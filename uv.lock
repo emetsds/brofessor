@@ -100,7 +100,7 @@ requires-dist = [
     { name = "pypdf", specifier = ">=5,<7" },
     { name = "python-pptx", specifier = ">=1.0.2,<2" },
     { name = "soundfile", marker = "extra == 'speech'", specifier = ">=0.13,<1" },
-    { name = "streamlit", marker = "extra == 'ui'", specifier = ">=1.45,<2" },
+    { name = "streamlit", marker = "extra == 'ui'", specifier = ">=1.55,<2" },
     { name = "typer", specifier = ">=0.15,<1" },
 ]
 provides-extras = ["ui", "speech"]

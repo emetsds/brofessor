@@ -12,9 +12,10 @@ from brofessor.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)
-def offline_streamlit_config():
+def offline_streamlit_config(tmp_path, monkeypatch):
     # AppTest otherwise collects page-profile telemetry, including installed
     # agents/skills from the host filesystem. That is outside these UI contracts.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     with patch_config_options({"browser.gatherUsageStats": False}):
         yield
 
@@ -199,3 +200,96 @@ def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
             break
     assert not ui.exception
     assert {job["params"]["ollama_port"] for job in workspace.jobs()} == {11436, 11437}
+
+
+def test_ui_language_is_remembered_across_sessions_and_workspaces(tmp_path, monkeypatch):
+    script = str(Path(__file__).parents[1] / "src/brofessor/ui.py")
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "first")])
+    ui = AppTest.from_file(script, default_timeout=10).run()
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert [tab.label for tab in ui.tabs] == ["Sources", "Create", "Jobs and results"]
+    assert ui.selectbox(key="output_language").value == "ru"
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "second")])
+    reopened = AppTest.from_file(script, default_timeout=10).run()
+    assert not reopened.exception
+    assert reopened.selectbox(key="ui_language").value == "en"
+    assert reopened.tabs[0].label == "Sources"
+    reopened.selectbox(key="ui_language").select("ru").run()
+    assert not reopened.exception
+    assert reopened.tabs[0].label == "Источники"
+
+
+def test_language_switch_preserves_form_inputs_and_unsaved_draft(tmp_path, monkeypatch):
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "chapter.md"
+    source.write_text("A bridge carries 1200 kilograms.")
+    added = workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    job = service.submit(workspace, "slides", start_worker=False)
+    workspace.save_draft(
+        job["id"],
+        {
+            "title": "Original title",
+            "language": "ru",
+            "slides": [
+                {
+                    "title": "Load",
+                    "bullets": ["1200 kg"],
+                    "notes": "Review source",
+                    "citations": [citation],
+                },
+            ],
+        },
+    )
+    workspace.update_job(job["id"], status="succeeded")
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    monkeypatch.setattr("brofessor.worker.ensure_worker", lambda workspace: None)
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    buffer_key = f"editor:{workspace.path}:{job['id']}:text"
+    data = workspace.draft(job["id"])["data"]
+    data["title"] = "Unsaved user edit"
+    unsaved = json.dumps(data)
+    ui.text_area(key=buffer_key).set_value(unsaved).run()
+    ui.selectbox(key="provider").select("ollama").run()
+    ui.text_input(key="model").set_value("tiny").run()
+    ui.number_input(key="ollama_port").set_value(11435).run()
+    ui.multiselect(key="source_ids").set_value([added["id"]])
+    ui.selectbox(key="kind").select("slides")
+    ui.selectbox(key="output_language").select("en")
+    ui.text_area(key="focus").set_value("Keep my focus")
+    ui.number_input(key="slide_count").set_value(4)
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert ui.text_input(key="workspace_path").value == str(workspace.path)
+    assert ui.selectbox(key="provider").value == "ollama"
+    assert ui.text_input(key="model").value == "tiny"
+    assert ui.number_input(key="ollama_port").value == 11435
+    assert ui.multiselect(key="source_ids").value == [added["id"]]
+    assert ui.selectbox(key="kind").value == "slides"
+    assert ui.selectbox(key="output_language").value == "en"
+    assert ui.text_area(key="focus").value == "Keep my focus"
+    assert ui.number_input(key="slide_count").value == 4
+    assert ui.text_area(key=buffer_key).value == unsaved
+    assert workspace.draft(job["id"])["data"]["title"] == "Original title"
+    assert any("Slide outline · Ready" in expander.label for expander in ui.expander)
+    ui.button(key=f"save-{job['id']}").click().run()
+    assert not ui.exception
+    assert workspace.draft(job["id"])["data"]["title"] == "Unsaved user edit"
+
+
+def test_language_save_error_is_visible_but_ui_still_switches(tmp_path, monkeypatch):
+    def fail_save(language):
+        raise OSError("Read-only settings directory")
+
+    monkeypatch.setattr("brofessor.ui_language.save_language", fail_save)
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "workspace")])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert ui.tabs[0].label == "Sources"
+    assert any("Could not remember" in warning.value for warning in ui.warning)

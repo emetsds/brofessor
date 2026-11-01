@@ -55,7 +55,11 @@ Look for `"available": true`. If false, follow `diagnostic`. This checks connect
 uv run --no-sync brofessor ui
 ```
 
-Open [localhost:8501](http://localhost:8501). The UI currently uses Russian labels:
+Open [localhost:8501](http://localhost:8501). Use **Язык интерфейса / Interface language** in the sidebar to switch between **Русский** and **English**. Your choice is saved for your local user and survives browser/app restarts, workspace changes, and port changes. On the first visit, the app follows your browser language (Russian or English).
+
+**Output language** is a separate setting: it selects the language of the answer, podcast, or presentation. Switching the interface language keeps your draft edits and output settings.
+
+To create a result (button labels below are shown in both languages):
 
 1. In **Источники** (Sources), upload a PDF, EPUB, Markdown, or TXT file and click **Импортировать** (Import). For a first test, use `tests/fixtures/chapter.md` from this repository. PDFs need selectable text; scanned pages are not OCR'd.
 2. In **Создать** (Create), select the sources, choose a presentation, podcast, or question, and set the focus and language (`ru` or `en`). Click **Подготовить** (Prepare).
