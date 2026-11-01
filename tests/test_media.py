@@ -200,7 +200,7 @@ def test_real_pptx_has_editable_text_table_notes_and_citations_without_external_
         slide = archive.read("ppt/slides/slide1.xml").decode()
         notes = archive.read("ppt/notesSlides/notesSlide1.xml").decode()
         assert "Проверяемый вывод" in slide and "<a:tbl>" in slide
-        assert "source:p2" in slide and "Проверить первоисточник" in notes
+        assert "source:p2" in notes and "Проверить первоисточник" in notes
         assert "<p:pic>" not in slide  # text/table is not a screenshot
         namespace = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
         paragraph_properties = next(
@@ -241,7 +241,12 @@ def test_slide_order_unicode_and_original_notes_are_preserved(tmp_path):
                     "notes": "Paragraph one.\n\nВторой абзац.",
                     "citations": ["source:1", "source:2"],
                 },
-                {"title": "Second", "bullets": [], "notes": "No bullet points", "citations": []},
+                {
+                    "title": "Second",
+                    "bullets": [],
+                    "notes": "No bullet points",
+                    "citations": ["source:2"],
+                },
             ],
         },
         tmp_path / "ordered.pptx",
@@ -268,7 +273,14 @@ def test_failed_save_preserves_existing_deck_and_removes_temporary_file(tmp_path
 
     monkeypatch.setattr(Presentation, "save", fail_save)
     with pytest.raises(OSError, match="Synthetic disk error"):
-        media.render_slides({"slides": [{"title": "A title", "bullets": []}]}, output)
+        media.render_slides(
+            {
+                "title": "Deck",
+                "language": "en",
+                "slides": [{"title": "A title", "bullets": [], "notes": "", "citations": ["u:1"]}],
+            },
+            output,
+        )
     assert output.read_bytes() == b"existing user artifact"
     assert list(tmp_path.iterdir()) == [output]
 
@@ -276,5 +288,17 @@ def test_failed_save_preserves_existing_deck_and_removes_temporary_file(tmp_path
 def test_rejects_dense_slides(tmp_path):
     with pytest.raises(ValueError, match="dense"):
         media.render_slides(
-            {"slides": [{"title": "Too much", "bullets": ["x"] * 9}]}, tmp_path / "deck.pptx"
+            {
+                "title": "Deck",
+                "language": "en",
+                "slides": [
+                    {
+                        "title": "Too much",
+                        "bullets": ["A detailed explanation. " * 40] * 6,
+                        "notes": "",
+                        "citations": ["u:1"],
+                    }
+                ],
+            },
+            tmp_path / "deck.pptx",
         )

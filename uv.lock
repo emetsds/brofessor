@@ -263,6 +263,7 @@ source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "huggingface-hub" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "pypdf" },
     { name = "python-pptx" },
@@ -304,6 +305,7 @@ requires-dist = [
     { name = "imageio-ffmpeg", marker = "extra == 'silero'", specifier = ">=0.6,<1" },
     { name = "imageio-ffmpeg", marker = "extra == 'speech'", specifier = ">=0.6,<1" },
     { name = "mlx-audio", marker = "extra == 'speech'", specifier = ">=0.6.3,<0.7" },
+    { name = "pillow", specifier = ">=11,<13" },
     { name = "pydantic", specifier = ">=2.10,<3" },
     { name = "pypdf", specifier = ">=5,<7" },
     { name = "python-pptx", specifier = ">=1.0.2,<2" },

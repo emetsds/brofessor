@@ -9,6 +9,7 @@ jobs:
         with:
           version: "0.11.7"
       - run: uv sync --locked --extra ui
+      - run: sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
       - run: uv run --extra ui pytest -q
       - run: uv run ruff check .
       - run: uv run ruff format --check .

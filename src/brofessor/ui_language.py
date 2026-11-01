@@ -6,6 +6,7 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Ask for comparison tables or a sequence of steps in the focus when they help explain your sources.": "В поле фокуса можно попросить сравнительную таблицу или схему последовательности, если они помогают объяснить материал.",
     "Podcast series": "Серия подкастов",
     "Episodes: {count} · Target per episode: {minutes} min · Text provider: {provider}": "Выпусков: {count} · Цель для каждого: {minutes} мин · Исполнитель текста: {provider}",
     "Number of episodes": "Количество выпусков",

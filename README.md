@@ -2,7 +2,7 @@
 
 Turn books and other source materials into answers with citations, two-voice podcasts, and editable PowerPoint presentations. Choose a text model, set the focus, review the draft, then generate the file. Work in a local web UI or use the same workspace from a terminal or coding agent.
 
-**Early working version.** Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/experiments/whole-book.md). Four 25/60-minute cases have passed duration checks. Broader content and listening quality are still being tested.
+**Early working version.** Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/experiments/whole-book.md). Four 25/60-minute cases have passed duration checks. Editable lists, tables, and sequences have passed [PPTX layout checks](docs/experiments/pptx-quality.md). Broader content and listening quality are still being tested.
 
 [Get started](#get-started) · [Web UI](#use-the-web-ui) · [CLI workflows](#use-the-cli) · [For agents](#for-agents) · [Troubleshooting](#troubleshooting)
 
@@ -131,6 +131,12 @@ uv run --no-sync brofessor draft render DRAFT_ID --wait
 ```
 
 Rendering creates a **new job ID**. Its output includes `artifacts[].path`, relative to the project folder reported by `project list`. For example, a project at `/path/to/my-book` with artifact `jobs/abc123/presentation.pptx` produces `/path/to/my-book/jobs/abc123/presentation.pptx`. Open that file in your presentation editor. PPTX generation needs neither speech dependencies nor an installed office application.
+
+Use the focus to request a comparison table or a sequence of events/steps where it helps explain the material. The draft supports bullet lists, native tables, and linear diagrams. They remain editable objects in the PPTX. Each slide's speaker notes contain its explanation and full source IDs, filenames, and original locations; the slide footer points to those notes.
+
+The JSON editor in either interface uses these slide fields: `title`, `bullets`, `notes`, `citations`, optional `table` (`headers` and `rows`), and optional `steps`. A table has 1–6 columns and 1–8 data rows; a sequence has 2–5 labels. Choose one visual per slide, with up to two short bullets alongside it. Keep unused `table` as `null` and `steps` as `[]`. Existing bullet-only drafts still work. See [Edit a draft](#edit-a-draft) to save a new revision before rendering.
+
+The renderer measures text using an installed font: Arial, then Liberation Sans, then DejaVu Sans, including bold. macOS normally supplies Arial; on Debian/Ubuntu, install `fonts-dejavu-core` if neither alternative is present. Titles stay at least 28 pt, bullets 20 pt, and table/diagram text 18 pt. Long sequence labels use a vertical layout. If the content still does not fit, the render job names the slide and fails: shorten it, move details to notes, or split it in the draft, save, then render again. Words are never silently dropped. Fonts are not embedded, so use the same font on the computer where you present. The UI currently offers a PPTX download; PDF/PNG previews in the [test report](docs/experiments/pptx-quality.md) are QA artifacts.
 
 ### Ask a question
 

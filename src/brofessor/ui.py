@@ -364,6 +364,12 @@ with create_tab:
             "ask": t("Answer a question"),
         }
         kind = st.selectbox(t("Output"), list(kinds), format_func=kinds.__getitem__, key="kind")
+        if kind == "slides":
+            st.caption(
+                t(
+                    "Ask for comparison tables or a sequence of steps in the focus when they help explain your sources."
+                )
+            )
         focus = st.text_area(t("Focus / question"), key="focus")
         language = st.selectbox(
             t("Output language"),

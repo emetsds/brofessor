@@ -90,7 +90,15 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             raise ValueError("The requested draft revision no longer exists")
         check()
         if job["kind"] == "render_slides":
-            output = render_slides(draft["data"], folder / "presentation.pptx")
+            source_job = workspace.job(params["draft_job_id"])
+            names = {source["id"]: source["name"] for source in workspace.sources()}
+            labels = {
+                unit["id"]: f"{names[unit['source_id']]} · {unit['locator']}"
+                for unit in workspace.units(source_job["params"]["source_ids"])
+            }
+            output = render_slides(
+                draft["data"], folder / "presentation.pptx", source_labels=labels
+            )
             check()
             workspace.add_artifact(job["id"], Path(output), "pptx", {"revision": draft["revision"]})
         elif job["kind"] == "render_podcast":
@@ -182,8 +190,20 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
         )
     elif job["kind"] == "slides":
         value = generate(
-            base + f"\nCreate {params['slide_count']} slides. Each has a concise title, "
-            "3–5 brief bullets and speaker notes. Keep claims tied to citations.",
+            base
+            + f"\nCreate exactly {params['slide_count']} slides in total. Give each a distinct "
+            "purpose and a concise title, preferably under 90 characters. Choose the form that "
+            "explains the evidence: 3–5 brief bullets, a comparison table, or a linear sequence "
+            "of events or process with 2–5 concise labels. For a narrative, a sequence can show "
+            "key decisions in chronological order. Use a table or steps only where the source supports "
+            "that structure. Do not force chronology into causation or invent missing data. "
+            "Tables: at most 6 columns and 8 rows, short cell text. For tables and sequences "
+            "default to an empty bullets list; put explanatory context in notes. A critical caveat "
+            "can stay in a concise cell or a single short bullet. "
+            "Set table to null and steps to [] when unused. Keep bullets under 120 characters "
+            "and step labels under 80. Put explanations and qualifications in speaker notes, "
+            "while keeping caveats that affect the conclusion visible. Do not add a cover by "
+            "default. Keep claims tied to original citations; do not print citation IDs in text.",
             Slides,
         )
     elif job["kind"] == "podcast_series":

@@ -14,12 +14,6 @@ import wave
 from collections.abc import Callable
 from pathlib import Path
 
-from pptx import Presentation
-from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
-from pptx.oxml.xmlchemy import OxmlElement
-from pptx.util import Inches, Pt
 
 from . import speech
 from .speech import SpeechCancelled as RenderCancelled, SpeechError as MediaError
@@ -43,141 +37,11 @@ def _atomic_json(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def _strings(value: object, label: str) -> list[str]:
-    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-        raise ValueError(f"{label} must be a list of strings")
-    return value
+def render_slides(plan: dict, output: Path, *, source_labels=None) -> Path:
+    """Shared entry point; slide layout is independent of speech rendering."""
+    from .slides import render
 
-
-def _slide_text(slide, text: str, bounds: tuple, size: int, color: str, *, bold=False):
-    frame = slide.shapes.add_textbox(*(Inches(value) for value in bounds)).text_frame
-    frame.word_wrap = True
-    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-    frame.margin_left = frame.margin_right = frame.margin_top = frame.margin_bottom = 0
-    frame.text = text
-    for paragraph in frame.paragraphs:
-        paragraph.font.name = "Arial"
-        paragraph.font.size = Pt(size)
-        paragraph.font.bold = bold
-        paragraph.font.color.rgb = RGBColor.from_string(color)
-    return frame
-
-
-def _slide_deck(plan: dict):
-    deck = Presentation()
-    deck.slide_width, deck.slide_height = Inches(13.333333), Inches(7.5)
-    deck.core_properties.author = "brofessor"
-    deck.core_properties.title = plan.get("title") or "brofessor"
-    deck.core_properties.subject = "Source-grounded editable presentation"
-    deck.core_properties.language = "ru-RU" if plan.get("language") == "ru" else "en-US"
-    ink, accent, muted = "142B39", "008773", "526772"
-    for number, item in enumerate(plan["slides"], 1):
-        slide = deck.slides.add_slide(deck.slide_layouts[6])
-        slide.background.fill.solid()
-        slide.background.fill.fore_color.rgb = RGBColor.from_string("F8FAFA")
-        stripe = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0, Inches(0.17), Inches(7.5))
-        stripe.fill.solid()
-        stripe.fill.fore_color.rgb = RGBColor.from_string(accent)
-        stripe.line.fill.background()
-        title_size = 24 if len(item["title"]) > 90 else 29
-        title = _slide_text(slide, item["title"], (0.6, 0.48, 12, 1), title_size, ink, bold=True)
-        title.vertical_anchor = MSO_ANCHOR.MIDDLE
-        table = item.get("table")
-        bullets = item.get("bullets", [])
-        if bullets:
-            body = _slide_text(
-                slide, "\n".join(bullets), (0.7, 1.72, 11.9, 1.7 if table else 4.42), 23, ink
-            )
-            for paragraph in body.paragraphs:
-                paragraph.space_after = Pt(18)
-                # Native list markers need OOXML; python-pptx has no public bullet setter.
-                properties = paragraph._p.get_or_add_pPr()
-                properties.set("marL", str(Inches(0.25)))
-                properties.set("indent", str(-Inches(0.25)))
-                marker = OxmlElement("a:buChar")
-                marker.set("char", "•")
-                properties.insert_element_before(marker, "a:tabLst", "a:defRPr", "a:extLst")
-        if table:
-            rows = [table["headers"], *table["rows"]]
-            shape = slide.shapes.add_table(
-                len(rows),
-                len(rows[0]),
-                Inches(0.7),
-                Inches(3.6 if bullets else 1.85),
-                Inches(11.9),
-                Inches(2.45 if bullets else 4.2),
-            )
-            for row_index, values in enumerate(rows):
-                for column_index, value in enumerate(values):
-                    cell = shape.table.cell(row_index, column_index)
-                    cell.text = value
-                    cell.fill.solid()
-                    cell.fill.fore_color.rgb = RGBColor.from_string(
-                        "E5F0EE" if row_index == 0 else "FFFFFF"
-                    )
-                    cell.margin_left = cell.margin_right = Inches(0.12)
-                    cell.margin_top = cell.margin_bottom = Inches(0.08)
-                    cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-                    cell.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-                    for paragraph in cell.text_frame.paragraphs:
-                        paragraph.font.name = "Arial"
-                        paragraph.font.size = Pt(14 if len(rows) > 4 or len(rows[0]) > 3 else 18)
-                        paragraph.font.bold = row_index == 0
-                        paragraph.font.color.rgb = RGBColor.from_string(ink)
-        citations = item.get("citations", [])
-        _slide_text(slide, "  ·  ".join(citations) or "brofessor", (0.7, 6.7, 11.1, 0.4), 10, muted)
-        page = _slide_text(slide, f"{number:02}", (12, 6.7, 0.6, 0.4), 12, accent)
-        page.paragraphs[0].alignment = PP_ALIGN.RIGHT
-        notes = [item.get("notes", "")]
-        if citations:
-            notes.append("Sources: " + "; ".join(citations))
-        slide.notes_slide.notes_text_frame.text = "\n\n".join(part for part in notes if part)
-    return deck
-
-
-def render_slides(plan: dict, output: Path) -> Path:
-    """Create native editable text/table objects and speaker notes in a PPTX."""
-    slides = plan.get("slides")
-    if not isinstance(slides, list) or not slides:
-        raise ValueError("slides must contain at least one slide")
-    for slide in slides:
-        if not isinstance(slide, dict) or not isinstance(slide.get("title"), str):
-            raise TypeError("Each slide needs a title")
-        bullets = _strings(slide.get("bullets", []), "bullets")
-        citations = _strings(slide.get("citations", []), "citations")
-        if len(citations) > 6 or sum(map(len, citations)) > 600:
-            raise ValueError("Keep slide citations concise and put details in speaker notes")
-        if len(bullets) > 8 or sum(map(len, bullets)) > 1400 or len(slide["title"]) > 160:
-            raise ValueError("Slide is too dense; split it into smaller slides")
-        if table := slide.get("table"):
-            headers = _strings(table.get("headers"), "table.headers")
-            rows = table.get("rows")
-            if not headers or not isinstance(rows, list) or len(rows) > 6:
-                raise ValueError("Tables require headers and at most six rows")
-            if len(headers) > 5 or (bullets and len(bullets) > 2):
-                raise ValueError("Split dense table slides before rendering")
-            for row in rows:
-                if len(_strings(row, "table row")) != len(headers):
-                    raise ValueError("Every table row must match its headers")
-            cell_limit = 100 if len(headers) <= 3 else 55
-            if any(len(cell) > cell_limit for row in [headers, *rows] for cell in row):
-                raise ValueError("Table cells are too dense; shorten or split the table")
-            if bullets and (len(rows) > 3 or sum(map(len, bullets)) > 280):
-                raise ValueError("Split table and commentary across slides")
-    output = Path(output).resolve()
-    if output.suffix.lower() != ".pptx":
-        raise ValueError("Slide output must have a .pptx suffix")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    deck = _slide_deck(plan)
-    fd, name = tempfile.mkstemp(prefix=f".{output.stem}.", suffix=".pptx", dir=output.parent)
-    os.close(fd)
-    temporary = Path(name)
-    try:
-        deck.save(temporary)
-        temporary.replace(output)
-    finally:
-        temporary.unlink(missing_ok=True)
-    return output
+    return render(plan, output, source_labels=source_labels)
 
 
 def _model_identity(model: str | dict | None) -> dict:

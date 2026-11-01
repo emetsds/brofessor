@@ -33,11 +33,36 @@ class Podcast(Output):
     turns: list[Turn] = Field(min_length=2)
 
 
+class SlideTable(Output):
+    headers: list[str] = Field(min_length=1, max_length=6)
+    rows: list[list[str]] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def rectangular(self):
+        if any(len(row) != len(self.headers) for row in self.rows):
+            raise ValueError("Every table row must match its headers")
+        return self
+
+
 class Slide(Output):
     title: str = Field(min_length=1)
-    bullets: list[str] = Field(min_length=1, max_length=6)
+    bullets: list[str] = Field(max_length=6)
     notes: str
     citations: list[str] = Field(min_length=1)
+    table: SlideTable | None = None
+    steps: list[str] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def one_visual(self):
+        if self.table is not None and self.steps:
+            raise ValueError("Use a table or a sequence of steps, not both on one slide")
+        if self.steps and len(self.steps) < 2:
+            raise ValueError("A process needs 2–5 steps")
+        if (self.table is not None or self.steps) and len(self.bullets) > 2:
+            raise ValueError("Keep at most two brief bullets with a table or process")
+        if any(not text.strip() for text in [self.title, *self.bullets, *self.steps]):
+            raise ValueError("Slide text must not be blank")
+        return self
 
 
 class Slides(Output):

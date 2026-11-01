@@ -592,3 +592,64 @@ def test_series_cli_ui_share_plan_episode_and_unsaved_edit_protection(tmp_path, 
     )
     assert new["id"] != episode["id"]
     assert workspace.draft(parent["id"], 1)["data"] == value
+
+
+def test_ui_edit_and_cli_render_share_table_and_sequence_contract(tmp_path, monkeypatch):
+    from pptx import Presentation
+    from brofessor import worker
+
+    w = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.md"
+    source.write_text("The original text supports a comparison and a sequence.")
+    w.add_source(source)
+    citation = w.units()[0]["id"]
+    job = service.submit(w, "slides", slide_count=2, start_worker=False)
+    value = {
+        "title": "Материал",
+        "language": "ru",
+        "slides": [
+            {
+                "title": "Сравнение",
+                "bullets": [],
+                "notes": "Сохранить пояснение",
+                "citations": [citation],
+                "table": {"headers": ["Тип", "Смысл"], "rows": [["Факт", "Проверяемый вывод"]]},
+            },
+            {
+                "title": "Последовательность",
+                "bullets": [],
+                "notes": "Порядок действий",
+                "citations": [citation],
+                "steps": ["Источник", "Проверка", "Результат"],
+            },
+        ],
+    }
+    monkeypatch.setattr("brofessor.executors.generate", lambda *a, **kw: value)
+    monkeypatch.setattr(worker, "ensure_worker", lambda *_: None)
+    worker.run(w, once=True)
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    key = f"editor:{w.path}:{job['id']}:text"
+    edited = json.loads(ui.text_area(key=key).value)
+    edited["slides"][0]["table"]["rows"][0][1] = "Уточнённый вывод"
+    edited["slides"][1]["steps"][1] = "Сверка с оригиналом"
+    ui.text_area(key=key).set_value(json.dumps(edited, ensure_ascii=False)).run()
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    ui.button(key=f"save-{job['id']}").click().run()
+    assert not ui.exception
+    result = CliRunner().invoke(app, ["-w", str(w.path), "draft", "render", job["id"]])
+    assert result.exit_code == 0, result.output
+    rendered = json.loads(result.output)
+    assert rendered["params"]["revision"] == 2
+    worker.run(w, once=True)
+    artifact = w.artifacts(rendered["id"])[0]
+    deck = Presentation(w.path / artifact["path"])
+    assert (
+        next(s.table for s in deck.slides[0].shapes if s.has_table).cell(1, 1).text
+        == "Уточнённый вывод"
+    )
+    assert any(s.has_text_frame and s.text == "Сверка с оригиналом" for s in deck.slides[1].shapes)
+    assert "source.md" in deck.slides[1].notes_slide.notes_text_frame.text
