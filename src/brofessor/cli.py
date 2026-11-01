@@ -261,6 +261,7 @@ def ui(ctx: typer.Context, port: int = 8501):
                 "run",
                 str(module),
                 "--server.address=127.0.0.1",
+            "--server.headless=true",
                 f"--server.port={port}",
                 "--browser.gatherUsageStats=false",
                 "--",
