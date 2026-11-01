@@ -169,10 +169,9 @@ def source_show(ctx: typer.Context, source_id: str):
 
 
 @app.command()
-def search(ctx: typer.Context, query: str):
-    from .sources import search_units
-
-    show(search_units(ctx.obj.units(), query))
+def search(ctx: typer.Context, query: str, source: list[str] = typer.Option(None), limit: int = 8):
+    """Search original words locally; no model call or automatic translation."""
+    show(service.search(ctx.obj, query, source_ids=source, limit=limit))
 
 
 def wait_for_job(workspace: Workspace, job_id: str) -> dict:
@@ -412,7 +411,10 @@ def resume_job(ctx: typer.Context, job_id: str):
 
 @draft_app.command("show")
 def show_draft(ctx: typer.Context, job_id: str):
-    show(ctx.obj.draft(job_id))
+    draft = ctx.obj.draft(job_id)
+    if draft and ctx.obj.job(job_id)["kind"] == "ask":
+        draft["evidence"] = service.answer_evidence(ctx.obj, job_id, draft["revision"])
+    show(draft)
 
 
 @draft_app.command("save")

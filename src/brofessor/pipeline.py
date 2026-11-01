@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 
 from . import reading
-from .models import Answer, Podcast, Slides, validate_citations
+from .models import Podcast, Slides, validate_citations
 from .workspace import Workspace, atomic_json
 
 
@@ -152,6 +152,18 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             raise ValueError("Series language does not match the episode")
         series_context = series.episode_context(plan, reference["episode"])
         evidence, coverage = series.reading_notes(workspace, reference, folder, allowed)
+    elif job["kind"] == "ask":
+        from . import questions
+
+        names = {s["id"]: s["name"] for s in workspace.sources()}
+        evidence, coverage = questions.prepare(
+            [{**u, "source": names[u["source_id"]]} for u in workspace.units(params["source_ids"])],
+            params["focus"],
+            generate,
+            check,
+            progress,
+            folder,
+        )
     else:
         evidence, coverage = reading.prepare(
             workspace.units(params["source_ids"]),
@@ -183,10 +195,10 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             "or spoil their conclusions. Clearly identify this episode within the series."
         )
     if job["kind"] == "ask":
-        value = generate(
-            base + "\nAnswer the question clearly, with citations. Set evidence_status "
-            "to supported when sources answer it, otherwise insufficient_evidence.",
-            Answer,
+        from . import questions
+
+        value = questions.write(
+            base, evidence, generate, [u for u in units if u["id"] in allowed], params["language"]
         )
     elif job["kind"] == "slides":
         value = generate(
@@ -224,7 +236,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
         else:
             value = short_podcast(base, params, generate, progress)
     check()
-    if coverage["mode"] == "direct":
+    if coverage["mode"] in ("direct", "retrieved"):
         for unit in coverage["units"]:
             if unit["status"] == "pending":
                 unit["status"] = "read"
@@ -237,7 +249,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     draft_path = folder / f"draft-r{final_draft['revision']}.json"
     atomic_json(draft_path, final_draft["data"])
     workspace.add_artifact(job["id"], draft_path, "json", {"revision": final_draft["revision"]})
-    progress({"stage": "draft_ready", "read_units": len(units)})
+    progress({"stage": "draft_ready", "read_units": coverage["count"]})
 
 
 def short_podcast(base, params, generate, progress):

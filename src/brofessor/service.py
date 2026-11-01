@@ -77,6 +77,16 @@ def edit_draft(workspace: Workspace, job_id: str, data: dict, expected_revision:
     value = schema.model_validate(data).model_dump()
     allowed = {u["id"] for u in workspace.units(job["params"]["source_ids"])}
     validate_citations(value, allowed)
+    if job["kind"] == "ask":
+        from .questions import validate_answer
+
+        previous = workspace.draft(job_id)
+        require_quotes = "quotes" in data or (previous is not None and "quotes" in previous["data"])
+        validate_answer(
+            value, workspace.units(job["params"]["source_ids"]), require_quotes=require_quotes
+        )
+        if not require_quotes and "quotes" not in data:
+            value.pop("quotes")  # Preserve legacy answers without claiming quote verification.
     saved = workspace.save_draft(job_id, value, expected_revision)
     output = workspace.path / "jobs" / job_id / f"draft-r{saved['revision']}.json"
     atomic_json(output, saved["data"])
@@ -212,6 +222,48 @@ def artifact_path(workspace: Workspace, path: str) -> Path:
     if not resolved.is_relative_to(workspace.path):
         raise ValueError("Artifact is outside the workspace")
     return resolved
+
+
+def search(workspace, query, *, source_ids=None, limit=8):
+    from .sources import search_units
+
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError("Search limit must be 1–50")
+    names = {s["id"]: s["name"] for s in workspace.sources()}
+    if source_ids is not None and not set(source_ids) <= names.keys():
+        raise ValueError("Select existing sources for search")
+    return [
+        {**u, "source": names[u["source_id"]]}
+        for u in search_units(workspace.units(source_ids), query, limit)
+    ]
+
+
+def answer_evidence(workspace, job_id, revision=None):
+    """Resolve the saved answer's quotes and provenance for both frontends."""
+    job = workspace.job(job_id)
+    if job["kind"] != "ask":
+        raise ValueError("Choose a question job")
+    draft = workspace.draft(job_id, revision)
+    if draft is None:
+        return []
+    names = {s["id"]: s["name"] for s in workspace.sources()}
+    units = {u["id"]: u for u in workspace.units(job["params"]["source_ids"])}
+    result = []
+    for key in draft["data"]["citations"]:
+        unit = units[key]
+        result.append(
+            {
+                "citation": key,
+                "source_id": unit["source_id"],
+                "source": names[unit["source_id"]],
+                "locator": unit["locator"],
+                "text": unit["text"],
+                "quotes": [
+                    q["text"] for q in draft["data"].get("quotes", []) if q["citation"] == key
+                ],
+            }
+        )
+    return result
 
 
 def coverage(workspace: Workspace, job_id: str) -> dict | None:

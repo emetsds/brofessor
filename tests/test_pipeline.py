@@ -22,7 +22,11 @@ def test_pipeline_references_original_and_reuses_checkpoint(workspace, monkeypat
 
     def generate(prompt, *args, **kwargs):
         calls.append(prompt)
-        return {"answer": "1200 kg; flooding was not tested", "citations": [citation]}
+        return {
+            "answer": "1200 kg; flooding is unknown",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        }
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
     job = service.submit(workspace, "ask", focus="How much load?", start_worker=False)
@@ -224,7 +228,11 @@ def test_legacy_job_reuses_original_checkpoint_identity(workspace, monkeypatch, 
 
     def generate(prompt, schema, provider, model, **kwargs):
         calls.append((prompt, schema, kwargs["ollama_port"]))
-        return {"answer": "1200 kg", "citations": [citation]}
+        return {
+            "answer": "1200 kg",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        }
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
     job = service.submit(workspace, "ask", focus="Load?", provider=provider, start_worker=False)
@@ -254,7 +262,11 @@ def test_checkpoint_identity_changes_with_ollama_port_only(
 
     def generate(*args, **kwargs):
         calls.append(kwargs["ollama_port"])
-        return {"answer": "1200 kg", "citations": [citation]}
+        return {
+            "answer": "1200 kg",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        }
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
     job = service.submit(

@@ -9,10 +9,18 @@ class Output(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class Quote(Output):
+    citation: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class Answer(Output):
     answer: str = Field(min_length=1)
     citations: list[str]
-    evidence_status: Literal["supported", "insufficient_evidence"] = "supported"
+    evidence_status: Literal["supported", "insufficient_evidence", "conflicting_evidence"] = (
+        "supported"
+    )
+    quotes: list[Quote] = Field(default_factory=list, max_length=24)
 
     @model_validator(mode="after")
     def supported_answer_has_citations(self):

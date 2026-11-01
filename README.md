@@ -145,11 +145,31 @@ uv run --no-sync brofessor ask "What evidence supports the conclusions?" --provi
 uv run --no-sync brofessor draft show ASK_ID
 ```
 
-`ask` returns a job, not the answer text. `draft show` returns the answer in `data.answer`, with `data.citations` and `data.evidence_status`. Use `source list` and `source show SOURCE_ID` to read the source fragments behind those citations.
+`ask` returns a job, not the answer text. `draft show` returns `data.answer`, `data.citations`, `data.quotes`, and `data.evidence_status`. Each quote contains a `citation` ID and original `text`. The envelope's `evidence` list resolves the references to source filenames, locations, quotes, and full original fragments. In the UI, open the answer in **Jobs and results** to see the same information and expand **Original fragment**.
+
+| Evidence status | Meaning |
+|---|---|
+| `supported` | The available source evidence answers the question. |
+| `insufficient_evidence` | The available evidence does not establish an answer. |
+| `conflicting_evidence` | The sources give incompatible positions; the answer presents both. |
+
+Questions can be in Russian while sources are in English. Small source sets are passed through as originals. For larger sets, the chosen text provider first writes short RU/EN search variants; local BM25 selects original fragments and nearby context. This adds one text-model call. The answer uses those excerpts, with a visible record of what was selected. A missing match does not prove the answer is absent from the entire book. Use a podcast or presentation workflow for a whole-book overview; question retrieval is selective.
+
+Every new cited reference needs an original quote. The app rejects invented words, numbers, or punctuation and references outside the selected evidence. When only whitespace or line wrapping differs, it restores the original substring before saving. This checks quotation integrity; it does not automatically prove that the quote supports every claim. Old saved answers keep their references and remain editable, with a notice that they have no verified exact quotes. [Measured results and limitations](docs/experiments/source-questions.md).
+
+To restrict a question to particular sources, repeat `--source SOURCE_ID`. For a quick local word search without a model call:
+
+```sh
+uv run --no-sync brofessor search "flood resistance" --source SOURCE_ID --limit 8
+```
+
+Get IDs with `source list`. In the UI, use **Search source text** and **Search in sources** in the Sources tab. This word search does not translate queries; use **Answer a question** for questions across languages. No matches returns an empty result, never an arbitrary excerpt.
 
 ### Check reading coverage
 
-Long sources are read in batches, with a checkpoint after each accepted batch. Every readable fragment is processed; the final answer, script, or slide outline uses condensed notes selected for your focus. Very large note sets are condensed again. This can lose detail: check important claims against the original source.
+Podcasts, series plans, and slide outlines read long sources in batches, with a checkpoint after each accepted batch. Every readable fragment is processed; the final script or slide outline uses condensed notes selected for your focus. Very large note sets are condensed again. This can lose detail: check important claims against the original source.
+
+Questions use original text: all fragments for small sets, search-selected fragments for larger ones. Their coverage report distinguishes **Not selected by search** from read, pending, and excluded fragments. It also records the search variants and selected count. It does not claim that the whole book was read for that question.
 
 In **Jobs and results**, open a job to see **Reading coverage**: read, pending, and excluded fragments, their original locations, and which fragments the saved draft cites. The CLI shows the same report:
 
@@ -279,9 +299,9 @@ Resume is available for `failed`, `cancelled`, and `interrupted` jobs; fix the r
 
 Sources and outputs are stored in your workspace. Dependencies and model weights require downloads during setup or first use; the provider table above explains where text is processed.
 
-Files are limited to 100 MiB each. The current app has source search and individual questions; cross-language retrieval quality still needs testing. Slide-image previews and Google Slides export are not available yet. Audio pronunciation and voice quality need listening review.
+Files are limited to 100 MiB each. Source search and individual questions have been checked on 20 synthetic questions plus three questions in a complete EPUB; this is a small control corpus, not a general retrieval-quality guarantee. Notes and follow-up conversations are still planned. Slide-image previews and Google Slides export are not available yet. Audio pronunciation and voice quality need listening review.
 
-Measured results: [first workflow and providers](docs/experiments/first-slice.md), [local speech](docs/experiments/media.md), [current PPTX renderer](docs/experiments/python-pptx.md).
+Measured results: [first workflow and providers](docs/experiments/first-slice.md), [local speech](docs/experiments/media.md), [PPTX layouts](docs/experiments/pptx-quality.md), [source questions](docs/experiments/source-questions.md).
 
 ## Development
 

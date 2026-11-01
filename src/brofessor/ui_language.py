@@ -6,6 +6,18 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Search in sources": "Искать в источниках",
+    "Search matches original words. For a question in another language, use Answer a question.": "Поиск ищет слова оригинала. Для вопроса на другом языке выберите «Ответ на вопрос».",
+    "No matching fragments.": "Подходящие фрагменты не найдены.",
+    "Searching original fragments": "Поиск оригинальных фрагментов",
+    "This answer uses search-selected original fragments. Other fragments were not read; missing matches do not prove absence.": "Ответ использует оригинальные фрагменты, выбранные поиском. Остальные фрагменты не прочитаны; отсутствие совпадений не доказывает отсутствие ответа.",
+    "Search queries": "Поисковые запросы",
+    "Not selected by search": "Не выбран поиском",
+    "Question": "Вопрос",
+    "Sources contain conflicting evidence. Review both positions below.": "В источниках есть противоречие. Ниже приведены обе позиции.",
+    "The available evidence is insufficient to establish an answer.": "Доступных сведений недостаточно для ответа.",
+    "This older answer has source references but no verified exact quotes.": "В этом старом ответе есть ссылки, но нет проверенных точных цитат.",
+    "Original fragment": "Оригинальный фрагмент",
     "Ask for comparison tables or a sequence of steps in the focus when they help explain your sources.": "В поле фокуса можно попросить сравнительную таблицу или схему последовательности, если они помогают объяснить материал.",
     "Podcast series": "Серия подкастов",
     "Episodes: {count} · Target per episode: {minutes} min · Text provider: {provider}": "Выпусков: {count} · Цель для каждого: {minutes} мин · Исполнитель текста: {provider}",

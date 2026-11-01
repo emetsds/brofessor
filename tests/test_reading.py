@@ -27,6 +27,21 @@ def notes_for(prompt):
     }
 
 
+def slide_plan(citations):
+    return {
+        "title": "Evidence",
+        "language": "ru",
+        "slides": [
+            {
+                "title": "Retained facts",
+                "bullets": ["Beginning, middle and end"],
+                "notes": "Original evidence.",
+                "citations": citations,
+            }
+        ],
+    }
+
+
 def test_whole_book_is_read_in_order_and_resumes_without_model_calls(book, monkeypatch):
     workspace, source, units = book
     batches = []
@@ -40,10 +55,12 @@ def test_whole_book_is_read_in_order_and_resumes_without_model_calls(book, monke
         evidence, _ = json.JSONDecoder().raw_decode(prompt.split("EVIDENCE:\n")[1])
         assert len(reading.encoded(evidence)) <= reading.SYNTHESIS_BUDGET
         assert {item["citations"][0] for item in evidence} == {u["id"] for u in units}
-        return {"answer": "Beginning, middle and end", "citations": final_citations}
+        return slide_plan(final_citations)
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
-    job = service.submit(workspace, "ask", focus="Facts throughout the book?", start_worker=False)
+    job = service.submit(
+        workspace, "slides", slide_count=1, focus="Facts throughout the book?", start_worker=False
+    )
     pipeline.execute(workspace, job)
     assert len(batches) > 1
     assert [citation for batch in batches for citation in batch] == [u["id"] for u in units]
@@ -53,7 +70,7 @@ def test_whole_book_is_read_in_order_and_resumes_without_model_calls(book, monke
     assert all(unit["status"] == "read" for unit in report["units"])
     monkeypatch.setattr("brofessor.executors.generate", lambda *a, **k: pytest.fail("Checkpoint"))
     pipeline.execute(workspace, job)
-    service.edit_draft(workspace, job["id"], {"answer": "Edited", "citations": [units[0]["id"]]}, 1)
+    service.edit_draft(workspace, job["id"], slide_plan([units[0]["id"]]), 1)
     assert service.coverage(workspace, job["id"])["cited_count"] == 1
     assert service.coverage(workspace, job["id"])["draft_revision"] == 2
 
@@ -73,7 +90,7 @@ def test_invalid_reading_batch_is_not_checkpointed(book, monkeypatch, problem):
         return result
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
-    job = service.submit(workspace, "ask", focus="Facts?", start_worker=False)
+    job = service.submit(workspace, "slides", slide_count=1, focus="Facts?", start_worker=False)
     with pytest.raises(ValueError):
         pipeline.execute(workspace, job)
     assert not list((workspace.path / "jobs" / job["id"]).glob("checkpoints/*.json"))
@@ -92,7 +109,7 @@ def test_cancelled_book_keeps_accepted_reading_progress(book, monkeypatch):
         return notes_for(prompt)
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
-    job = service.submit(workspace, "ask", focus="Facts?", start_worker=False)
+    job = service.submit(workspace, "slides", slide_count=1, focus="Facts?", start_worker=False)
     with pytest.raises(CancelledError):
         pipeline.execute(workspace, job)
     report = service.coverage(workspace, job["id"])
@@ -118,10 +135,10 @@ def test_large_note_sets_are_consolidated_without_new_citation_ids(book, monkeyp
         evidence, _ = json.JSONDecoder().raw_decode(prompt.split("EVIDENCE:\n")[1])
         assert len(reading.encoded(evidence)) <= reading.SYNTHESIS_BUDGET
         assert {c for item in evidence for c in item["citations"]} == {u["id"] for u in units}
-        return {"answer": "Retained facts", "citations": [units[-1]["id"]]}
+        return slide_plan([units[-1]["id"]])
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
-    job = service.submit(workspace, "ask", focus="Facts?", start_worker=False)
+    job = service.submit(workspace, "slides", slide_count=1, focus="Facts?", start_worker=False)
     pipeline.execute(workspace, job)
     assert consolidated
     assert service.coverage(workspace, job["id"])["count"] == len(units)

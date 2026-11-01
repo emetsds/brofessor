@@ -21,6 +21,116 @@ def offline_streamlit_config(tmp_path, monkeypatch):
         yield
 
 
+@pytest.mark.parametrize("status", ["supported", "insufficient_evidence", "conflicting_evidence"])
+def test_cli_and_ui_show_exact_quotes_status_and_original_locations(tmp_path, monkeypatch, status):
+    from brofessor import pipeline
+
+    w = Workspace(tmp_path / "workspace")
+    path = tmp_path / "report.txt"
+    path.write_text("Report A: capacity 80 kg. Report B: capacity 120 kg.")
+    w.add_source(path)
+    citation = w.units()[0]["id"]
+    value = {
+        "answer": "The source contains both reported capacities.",
+        "evidence_status": status,
+        "citations": [citation],
+        "quotes": [
+            {"citation": citation, "text": "Report A: capacity 80 kg."},
+            {"citation": citation, "text": "Report B: capacity 120 kg."},
+        ],
+    }
+    monkeypatch.setattr("brofessor.executors.generate", lambda *a, **kw: value)
+    job = service.submit(w, "ask", focus="Capacity?", start_worker=False)
+    pipeline.execute(w, job)
+    w.update_job(job["id"], status="succeeded")
+    result = CliRunner().invoke(app, ["-w", str(w.path), "draft", "show", job["id"]])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["data"]["quotes"] == value["quotes"]
+    assert data["evidence"] == service.answer_evidence(w, job["id"])
+    assert data["evidence"][0]["source"] == "report.txt"
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    assert not ui.exception
+    assert any(text.value == value["quotes"][0]["text"] for text in ui.text)
+    assert any("report.txt · lines 1-1" in c.value for c in ui.caption)
+    if status == "conflicting_evidence":
+        assert any("противоречие" in warning.value for warning in ui.warning)
+    if status == "insufficient_evidence":
+        assert any("недостаточно" in info.value for info in ui.info)
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert any(text.value == value["quotes"][1]["text"] for text in ui.text)
+
+
+def test_cli_and_ui_search_selected_sources(tmp_path, monkeypatch):
+    w = Workspace(tmp_path / "workspace")
+    for name in ("a", "b"):
+        path = tmp_path / f"{name}.txt"
+        path.write_text(f"The {name} beacon is blue.")
+        w.add_source(path)
+    source = next(s for s in w.sources() if s["name"] == "b.txt")
+    result = CliRunner().invoke(
+        app, ["-w", str(w.path), "search", "blue", "--source", source["id"], "--limit", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output) == service.search(
+        w, "blue", source_ids=[source["id"]], limit=1
+    )
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    ui.multiselect(key="search_source_ids").set_value([source["id"]])
+    ui.text_input(key="source_query").set_value("blue").run()
+    assert not ui.exception
+    assert any("b.txt · lines 1-1" in item.value for item in ui.markdown)
+    assert not any("a.txt · lines 1-1" in item.value for item in ui.markdown)
+    ui.text_input(key="source_query").set_value("zirconium").run()
+    assert any("не найдены" in item.value for item in ui.info)
+
+
+def test_ui_shows_search_selection_without_claiming_unread_fragments_were_read(
+    tmp_path, monkeypatch
+):
+    from brofessor import pipeline, questions
+
+    w = Workspace(tmp_path / "workspace")
+    for name, text in [("beacon", "A beacon is blue."), ("granite", "Unrelated granite." * 50)]:
+        path = tmp_path / f"{name}.txt"
+        path.write_text(text)
+        w.add_source(path)
+    citation = next(u["id"] for u in w.units() if "blue" in u["text"])
+    monkeypatch.setattr(questions, "EVIDENCE_BUDGET", 500)
+    monkeypatch.setattr(
+        "brofessor.executors.generate",
+        lambda prompt, schema, *a, **k: (
+            {"queries": ["beacon blue"]}
+            if schema["title"] == "SearchQueries"
+            else {
+                "answer": "Blue",
+                "citations": [citation],
+                "quotes": [{"citation": citation, "text": "A beacon is blue."}],
+            }
+        ),
+    )
+    job = service.submit(w, "ask", focus="beacon colour", start_worker=False)
+    pipeline.execute(w, job)
+    w.update_job(job["id"], status="succeeded")
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    assert not ui.exception
+    assert set(ui.dataframe[0].value["Статус чтения"]) == {"Прочитан", "Не выбран поиском"}
+    assert any("не прочитаны" in info.value for info in ui.info)
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert set(ui.dataframe[0].value["Reading status"]) == {"Read", "Not selected by search"}
+
+
 def test_cli_import_is_visible_in_ui(tmp_path, monkeypatch):
     path = tmp_path / "workspace"
     source = tmp_path / "chapter.md"
@@ -50,7 +160,11 @@ def test_cli_and_both_ui_languages_show_shared_coverage(tmp_path, monkeypatch):
     citation = next(unit["id"] for unit in workspace.units() if unit["status"] == "ready")
     monkeypatch.setattr(
         "brofessor.executors.generate",
-        lambda *a, **k: {"answer": "1200 kilograms", "citations": [citation]},
+        lambda *a, **k: {
+            "answer": "1200 kilograms",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        },
     )
     job = service.submit(workspace, "ask", focus="Load?", start_worker=False)
     pipeline.execute(workspace, job)

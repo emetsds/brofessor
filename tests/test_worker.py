@@ -192,7 +192,9 @@ def test_real_pipeline_reuses_accepted_checkpoints_after_failure(workspace, tmp_
     source = workspace.add_source(incoming)
     units = workspace.units([source["id"]])
     assert len(units) > 2
-    submitted = service.submit(workspace, "ask", focus="What is the evidence?", start_worker=False)
+    submitted = service.submit(
+        workspace, "slides", slide_count=1, focus="What is the evidence?", start_worker=False
+    )
     calls = []
     fail_once = True
 
@@ -210,7 +212,18 @@ def test_real_pipeline_reuses_accepted_checkpoints_after_failure(workspace, tmp_
                     for unit in batch
                 ]
             }
-        return {"answer": "The source describes a lighthouse.", "citations": [units[0]["id"]]}
+        return {
+            "title": "Evidence",
+            "language": "ru",
+            "slides": [
+                {
+                    "title": "Lighthouse",
+                    "bullets": ["A lighthouse"],
+                    "notes": "Original evidence.",
+                    "citations": [units[0]["id"]],
+                }
+            ],
+        }
 
     monkeypatch.setattr(executors, "generate", generate)
     worker.run(workspace, once=True)
@@ -239,7 +252,11 @@ def test_resume_after_draft_publication_failure_preserves_author_revision(
 
     def generate(*args, **kwargs):
         calls.append(1)
-        return {"answer": "Blue.", "citations": [unit["id"]]}
+        return {
+            "answer": "Blue.",
+            "citations": [unit["id"]],
+            "quotes": [{"citation": unit["id"], "text": "A synthetic lighthouse is blue."}],
+        }
 
     def fail_publication(path, value):
         if path.name.startswith("draft-r"):

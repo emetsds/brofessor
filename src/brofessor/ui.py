@@ -40,6 +40,7 @@ def remember_language():
 def activate_project(project):
     st.session_state.project_selector = project["path"]
     st.session_state.pop("source_ids", None)
+    st.session_state.pop("search_source_ids", None)
     st.session_state.pop("project_error", None)
 
 
@@ -336,11 +337,25 @@ with sources_tab:
                 st.markdown(f"**{unit['locator']}** · `{unit['id']}`")
                 st.text(unit["text"] or t("No text extracted"))
     query = st.text_input(t("Search source text"), key="source_query")
+    search_names = {s["id"]: s["name"] for s in workspace.sources()}
+    search_sources = st.multiselect(
+        t("Search in sources"),
+        list(search_names),
+        default=list(search_names),
+        format_func=lambda key: search_names[key],
+        key="search_source_ids",
+    )
+    st.caption(
+        t(
+            "Search matches original words. For a question in another language, use Answer a question."
+        )
+    )
     if query:
-        from brofessor.sources import search_units
-
-        for unit in search_units(workspace.units(), query):
-            st.write(f"{unit['locator']} · {unit['id']}")
+        found = service.search(workspace, query, source_ids=search_sources)
+        if not found:
+            st.info(t("No matching fragments."))
+        for unit in found:
+            st.write(f"{unit['source']} · {unit['locator']} · {unit['id']}")
             st.text(unit["text"])
 
 with create_tab:
@@ -508,6 +523,7 @@ def results():
             progress = job["progress"]
             stage = {
                 "reading": "Reading sources",
+                "searching": "Searching original fragments",
                 "outline": "Planning episode",
                 "series_plan": "Planning series",
                 "consolidating": "Consolidating reading notes",
@@ -546,6 +562,12 @@ def results():
             draft = workspace.draft(job["id"])
             coverage = service.coverage(workspace, job["id"])
             if coverage and coverage.get("units"):
+                if coverage.get("mode") == "retrieved":
+                    st.info(
+                        t(
+                            "This answer uses search-selected original fragments. Other fragments were not read; missing matches do not prove absence."
+                        )
+                    )
                 if coverage.get("series"):
                     st.caption(t("Reading notes reused from the series plan."))
                 st.caption(
@@ -558,6 +580,10 @@ def results():
                     )
                 )
                 with st.expander(t("Reading coverage")):
+                    if coverage.get("queries"):
+                        st.caption(t("Search queries"))
+                        for query_text in coverage["queries"]:
+                            st.text(query_text)
                     st.caption(
                         t("Reading coverage does not guarantee that every fact is in the result.")
                     )
@@ -565,9 +591,12 @@ def results():
                         [
                             {
                                 t("Reading status"): t(
-                                    {"read": "Read", "pending": "Pending", "excluded": "Excluded"}[
-                                        unit["status"]
-                                    ]
+                                    {
+                                        "read": "Read",
+                                        "pending": "Pending",
+                                        "excluded": "Excluded",
+                                        "not_selected": "Not selected by search",
+                                    }[unit["status"]]
                                 ),
                                 t("Cited in result"): unit["cited"],
                                 t("Source"): unit["source"],
@@ -575,6 +604,8 @@ def results():
                                 "ID": unit["id"],
                                 t("Exclusion reason"): t("No text extracted")
                                 if unit["reason"] == "empty"
+                                else t("Not selected by search")
+                                if unit["reason"] == "not_selected_by_search"
                                 else unit["reason"],
                             }
                             for unit in coverage["units"]
@@ -601,19 +632,28 @@ def results():
                             for term in draft["data"]["terms"]:
                                 st.write(f"{term['term']}: {term['meaning']}")
                 if job["kind"] == "ask":
+                    st.caption(t("Question"))
+                    st.write(job["params"]["focus"])
                     st.write(draft["data"]["answer"])
-                    for citation in draft["data"]["citations"]:
-                        unit = next(
-                            (
-                                u
-                                for u in workspace.units(job["params"]["source_ids"])
-                                if u["id"] == citation
-                            ),
-                            None,
+                    evidence_status = draft["data"].get("evidence_status", "supported")
+                    if evidence_status == "conflicting_evidence":
+                        st.warning(
+                            t("Sources contain conflicting evidence. Review both positions below.")
                         )
-                        if unit:
-                            st.caption(f"{citation} · {unit['locator']}")
-                            st.text(unit["text"])
+                    elif evidence_status == "insufficient_evidence":
+                        st.info(t("The available evidence is insufficient to establish an answer."))
+                    if "quotes" not in draft["data"]:
+                        st.caption(
+                            t(
+                                "This older answer has source references but no verified exact quotes."
+                            )
+                        )
+                    for item in service.answer_evidence(workspace, job["id"], draft["revision"]):
+                        st.caption(f"{item['source']} · {item['locator']} · {item['citation']}")
+                        for quote in item["quotes"]:
+                            st.text(quote)
+                        with st.expander(t("Original fragment")):
+                            st.text(item["text"])
                 editor_key = f"editor:{workspace.path}:{job['id']}"
                 buffer_key = editor_key + ":text"
                 if editor_key not in st.session_state:
