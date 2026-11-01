@@ -17,7 +17,7 @@ flowchart TD
     EXEC --> CLAUDE[Official Claude Code CLI]
     EXEC --> OLLAMA[Local Ollama model]
     APP --> TTS[Local speech renderer]
-    APP --> SLIDES[PPTX renderer]
+    APP --> SLIDES[Python / python-pptx renderer]
 ```
 
 Streamlit и CLI непосредственно вызывают Python application services. UI не запускает shell-команды CLI для бизнес-операций. Ядро не импортирует Streamlit/Typer и не зависит от провайдерских SDK. Отдельный HTTP API для связи собственных интерфейсов в v1 не нужен.
@@ -35,10 +35,10 @@ Streamlit и CLI непосредственно вызывают Python applicat
 | Текст | Официальные Codex/Claude CLI runners и прямой Ollama HTTP adapter |
 | Речь | Кандидаты Qwen3-TTS и Chatterbox через стабильный MLX runtime. Выбор по измеренному RU/EN пилоту |
 | Монтаж | FFmpeg/ffprobe, сегменты WAV и финальный MP3. Версии и параметры фиксируются |
-| Презентации | Небольшой Node/PptxGenJS renderer. Проверяемый открытый способ рендеринга превью, например LibreOffice, выбирается в пилоте |
+| Презентации | `python-pptx>=1.0.2,<2` внутри существующего Python-сервиса. Редактируемые объекты и заметки докладчика сохраняются в PPTX. Проверяемый открытый способ рендеринга превью, например LibreOffice, выбирается в пилоте |
 | Проверки | pytest, проверки типов/формата, Streamlit AppTest и браузерный smoke test. Настоящие модели отдельно от offline CI |
 
-Это технические defaults, а не обязательная установка всех зависимостей для любой команды. Extras для UI, TTS и slides позволяют запускать core CLI без тяжёлых пакетов. Runtime, встроенный в Codex desktop, не является зависимостью проекта.
+Это технические defaults, а не обязательная установка всех зависимостей для любой команды. Extras `ui` и `speech` позволяют запускать core CLI без интерфейса и моделей речи. Генератор PPTX входит в базовые Python-зависимости, отдельный runtime или framework ему не нужен. Runtime, встроенный в Codex desktop, не является зависимостью проекта.
 
 ## Исполнители
 

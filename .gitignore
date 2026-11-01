@@ -13,7 +13,6 @@ htmlcov/
 build/
 dist/
 *.egg-info/
-node_modules/
 .streamlit/secrets.toml
 .claude/settings.local.json
 .brofessor/

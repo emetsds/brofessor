@@ -12,18 +12,17 @@ The measured checks and remaining work are in the [implementation plan](docs/imp
 
 ## Install from source
 
-Use Python 3.12, uv, Node.js 20+ and an official stable Codex or Claude Code CLI, or a local Ollama server. Local Qwen3 speech requires Apple Silicon. The reference Mac has 32 GB memory.
+Use Python 3.12, uv and an official stable Codex or Claude Code CLI, or a local Ollama server. Local Qwen3 speech requires Apple Silicon. The reference Mac has 32 GB memory.
 
 ```sh
 uv sync --locked --extra ui --extra speech
-npm ci --ignore-scripts
 export HF_HOME="$PWD/.models-cache"
 uv run --extra ui --extra speech brofessor -w ./workspaces/demo ui
 ```
 
 The app listens on `127.0.0.1`. In the UI, import a source, choose a focus and create a draft. Edit the draft, then use the audio/PPTX render button. The first speech run downloads the pinned public Qwen3-TTS model. Subsequent speech runs can use `HF_HUB_OFFLINE=1`.
 
-For text and PPTX only, omit `--extra speech`. Existing agents can use the same CLI. There is no separate skill protocol or agent framework.
+For text and PPTX only, omit `--extra speech`. PPTX generation runs in Python with `python-pptx>=1.0.2,<2`, installed by `uv sync`. Existing agents can use the same CLI. There is no separate skill protocol or agent framework.
 
 ## CLI workflow
 
@@ -71,7 +70,6 @@ For Ollama, start the local server with `OLLAMA_NO_CLOUD=1` and select an instal
 
 ```sh
 uv sync --locked --extra ui
-npm ci --ignore-scripts
 uv run --extra ui pytest -q
 uv run ruff check .
 uv run ruff format --check .

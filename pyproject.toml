@@ -7,7 +7,7 @@ name = "brofessor"
 version = "0.1.0"
 description = "Local sources, grounded answers, podcasts and presentations"
 requires-python = ">=3.12,<3.14"
-dependencies = ["typer>=0.15,<1", "pydantic>=2.10,<3", "pypdf>=5,<7", "httpx>=0.28,<1"]
+dependencies = ["typer>=0.15,<1", "pydantic>=2.10,<3", "pypdf>=5,<7", "httpx>=0.28,<1", "python-pptx>=1.0.2,<2"]
 
 [project.optional-dependencies]
 ui = ["streamlit>=1.45,<2"]

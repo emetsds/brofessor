@@ -24,7 +24,7 @@ Implementation is authorized. Build and verify the working product incrementally
 
 ## Development choices
 
-The proposed stack is Python 3.12, uv, Typer, Pydantic, SQLite, and Streamlit, with a small Node/PptxGenJS renderer. Revisit a choice only when evidence improves the user outcome. Prefer a local worker over external queue infrastructure.
+The stack is Python 3.12, uv, Typer, Pydantic, SQLite, Streamlit, and python-pptx>=1.0.2,<2 for PPTX generation. Keep rendering in the existing Python service without adding a framework. Revisit a choice only when evidence improves the user outcome. Prefer a local worker over external queue infrastructure.
 
 Keep the architecture small: one SQLite workspace, one OS-locked local worker, and three bounded text adapters. Do not introduce worker leases, a separate host-agent protocol, workspace archive formats, or speculative future features. CLI documentation is sufficient for existing agents to use the product.
 

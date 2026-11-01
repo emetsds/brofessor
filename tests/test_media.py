@@ -1,7 +1,7 @@
 """Offline renderer contract tests; fake speech is never a model-quality check."""
 
-import shutil
 import wave
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -148,10 +148,15 @@ def test_rejects_unpinned_model_and_bad_plans(tmp_path, speech):
         media.render_audio({"turns": []}, tmp_path / "a.wav", segment_dir=tmp_path)
 
 
-def test_real_pptx_has_editable_text_table_notes_and_citations(tmp_path):
-    checkout = Path(__file__).parents[1]
-    if not shutil.which("node") or not (checkout / "node_modules/pptxgenjs").is_dir():
-        pytest.skip("Run npm ci to exercise the real PPTX renderer")
+def test_real_pptx_has_editable_text_table_notes_and_citations_without_external_tools(
+    tmp_path, monkeypatch
+):
+    from pptx import Presentation
+
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(
+        media.subprocess, "run", lambda *a, **k: pytest.fail("PPTX must render in Python")
+    )
     output = media.render_slides(
         {
             "title": "Editable evidence",
@@ -177,6 +182,75 @@ def test_real_pptx_has_editable_text_table_notes_and_citations(tmp_path):
         assert "Проверяемый вывод" in slide and "<a:tbl>" in slide
         assert "source:p2" in slide and "Проверить первоисточник" in notes
         assert "<p:pic>" not in slide  # text/table is not a screenshot
+        namespace = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+        paragraph_properties = next(
+            p
+            for p in ET.fromstring(slide).iter(f"{namespace}pPr")
+            if p.find(f"{namespace}buChar") is not None
+        )
+        children = [element.tag for element in paragraph_properties]
+        assert children.index(f"{namespace}buChar") < children.index(f"{namespace}defRPr")
+    deck = Presentation(output)
+    assert len(deck.slides) == 1
+    assert deck.core_properties.title == "Editable evidence"
+    table = next(shape.table for shape in deck.slides[0].shapes if shape.has_table)
+    assert table.cell(1, 0).text == "Контракт"
+    table.cell(1, 0).text = "Правка таблицы"
+    deck.slides[0].notes_slide.notes_text_frame.text = "Правка заметки"
+    edited = tmp_path / "edited.pptx"
+    deck.save(edited)
+    reopened = Presentation(edited)
+    assert (
+        next(s.table for s in reopened.slides[0].shapes if s.has_table).cell(1, 0).text
+        == "Правка таблицы"
+    )
+    assert reopened.slides[0].notes_slide.notes_text_frame.text == "Правка заметки"
+
+
+def test_slide_order_unicode_and_original_notes_are_preserved(tmp_path):
+    from pptx import Presentation
+
+    output = media.render_slides(
+        {
+            "title": "Пример & evidence",
+            "language": "en",
+            "slides": [
+                {
+                    "title": "First <result>",
+                    "bullets": ["A & B", "Русский текст"],
+                    "notes": "Paragraph one.\n\nВторой абзац.",
+                    "citations": ["source:1", "source:2"],
+                },
+                {"title": "Second", "bullets": [], "notes": "No bullet points", "citations": []},
+            ],
+        },
+        tmp_path / "ordered.pptx",
+    )
+    deck = Presentation(output)
+    assert len(deck.slides) == 2
+    texts = [[s.text for s in slide.shapes if s.has_text_frame] for slide in deck.slides]
+    assert "First <result>" in texts[0] and "Second" in texts[1]
+    assert any("A & B" in text and "Русский текст" in text for text in texts[0])
+    notes = deck.slides[0].notes_slide.notes_text_frame.text
+    assert "Paragraph one.\n\nВторой абзац." in notes
+    assert "source:1" in notes and "source:2" in notes
+
+
+def test_failed_save_preserves_existing_deck_and_removes_temporary_file(tmp_path, monkeypatch):
+    from pptx.presentation import Presentation
+
+    output = tmp_path / "deck.pptx"
+    output.write_bytes(b"existing user artifact")
+
+    def fail_save(self, target):
+        Path(target).write_bytes(b"incomplete output")
+        raise OSError("Synthetic disk error")
+
+    monkeypatch.setattr(Presentation, "save", fail_save)
+    with pytest.raises(OSError, match="Synthetic disk error"):
+        media.render_slides({"slides": [{"title": "A title", "bullets": []}]}, output)
+    assert output.read_bytes() == b"existing user artifact"
+    assert list(tmp_path.iterdir()) == [output]
 
 
 def test_rejects_dense_slides(tmp_path):
