@@ -10,13 +10,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from brofessor import service
+from brofessor import projects, service, speech_models
 from brofessor import ui_language
 from brofessor.executors import DEFAULT_OLLAMA_PORT
 from brofessor.workspace import Workspace
 
 parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument("--workspace", default=".brofessor/workspace")
+parser.add_argument("--workspace", default=None)
 parser.add_argument("--ollama-port", type=int, default=DEFAULT_OLLAMA_PORT)
 args, _ = parser.parse_known_args()
 st.set_page_config(page_title="brofessor", page_icon="🎙", layout="wide")
@@ -37,6 +37,49 @@ def remember_language():
         st.session_state.language_save_failed = True
 
 
+def activate_project(project):
+    st.session_state.project_selector = project["path"]
+    st.session_state.pop("source_ids", None)
+    st.session_state.pop("project_error", None)
+
+
+def select_project():
+    try:
+        activate_project(projects.use(st.session_state.project_selector))
+    except (OSError, ValueError) as error:
+        st.session_state.project_error = str(error)
+
+
+def create_project():
+    try:
+        activate_project(
+            projects.create(st.session_state.project_name, root=st.session_state.projects_directory)
+        )
+        st.session_state.project_name = ""
+    except (OSError, ValueError) as error:
+        st.session_state.project_error = str(error)
+
+
+def open_project():
+    try:
+        activate_project(
+            projects.open_project(
+                st.session_state.existing_project_path,
+                name=st.session_state.project_name.strip() or None,
+            )
+        )
+        st.session_state.project_name = ""
+        st.session_state.existing_project_path = ""
+    except (OSError, ValueError) as error:
+        st.session_state.project_error = str(error)
+
+
+# Keep unsaved draft buffers when their project's widgets are temporarily hidden.
+for state_key in list(st.session_state):
+    if state_key.startswith("editor:"):
+        st.session_state[state_key] = st.session_state[state_key]
+
+
 with st.sidebar:
     interface_language = st.selectbox(
         "Язык интерфейса / Interface language",
@@ -50,7 +93,37 @@ with st.sidebar:
         st.warning(
             t("Could not remember your language choice. It will apply only to this session.")
         )
-    workspace_path = st.text_input(t("Workspace"), args.workspace, key="workspace_path")
+    try:
+        catalog = projects.list_projects()
+        if args.workspace and str(Path(args.workspace).expanduser().resolve()) not in {
+            item["path"] for item in catalog
+        }:
+            projects.open_project(Workspace(args.workspace).path)
+            catalog = projects.list_projects()
+        project_names = {item["path"]: item["name"] for item in catalog}
+        current = projects.selected()
+        selected_index = list(project_names).index(current["path"]) if current else None
+        workspace_path = st.selectbox(
+            t("Project"),
+            list(project_names),
+            index=selected_index,
+            format_func=project_names.__getitem__,
+            key="project_selector",
+            on_change=select_project,
+        )
+        with st.expander(t("Create or open a project")):
+            st.text_input(t("Project name"), key="project_name")
+            st.text_input(t("Projects folder"), str(projects.directory()), key="projects_directory")
+            st.button(t("Create project"), key="create_project", on_click=create_project)
+            st.text_input(t("Existing project folder"), key="existing_project_path")
+            st.button(t("Open project"), key="open_project", on_click=open_project)
+        if st.session_state.get("project_error"):
+            st.error(
+                t("Could not open the workspace: {error}", error=st.session_state.project_error)
+            )
+    except (OSError, ValueError) as error:
+        st.error(t("Could not open the workspace: {error}", error=error))
+        st.stop()
     provider = st.selectbox(t("Provider"), ["codex", "claude", "ollama"], key="provider")
     model = st.text_input(t("Model (leave empty for the provider default)"), key="model") or None
     ollama_port = st.session_state.get("selected_ollama_port", args.ollama_port)
@@ -83,6 +156,11 @@ with st.sidebar:
             st.error(t("Could not check the connection: {error}", error=error))
 
 try:
+    if not workspace_path:
+        st.info(t("Create a project or open an existing project folder to get started."))
+        st.stop()
+    if not (Path(workspace_path) / "workspace.sqlite3").is_file():
+        raise ValueError("The selected project folder is unavailable")
     workspace = Workspace(workspace_path)
 except Exception as error:
     st.error(t("Could not open the workspace: {error}", error=error))
@@ -93,6 +171,79 @@ tab_labels = [t("Sources"), t("Create"), t("Jobs and results")]
 
 def remember_tab():
     st.session_state.active_tab_index = tab_labels.index(st.session_state.active_tab)
+
+
+def choose_speech_model():
+    try:
+        speech_models.use(st.session_state.tts_model)
+        st.session_state.pop("tts_error", None)
+    except (OSError, ValueError) as error:
+        st.session_state.tts_error = str(error)
+
+
+@st.fragment(run_every=2)
+def speech_status(choice):
+    item = next(item for item in speech_models.list_models() if item["id"] == choice)
+    st.caption(
+        t(
+            "Languages: {languages} · Download: {size} MB",
+            languages=", ".join(item["languages"]),
+            size=round(item["download_bytes"] / 1e6),
+        )
+    )
+    st.caption(
+        t(
+            "Requires Apple Silicon and the speech extra. License: {license}",
+            license=item["license"],
+        )
+    )
+    st.caption(t("Installed" if item["installed"] else "Not installed"))
+    pending = next(
+        (
+            job
+            for job in workspace.jobs()
+            if job["kind"] == "download_model"
+            and job["params"]["model"] == choice
+            and job["status"] in ("queued", "running")
+        ),
+        None,
+    )
+    if pending is not None:
+        done = pending["progress"].get("completed", 0)
+        st.progress(min(done / item["download_bytes"], 1.0), text=t("Downloading model"))
+        st.caption(t("See job {id} in Jobs and results", id=pending["id"]))
+    if st.button(
+        t("Download model"),
+        key="download_tts_model",
+        disabled=item["installed"] or pending is not None or not item["compatible"],
+    ):
+        try:
+            service.download_model(workspace, choice)
+            st.rerun()
+        except (OSError, ValueError) as error:
+            st.error(t("Could not submit the job: {error}", error=error))
+    if st.session_state.get("tts_error"):
+        st.error(t("Details: {error}", error=st.session_state.tts_error))
+
+
+def speech_controls():
+    models = speech_models.list_models()
+    choices = {item["id"]: item for item in models}
+    with st.expander(t("Speech models")):
+        default = speech_models.selected()
+        choice = st.selectbox(
+            t("Voice model"),
+            list(choices),
+            index=list(choices).index(default),
+            format_func=lambda value: choices[value]["name"],
+            key="tts_model",
+            on_change=choose_speech_model,
+        )
+        speech_status(choice)
+
+
+with st.sidebar:
+    speech_controls()
 
 
 sources_tab, create_tab, results_tab = st.tabs(
@@ -242,6 +393,7 @@ def results():
             "slides": "Slide outline",
             "render_podcast": "Audio",
             "render_slides": "Presentation",
+            "download_model": "TTS model download",
         }.get(job["kind"], job["kind"])
         status_name = {
             "queued": "Queued",
@@ -258,6 +410,7 @@ def results():
                 "script": "Writing script",
                 "speech": "Generating speech",
                 "draft_ready": "Draft ready",
+                "downloading_model": "Downloading model",
             }.get(progress.get("stage"))
             if stage:
                 st.caption(t(stage))
@@ -265,7 +418,13 @@ def results():
                 completed, total = progress.get("completed", 0), progress["total"]
                 st.progress(
                     min(completed / total, 1.0),
-                    text=t("Completed {completed} of {total}", completed=completed, total=total),
+                    text=t(
+                        "Downloaded {completed} of {total} MB",
+                        completed=round(completed / 1e6),
+                        total=round(total / 1e6),
+                    )
+                    if job["kind"] == "download_model"
+                    else t("Completed {completed} of {total}", completed=completed, total=total),
                 )
             if job["error"]:
                 st.error(t("Details: {error}", error=job["error"]))
@@ -340,11 +499,21 @@ def results():
                         st.error(t("Could not save edits: {error}", error=error))
                 if job["kind"] in ("podcast", "slides"):
                     label = t("Generate audio" if job["kind"] == "podcast" else "Build PPTX")
-                    if st.button(label, key=f"render-{job['id']}"):
+                    voice_model = st.session_state.get("tts_model", speech_models.selected())
+                    missing_voice = (
+                        job["kind"] == "podcast"
+                        and speech_models.installed_path(voice_model) is None
+                    )
+                    if missing_voice:
+                        st.caption(t("Download the selected voice model before generating audio."))
+                    if st.button(label, key=f"render-{job['id']}", disabled=missing_voice):
                         service.render(
                             workspace,
                             job["id"],
-                            request_key=f"render:{job['id']}:{draft['revision']}",
+                            model=voice_model if job["kind"] == "podcast" else None,
+                            request_key=f"render:{job['id']}:{draft['revision']}:{voice_model}"
+                            if job["kind"] == "podcast"
+                            else f"render:{job['id']}:{draft['revision']}",
                         )
                         st.rerun()
             for artifact in workspace.artifacts(job["id"]):

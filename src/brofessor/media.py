@@ -188,6 +188,13 @@ def render_slides(plan: dict, output: Path) -> Path:
 
 def _model_identity(model: str | None) -> dict:
     model = model or DEFAULT_TTS_MODEL
+    from .speech_models import get
+
+    try:
+        item = get(model)
+        return {"repo": item["repo"], "revision": item["revision"]}
+    except ValueError:
+        pass
     if model == DEFAULT_TTS_MODEL:
         return {"repo": model, "revision": DEFAULT_TTS_REVISION}
     if "@" in model:
@@ -216,6 +223,20 @@ def _load_speech_model(identity: dict):
             f"Local speech requires Apple Silicon, Metal and uv sync --extra speech: {exc}"
         ) from exc
     try:
+        from .speech_models import get, installed_path
+
+        if "repo" in identity:
+            try:
+                known = get(f"{identity['repo']}@{identity['revision']}")
+            except ValueError:
+                known = None
+            if known is not None:
+                installed = installed_path(known["id"])
+                if installed is None:
+                    raise MediaError(
+                        f"Download this voice model first: brofessor tts download {known['id']} --wait"
+                    )
+                identity = {**identity, "path": str(installed)}
         location = identity.get("path") or snapshot_download(
             identity["repo"],
             revision=identity["revision"],

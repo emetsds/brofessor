@@ -1,15 +1,31 @@
 """UI wording and the local user's language preference, independent of workspaces."""
 
-import json
-import os
-import sys
-import tempfile
-from pathlib import Path
+from . import preferences
 
 LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Speech models": "Модели озвучки",
+    "Voice model": "Модель озвучки",
+    "Languages: {languages} · Download: {size} MB": "Языки: {languages} · Скачивание: {size} МБ",
+    "Requires Apple Silicon and the speech extra. License: {license}": "Нужны Apple Silicon и установка speech. Лицензия: {license}",
+    "Installed": "Установлена",
+    "Not installed": "Не установлена",
+    "Downloading model": "Скачивание модели",
+    "Download model": "Скачать модель",
+    "See job {id} in Jobs and results": "Задание {id} во вкладке «Задания и результаты»",
+    "TTS model download": "Скачивание TTS-модели",
+    "Downloaded {completed} of {total} MB": "Скачано {completed} из {total} МБ",
+    "Download the selected voice model before generating audio.": "Скачайте выбранную модель озвучки перед созданием аудио.",
+    "Project": "Проект",
+    "Create or open a project": "Создать или открыть проект",
+    "Project name": "Название проекта",
+    "Projects folder": "Папка проектов",
+    "Create project": "Создать проект",
+    "Existing project folder": "Папка существующего проекта",
+    "Open project": "Открыть проект",
+    "Create a project or open an existing project folder to get started.": "Создайте проект или откройте папку существующего проекта, чтобы начать работу.",
     "Workspace": "Каталог материалов",
     "Provider": "Исполнитель",
     "Model (leave empty for the provider default)": "Модель (пусто — выбор исполнителя)",
@@ -87,26 +103,8 @@ def text(language: str, message: str, **values) -> str:
     return template.format(**values)
 
 
-def preferences_path() -> Path:
-    if configured := os.environ.get("XDG_CONFIG_HOME"):
-        base = Path(configured).expanduser()
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    else:
-        base = Path.home() / ".config"
-    return base / "brofessor" / "preferences.json"
-
-
-def _preferences() -> dict:
-    try:
-        value = json.loads(preferences_path().read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {}
-    except (OSError, ValueError):
-        return {}
-
-
 def load_language(browser_locale: str | None = None) -> str:
-    language = _preferences().get("ui_language")
+    language = preferences.read().get("ui_language")
     if isinstance(language, str) and language in LANGUAGE_NAMES:
         return language
     return "ru" if not browser_locale or browser_locale.lower().startswith("ru") else "en"
@@ -115,15 +113,4 @@ def load_language(browser_locale: str | None = None) -> str:
 def save_language(language: str) -> None:
     if language not in LANGUAGE_NAMES:
         raise ValueError("UI language must be ru or en")
-    path = preferences_path()
-    value = {**_preferences(), "ui_language": language}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, name = tempfile.mkstemp(dir=path.parent, prefix=".preferences-", suffix=".json")
-    temporary = Path(name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump(value, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
-        temporary.replace(path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    preferences.update(ui_language=language)

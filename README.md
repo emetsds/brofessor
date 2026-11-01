@@ -14,10 +14,10 @@ Install the app and UI with Python 3.12:
 
 ```sh
 uv sync --locked --python 3.12 --extra ui
-export BROFESSOR_WORKSPACE="$PWD/workspaces/demo"
+uv run --no-sync brofessor ui
 ```
 
-The workspace is created automatically and contains your sources, drafts, job history, and files. Use one directory per project; repeat the workspace export in each new terminal. For CLI-only use, omit `--extra ui` when installing.
+In the sidebar, create a named project or open an existing project folder. Each project contains its sources, drafts, job history, and generated files. Projects are stored outside the application by default, in your user data directory; you can choose another projects folder when creating one. For CLI-only use, omit `--extra ui` when installing and create a project with the commands below.
 
 Examples use `uv run --no-sync` to run the environment you just installed. After updating the checkout, repeat the install command with the extras you use.
 
@@ -59,6 +59,8 @@ Open [localhost:8501](http://localhost:8501). Use **Язык интерфейс�
 
 **Output language** is a separate setting: it selects the language of the answer, podcast, or presentation. Switching the interface language keeps your draft edits and output settings.
 
+Choose a **Project** in the sidebar. **Create or open a project** lets you name a new project, choose its storage folder, or open a folder containing an existing brofessor workspace. The last selected project is remembered. Switching projects changes the sources and results shown; unsaved draft edits remain available when you switch back.
+
 To create a result (button labels below are shown in both languages):
 
 1. In **Источники** (Sources), upload a PDF, EPUB, Markdown, or TXT file and click **Импортировать** (Import). For a first test, use `tests/fixtures/chapter.md` from this repository. PDFs need selectable text; scanned pages are not OCR'd.
@@ -97,7 +99,17 @@ The same `--ollama-port` option is available on `slides` and `podcast`. Each job
 
 ## Use the CLI
 
-These examples use the workspace selected during setup and Codex. Replace the provider flags as needed. Replace placeholder IDs such as `DRAFT_ID` with the `id` returned by the previous command.
+Create or select a project first:
+
+```sh
+uv run --no-sync brofessor project create "My book"
+uv run --no-sync brofessor project list
+uv run --no-sync brofessor project use "My book"
+```
+
+To choose a storage folder, add `--directory /path/to/projects` to `project create`. A project subfolder is created there. To open existing data without copying it, use `project open /path/to/workspace --name "My book"`.
+
+Following commands use the selected project and Codex. An explicit `-w /path/to/workspace` before the subcommand or `BROFESSOR_WORKSPACE` overrides project selection. Remove an old workspace environment override to follow your selected project. Replace the provider flags as needed; replace placeholder IDs such as `DRAFT_ID` with the `id` returned by the previous command.
 
 Import a source once before using any workflow below. Start with the bundled example, or replace its path with your own material:
 
@@ -118,7 +130,7 @@ uv run --no-sync brofessor draft show DRAFT_ID
 uv run --no-sync brofessor draft render DRAFT_ID --wait
 ```
 
-Rendering creates a **new job ID**. Its output includes `artifacts[].path`, relative to the workspace. For example, `jobs/abc123/presentation.pptx` means `$BROFESSOR_WORKSPACE/jobs/abc123/presentation.pptx`. Open that file in your presentation editor. PPTX generation needs neither speech dependencies nor an installed office application.
+Rendering creates a **new job ID**. Its output includes `artifacts[].path`, relative to the project folder reported by `project list`. For example, a project at `/path/to/my-book` with artifact `jobs/abc123/presentation.pptx` produces `/path/to/my-book/jobs/abc123/presentation.pptx`. Open that file in your presentation editor. PPTX generation needs neither speech dependencies nor an installed office application.
 
 ### Ask a question
 
@@ -135,12 +147,19 @@ On an Apple Silicon Mac, add local speech support before starting the UI or a re
 
 ```sh
 uv sync --locked --python 3.12 --extra ui --extra speech
+uv run --no-sync brofessor tts list
+uv run --no-sync brofessor tts download qwen3-0.6b --wait
+uv run --no-sync brofessor tts use qwen3-0.6b
 uv run --no-sync brofessor podcast --provider codex --language ru --minutes 3 --focus "Explain the main findings and their limits" --wait
 uv run --no-sync brofessor draft show PODCAST_DRAFT_ID
 uv run --no-sync brofessor draft render PODCAST_DRAFT_ID --wait
 ```
 
-Review the dialogue before the last command. The audio file path is returned in the render job's `artifacts`. Speech runs locally with Qwen3-TTS and two preset voices: `host` (Ryan) and `guest` (Vivian). The first audio render downloads the model weights; later renders reuse them.
+Review the dialogue before the last command. The audio file path is returned in the render job's `artifacts`. Speech runs locally with Qwen3-TTS and two preset voices: `host` (Ryan) and `guest` (Vivian).
+
+**Speech models** in the sidebar offers Qwen3 0.6B (~1.7 GB) and 1.7B (~2.3 GB), both 4-bit models for Apple Silicon with Russian and English support. Choose a model and click **Download model**. Downloads run as background jobs with progress, cancellation, and resume in **Jobs and results**. Model weights are shared across projects in your user data directory outside the checkout. Complete previously cached files are reused where available; installed models work offline.
+
+`tts use` sets the default for future audio renders. To choose a model for one render, pass `draft render PODCAST_DRAFT_ID --tts-model qwen3-1.7b --wait`. Download it first. The render job records the exact model revision, so later preference changes do not alter that job.
 
 Start with a three-minute preview. `--minutes` is a target, not a guarantee: the app reports measured audio duration and warns if it differs by more than 10%. Long episodes and series are not yet verified. Use `--language en` for English; generate separate drafts for both languages.
 
@@ -159,7 +178,7 @@ On a revision conflict, reload the latest draft and merge your edits before retr
 
 Use the CLI above to operate brofessor. If changing the code, also read [AGENTS.md](AGENTS.md). Command options are available through `uv run --no-sync brofessor --help` and each subcommand's `--help`.
 
-- **Workspace:** run from the checkout and pass an explicit workspace, for example `uv run --no-sync brofessor -w /path/to/workspace job list`. Do not assume environment variables persist between tool calls. Without `-w` or `BROFESSOR_WORKSPACE`, the default is `.brofessor/workspace`.
+- **Project:** use `project list` and `project use NAME`, or pass an explicit workspace, for example `uv run --no-sync brofessor -w /path/to/workspace job list`. Without `-w` or `BROFESSOR_WORKSPACE`, commands use the remembered project. Do not assume environment variables persist between tool calls.
 - **Source scope:** without `--source`, generation uses all sources in the workspace. Get IDs with `source list`; repeat `--source SOURCE_ID` to select a subset. `--language` defaults to `ru`.
 - **Results:** data commands print JSON; errors may use stderr. Check both the exit status and returned fields. `doctor` can exit successfully with `available: false`.
 - **Jobs:** save the returned `id`. Without `--wait`, submission returns immediately; poll `job show ID`. `queued` and `running` are active; `succeeded`, `failed`, `cancelled`, and `interrupted` are terminal. Inspect `error` on failure. `--wait` exits nonzero unless the job succeeds. List jobs with `job list`; cancel the intended job with `job cancel ID`.

@@ -79,6 +79,10 @@ def render(
     draft = workspace.draft(draft_job_id)
     if original["kind"] not in ("podcast", "slides") or draft is None:
         raise ValueError("Generate a podcast or slides draft first")
+    if original["kind"] == "podcast":
+        from .speech_models import reference
+
+        model = reference(model)
     result = workspace.submit(
         "render_" + original["kind"],
         {
@@ -94,6 +98,18 @@ def render(
 
         ensure_worker(workspace)
     return result
+
+
+def download_model(workspace: Workspace, model: str, *, start_worker=True) -> dict:
+    from .speech_models import get
+
+    item = get(model)
+    job = workspace.submit("download_model", {"model": item["id"]})
+    if start_worker:
+        from .worker import ensure_worker
+
+        ensure_worker(workspace)
+    return job
 
 
 def artifact_path(workspace: Workspace, path: str) -> Path:

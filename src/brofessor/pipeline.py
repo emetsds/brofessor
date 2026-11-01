@@ -23,6 +23,15 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     def progress(value):
         workspace.update_job(job["id"], progress=value)
 
+    if job["kind"] == "download_model":
+        from .speech_models import download
+
+        result = download(params["model"], cancelled=cancelled, progress=progress)
+        output = folder / "model.json"
+        atomic_json(output, result)
+        workspace.add_artifact(job["id"], output, "json", result)
+        return
+
     def generate(prompt, schema, citation_scope=None):
         check()
         ollama_port = params.get("ollama_port", executors.DEFAULT_OLLAMA_PORT)

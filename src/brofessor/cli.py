@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 from click import ClickException
 
-from . import service
+from . import projects, service
 from .executors import DEFAULT_OLLAMA_PORT
 from .workspace import Workspace
 
@@ -22,9 +22,13 @@ app = typer.Typer(no_args_is_help=True, help="brofessor: sources, podcasts and p
 source_app = typer.Typer(no_args_is_help=True)
 job_app = typer.Typer(no_args_is_help=True)
 draft_app = typer.Typer(no_args_is_help=True)
+project_app = typer.Typer(no_args_is_help=True, help="Create, open and select local projects.")
+tts_app = typer.Typer(no_args_is_help=True, help="List, download and select local speech models.")
 app.add_typer(source_app, name="source")
 app.add_typer(job_app, name="job")
 app.add_typer(draft_app, name="draft")
+app.add_typer(project_app, name="project")
+app.add_typer(tts_app, name="tts")
 
 
 def show(value):
@@ -34,11 +38,86 @@ def show(value):
 @app.callback()
 def main(
     ctx: typer.Context,
-    workspace: Path = typer.Option(
-        Path(".brofessor/workspace"), "--workspace", "-w", envvar="BROFESSOR_WORKSPACE"
-    ),
+    workspace: Path | None = typer.Option(None, "--workspace", "-w", envvar="BROFESSOR_WORKSPACE"),
 ):
-    ctx.obj = Workspace(workspace)
+    if ctx.invoked_subcommand in ("project", "doctor"):
+        ctx.obj = None
+        return
+    if workspace is None:
+        current = projects.selected()
+        if current is not None:
+            if not current["available"] and ctx.invoked_subcommand not in ("ui", "tts"):
+                raise ClickException(
+                    "Selected project folder is unavailable. Use project open PATH"
+                )
+            workspace = Path(current["path"]) if current["available"] else None
+        elif ctx.invoked_subcommand == "init":
+            workspace = Path(projects.create("Default")["path"])
+        elif ctx.invoked_subcommand not in ("ui", "tts"):
+            raise ClickException("Choose a project first: project create NAME or project open PATH")
+    ctx.obj = Workspace(workspace) if workspace is not None else None
+
+
+@project_app.command("list")
+def list_projects():
+    show(projects.list_projects())
+
+
+@project_app.command("create")
+def create_project(name: str, directory: Path | None = None):
+    """Create a project in the chosen projects directory and select it."""
+    show(projects.create(name, root=directory))
+
+
+@project_app.command("open")
+def open_project(path: Path, name: str | None = None):
+    """Register an existing workspace folder and select it without copying data."""
+    show(projects.open_project(path, name=name))
+
+
+@project_app.command("use")
+def use_project(name: str):
+    """Select a registered project by name or absolute path."""
+    show(projects.use(name))
+
+
+@tts_app.command("list")
+def list_tts_models():
+    from .speech_models import list_models
+
+    show(list_models())
+
+
+@tts_app.command("use")
+def use_tts_model(model: str):
+    from .speech_models import use
+
+    show(use(model))
+
+
+@tts_app.command("download")
+def download_tts_model(ctx: typer.Context, model: str, wait: bool = False):
+    """Download a pinned model in a background job; --wait shows progress on stderr."""
+    if ctx.obj is None:
+        raise ClickException("Choose a project first: project create NAME or project open PATH")
+    job = service.download_model(ctx.obj, model)
+    if wait:
+        previous = None
+        while job["status"] in ("queued", "running"):
+            state = (job["progress"].get("completed", 0), job["progress"].get("total", 0))
+            if state != previous and state[1]:
+                typer.echo(f"{state[0] / 1e6:.0f} / {state[1] / 1e6:.0f} MB", err=True)
+                previous = state
+            time.sleep(0.25)
+            from .worker import is_running
+
+            if not is_running(ctx.obj):
+                job = wait_for_job(ctx.obj, job["id"])
+                break
+            job = ctx.obj.job(job["id"])
+    show(job)
+    if wait and job["status"] != "succeeded":
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -262,7 +341,12 @@ def save_draft(ctx: typer.Context, job_id: str, path: Path, expected_revision: i
 def render_draft(
     ctx: typer.Context,
     job_id: str,
-    model: str | None = None,
+    model: str | None = typer.Option(
+        None,
+        "--tts-model",
+        "--model",
+        help="Speech model ID from tts list, repo@revision, or local folder.",
+    ),
     request_key: str | None = None,
     wait: bool = False,
 ):
@@ -304,6 +388,9 @@ def ui(
 ):
     """Open the local Streamlit interface for this workspace."""
     module = Path(__file__).with_name("ui.py")
+    if ctx.obj is not None:
+        projects.open_project(ctx.obj.path)
+    workspace_args = ["--workspace", str(ctx.obj.path)] if ctx.obj is not None else []
     raise typer.Exit(
         subprocess.call(
             [
@@ -317,8 +404,7 @@ def ui(
                 f"--server.port={port}",
                 "--browser.gatherUsageStats=false",
                 "--",
-                "--workspace",
-                str(ctx.obj.path),
+                *workspace_args,
                 "--ollama-port",
                 str(ollama_port),
             ]

@@ -16,6 +16,7 @@ def offline_streamlit_config(tmp_path, monkeypatch):
     # AppTest otherwise collects page-profile telemetry, including installed
     # agents/skills from the host filesystem. That is outside these UI contracts.
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     with patch_config_options({"browser.gatherUsageStats": False}):
         yield
 
@@ -263,7 +264,7 @@ def test_language_switch_preserves_form_inputs_and_unsaved_draft(tmp_path, monke
     ui.number_input(key="slide_count").set_value(4)
     ui.selectbox(key="ui_language").select("en").run()
     assert not ui.exception
-    assert ui.text_input(key="workspace_path").value == str(workspace.path)
+    assert ui.selectbox(key="project_selector").value == str(workspace.path)
     assert ui.selectbox(key="provider").value == "ollama"
     assert ui.text_input(key="model").value == "tiny"
     assert ui.number_input(key="ollama_port").value == 11435
@@ -293,3 +294,85 @@ def test_language_save_error_is_visible_but_ui_still_switches(tmp_path, monkeypa
     assert not ui.exception
     assert ui.tabs[0].label == "Sources"
     assert any("Could not remember" in warning.value for warning in ui.warning)
+
+
+def test_ui_creates_external_projects_and_keeps_their_sources_separate(tmp_path, monkeypatch):
+    from brofessor import projects
+
+    monkeypatch.setattr("sys.argv", ["ui.py"])
+    script = str(Path(__file__).parents[1] / "src/brofessor/ui.py")
+    ui = AppTest.from_file(script, default_timeout=10).run()
+    assert not ui.exception
+    assert ui.selectbox(key="project_selector").value is None
+    ui.text_input(key="project_name").set_value("First book")
+    ui.text_input(key="projects_directory").set_value(str(tmp_path / "external"))
+    ui.button(key="create_project").click().run()
+    assert not ui.exception
+    first = projects.selected()
+    source = tmp_path / "first.md"
+    source.write_text("Only in the first project")
+    Workspace(first["path"]).add_source(source)
+    ui.run()
+    assert any(expander.label == "first.md" for expander in ui.expander)
+    ui.text_input(key="project_name").set_value("Second book")
+    ui.button(key="create_project").click().run()
+    assert not ui.exception
+    assert projects.selected()["name"] == "Second book"
+    assert not any(expander.label == "first.md" for expander in ui.expander)
+    ui.selectbox(key="project_selector").select(first["path"]).run()
+    assert not ui.exception
+    assert any(expander.label == "first.md" for expander in ui.expander)
+    reopened = AppTest.from_file(script, default_timeout=10).run()
+    assert reopened.selectbox(key="project_selector").value == first["path"]
+
+
+def test_switching_projects_keeps_unsaved_draft_buffer(tmp_path, monkeypatch):
+    from brofessor import projects
+
+    first = projects.create("First")
+    workspace = Workspace(first["path"])
+    source = tmp_path / "source.txt"
+    source.write_text("One measured result")
+    workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    job = service.submit(workspace, "ask", focus="Evidence?", start_worker=False)
+    workspace.save_draft(job["id"], {"answer": "Original answer", "citations": [citation]})
+    workspace.update_job(job["id"], status="succeeded")
+    second = projects.create("Second")
+    projects.use("First")
+    monkeypatch.setattr("sys.argv", ["ui.py"])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    buffer_key = f"editor:{workspace.path}:{job['id']}:text"
+    unsaved = json.dumps({"answer": "Unsaved answer", "citations": [citation]})
+    ui.text_area(key=buffer_key).set_value(unsaved).run()
+    ui.selectbox(key="project_selector").select(second["path"]).run()
+    assert not ui.exception
+    assert not any(job["id"] in expander.label for expander in ui.expander)
+    ui.selectbox(key="project_selector").select(first["path"]).run()
+    assert not ui.exception
+    assert ui.text_area(key=buffer_key).value == unsaved
+    assert workspace.draft(job["id"])["data"]["answer"] == "Original answer"
+
+
+def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatch):
+    from brofessor import speech_models
+
+    workspace = Workspace(tmp_path / "workspace")
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    monkeypatch.setattr("brofessor.worker.ensure_worker", lambda workspace: None)
+    entries = speech_models.list_models()
+    monkeypatch.setattr(
+        speech_models, "list_models", lambda: [{**item, "compatible": True} for item in entries]
+    )
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    ui.selectbox(key="tts_model").select("qwen3-1.7b").run()
+    ui.button(key="download_tts_model").click().run()
+    assert not ui.exception
+    assert speech_models.selected() == "qwen3-1.7b"
+    assert workspace.jobs()[0]["kind"] == "download_model"
+    assert workspace.jobs()[0]["params"]["model"] == "qwen3-1.7b"
+    assert ui.button(key="download_tts_model").disabled
