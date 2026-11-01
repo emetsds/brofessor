@@ -161,7 +161,18 @@ def results():
             "interrupted": "Прервано",
         }[job["status"]]
         with st.expander(f"{kind_name} · {status_name} · {job['id']}"):
-            st.write(job["progress"])
+            progress = job["progress"]
+            stage = {
+                "reading": "Чтение источников",
+                "script": "Подготовка сценария",
+                "speech": "Озвучка",
+                "draft_ready": "Черновик готов",
+            }.get(progress.get("stage"))
+            if stage:
+                st.caption(stage)
+            if progress.get("total"):
+                completed, total = progress.get("completed", 0), progress["total"]
+                st.progress(min(completed / total, 1.0), text=f"Готово {completed} из {total}")
             if job["error"]:
                 st.error(job["error"])
             if job["status"] in ("queued", "running"):
@@ -243,8 +254,17 @@ def results():
                     continue
                 if artifact["kind"] == "audio":
                     st.audio(str(path))
-                if artifact["metadata"].get("warning"):
-                    st.warning(artifact["metadata"]["warning"])
+                metadata = artifact["metadata"]
+                if metadata.get("duration_matches") is False:
+                    actual = round(metadata["duration_seconds"])
+                    target = round(metadata["requested_seconds"])
+                    st.warning(
+                        f"Получилось {actual // 60}:{actual % 60:02d} вместо "
+                        f"{target // 60}:{target % 60:02d}. Длительность отличается более чем "
+                        "на 10%. Скорректируйте сценарий перед следующей сборкой."
+                    )
+                elif metadata.get("warning"):
+                    st.warning(metadata["warning"])
                 st.download_button(
                     f"Скачать {path.name}",
                     path.read_bytes(),
