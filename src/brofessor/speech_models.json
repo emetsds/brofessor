@@ -35,7 +35,7 @@
       "max_tokens": 1500,
       "seed": 42
     },
-    "notes": ""
+    "notes": "Long Russian tests produced repeats and omissions. Start with a preview; try Silero for Russian episodes."
   },
   {
     "id": "qwen3-1.7b",
@@ -73,7 +73,7 @@
       "max_tokens": 1500,
       "seed": 42
     },
-    "notes": ""
+    "notes": "Long Russian tests produced repeats and omissions. Start with a preview; try Silero for Russian episodes."
   },
   {
     "id": "silero-cis-base",

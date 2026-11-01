@@ -6,6 +6,11 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Long Russian tests produced repeats and omissions. Start with a preview; try Silero for Russian episodes.": "В длинных русских тестах были повторы и пропуски речи. Начните с образца; для русского выпуска попробуйте Silero.",
+    "Audio duration {actual} · Target {target}": "Длительность аудио {actual} · Цель {target}",
+    "Actual duration {actual}, target {target}. Edit the script to match the target within 10% and keep full episodes between 20 and 60 minutes.": "Получилось {actual} вместо {target}. Отредактируйте сценарий для попадания в цель с допуском 10%; полный выпуск должен длиться от 20 до 60 минут.",
+    "Script: {words} words. At the measured pace, about {suggested} words would match the target. This is an editing estimate.": "Слов в сценарии: {words}. Ориентир для целевой длительности при измеренном темпе: {suggested}. Это приблизительная оценка для редактуры.",
+    "Planning episode": "Планирование выпуска",
     "Reading coverage": "Покрытие чтения",
     "Consolidating reading notes": "Обобщение прочитанного",
     "Read {read} of {total} fragments · Excluded {excluded} · Cited {cited}": "Прочитано {read} из {total} фрагментов · Исключено {excluded} · Цитируется {cited}",
@@ -120,8 +125,6 @@ RUSSIAN = {
     "Generate audio": "Озвучить",
     "Build PPTX": "Собрать PPTX",
     "File is missing: {name}": "Файл отсутствует: {name}",
-    "Actual duration {actual}, target {target}. The difference exceeds 10%. Edit the script before rendering again.": "Получилось {actual} вместо {target}. Длительность отличается более чем на 10%. "
-    "Скорректируйте сценарий перед следующей сборкой.",
     "Audio warning: {warning}": "Предупреждение по аудио: {warning}",
     "Download {name}": "Скачать {name}",
 }

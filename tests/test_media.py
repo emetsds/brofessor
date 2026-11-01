@@ -63,6 +63,22 @@ def test_changed_text_and_language_invalidate_cache(tmp_path, speech):
     assert len(speech) == 5
 
 
+def test_editorial_removal_and_reordering_reuse_matching_segments(tmp_path, speech, monkeypatch):
+    original = plan()
+    original["turns"].append(
+        {"speaker": "host", "text": "Keep the qualification.", "citations": ["u2"]}
+    )
+    directory = tmp_path / "segments"
+    media.render_audio(original, tmp_path / "original.wav", segment_dir=directory)
+    edited = {**original, "turns": [original["turns"][2], original["turns"][1]]}
+    monkeypatch.setattr(media, "_load_speech_model", lambda *a: pytest.fail("Must reuse audio"))
+    result = media.render_audio(edited, tmp_path / "edited.wav", segment_dir=directory)
+    assert all(segment["reused"] for segment in result["segments"])
+    assert result["duration_seconds"] == 2.25
+    assert [segment["speaker"] for segment in result["segments"]] == ["host", "guest"]
+    assert len(speech) == 3
+
+
 @pytest.mark.parametrize("component", ["wav", "json"])
 def test_corrupt_segment_is_rendered_again(tmp_path, speech, component):
     directory = tmp_path / "segments"

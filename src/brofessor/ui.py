@@ -476,6 +476,7 @@ def results():
             progress = job["progress"]
             stage = {
                 "reading": "Reading sources",
+                "outline": "Planning episode",
                 "consolidating": "Consolidating reading notes",
                 "script": "Writing script",
                 "speech": "Generating speech",
@@ -512,7 +513,6 @@ def results():
             draft = workspace.draft(job["id"])
             coverage = service.coverage(workspace, job["id"])
             if coverage and coverage.get("units"):
-                st.caption(t("Reading coverage"))
                 st.caption(
                     t(
                         "Read {read} of {total} fragments · Excluded {excluded} · Cited {cited}",
@@ -522,29 +522,30 @@ def results():
                         cited=coverage["cited_count"],
                     )
                 )
-                st.caption(
-                    t("Reading coverage does not guarantee that every fact is in the result.")
-                )
-                st.dataframe(
-                    [
-                        {
-                            t("Reading status"): t(
-                                {"read": "Read", "pending": "Pending", "excluded": "Excluded"}[
-                                    unit["status"]
-                                ]
-                            ),
-                            t("Cited in result"): unit["cited"],
-                            t("Source"): unit["source"],
-                            t("Fragment"): unit["locator"],
-                            "ID": unit["id"],
-                            t("Exclusion reason"): t("No text extracted")
-                            if unit["reason"] == "empty"
-                            else unit["reason"],
-                        }
-                        for unit in coverage["units"]
-                    ],
-                    hide_index=True,
-                )
+                with st.expander(t("Reading coverage")):
+                    st.caption(
+                        t("Reading coverage does not guarantee that every fact is in the result.")
+                    )
+                    st.dataframe(
+                        [
+                            {
+                                t("Reading status"): t(
+                                    {"read": "Read", "pending": "Pending", "excluded": "Excluded"}[
+                                        unit["status"]
+                                    ]
+                                ),
+                                t("Cited in result"): unit["cited"],
+                                t("Source"): unit["source"],
+                                t("Fragment"): unit["locator"],
+                                "ID": unit["id"],
+                                t("Exclusion reason"): t("No text extracted")
+                                if unit["reason"] == "empty"
+                                else unit["reason"],
+                            }
+                            for unit in coverage["units"]
+                        ],
+                        hide_index=True,
+                    )
             if draft:
                 if job["kind"] == "ask":
                     st.write(draft["data"]["answer"])
@@ -647,16 +648,34 @@ def results():
                 if artifact["kind"] == "audio":
                     st.audio(str(path))
                 metadata = artifact["metadata"]
+                if "requested_seconds" in metadata:
+                    actual = round(metadata["duration_seconds"])
+                    target = round(metadata["requested_seconds"])
+                    st.caption(
+                        t(
+                            "Audio duration {actual} · Target {target}",
+                            actual=f"{actual // 60}:{actual % 60:02d}",
+                            target=f"{target // 60}:{target % 60:02d}",
+                        )
+                    )
                 if metadata.get("duration_matches") is False:
                     actual = round(metadata["duration_seconds"])
                     target = round(metadata["requested_seconds"])
                     st.warning(
                         t(
-                            "Actual duration {actual}, target {target}. The difference exceeds 10%. Edit the script before rendering again.",
+                            "Actual duration {actual}, target {target}. Edit the script to match the target within 10% and keep full episodes between 20 and 60 minutes.",
                             actual=f"{actual // 60}:{actual % 60:02d}",
                             target=f"{target // 60}:{target % 60:02d}",
                         )
                     )
+                    if "suggested_word_count" in metadata:
+                        st.caption(
+                            t(
+                                "Script: {words} words. At the measured pace, about {suggested} words would match the target. This is an editing estimate.",
+                                words=metadata["script_words"],
+                                suggested=metadata["suggested_word_count"],
+                            )
+                        )
                 elif metadata.get("warning"):
                     st.warning(t("Audio warning: {warning}", warning=metadata["warning"]))
                 st.download_button(

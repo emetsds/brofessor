@@ -113,13 +113,17 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
                 progress=progress,
             )
             check()
-            target = params["minutes"] * 60
-            result["requested_seconds"] = target
-            result["duration_matches"] = abs(result["duration_seconds"] - target) <= target * 0.1
+            from .podcasts import duration_feedback
+
+            result.update(
+                duration_feedback(draft["data"], params["minutes"], result["duration_seconds"])
+            )
             if not result["duration_matches"]:
                 result["warning"] = (
-                    "Duration differs by more than 10%. Edit the script and render again."
+                    "Duration is outside the target tolerance (10%) or the 20–60 minute episode "
+                    "range. Edit the script and render again."
                 )
+            atomic_json(folder / "podcast.audio.json", result)
             workspace.add_artifact(job["id"], Path(result["path"]), "audio", result)
         return
 
@@ -155,30 +159,19 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             Slides,
         )
     elif job["kind"] == "podcast":
-        parts = max(1, math.ceil(params["minutes"] / 5))
-        turns = []
-        title = ""
-        for index in range(parts):
-            progress({"stage": "script", "completed": index, "total": parts})
-            # Initial estimate calibrated with the pinned local preset voices.
-            # Measured audio duration remains authoritative; this is not a guarantee.
-            words_per_minute = 85 if params["language"] == "ru" else 125
-            target_words = round(params["minutes"] * words_per_minute / parts)
-            previous = " ".join(turn["text"] for turn in turns[-4:])
-            value = generate(
-                base + f"\nWrite part {index + 1} of {parts} of a coherent dialogue between "
-                f"host and guest. Aim for {target_words} spoken words in this part. Both speakers "
-                "must contribute. Keep each turn under 600 characters. Explain mechanisms and examples, "
-                "avoid filler and repetitive agreement. "
-                f"Only part 1 has an opening; only part {parts} has a closing. "
-                f"Progress through the source topics in order. Previous ending: {previous}",
-                Podcast,
+        if params["minutes"] >= 20:
+            from . import podcasts
+
+            def save_outline(outline):
+                output = folder / "outline.json"
+                atomic_json(output, outline)
+                workspace.add_artifact(job["id"], output, "json", {"role": "episode_outline"})
+
+            value = podcasts.write(
+                base, params["minutes"], params["language"], generate, progress, save_outline
             )
-            title = title or value["title"]
-            turns.extend(value["turns"])
-        value = {"title": title, "language": params["language"], "turns": turns}
-        if {t["speaker"] for t in turns} != {"host", "guest"}:
-            raise ValueError("The podcast must contain both host and guest")
+        else:
+            value = short_podcast(base, params, generate, progress)
     check()
     if coverage["mode"] == "direct":
         for unit in coverage["units"]:
@@ -194,3 +187,32 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     atomic_json(draft_path, final_draft["data"])
     workspace.add_artifact(job["id"], draft_path, "json", {"revision": final_draft["revision"]})
     progress({"stage": "draft_ready", "read_units": len(units)})
+
+
+def short_podcast(base, params, generate, progress):
+    """Keep the existing preview prompts and checkpoints for jobs below 20 minutes."""
+    parts = max(1, math.ceil(params["minutes"] / 5))
+    turns = []
+    title = ""
+    for index in range(parts):
+        progress({"stage": "script", "completed": index, "total": parts})
+        # Initial estimate calibrated with the pinned local preset voices.
+        # Measured audio duration remains authoritative; this is not a guarantee.
+        words_per_minute = 85 if params["language"] == "ru" else 125
+        target_words = round(params["minutes"] * words_per_minute / parts)
+        previous = " ".join(turn["text"] for turn in turns[-4:])
+        value = generate(
+            base + f"\nWrite part {index + 1} of {parts} of a coherent dialogue between "
+            f"host and guest. Aim for {target_words} spoken words in this part. Both speakers "
+            "must contribute. Keep each turn under 600 characters. Explain mechanisms and examples, "
+            "avoid filler and repetitive agreement. "
+            f"Only part 1 has an opening; only part {parts} has a closing. "
+            f"Progress through the source topics in order. Previous ending: {previous}",
+            Podcast,
+        )
+        title = title or value["title"]
+        turns.extend(value["turns"])
+    value = {"title": title, "language": params["language"], "turns": turns}
+    if {t["speaker"] for t in turns} != {"host", "guest"}:
+        raise ValueError("The podcast must contain both host and guest")
+    return value

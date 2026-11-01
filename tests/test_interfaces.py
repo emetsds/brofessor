@@ -452,3 +452,59 @@ def test_audio_result_shows_recorded_model_even_if_default_changes(tmp_path, mon
     assert not ui.exception
     assert ui.selectbox(key="tts_model").value == "qwen3-0.6b"
     assert any("Модель озвучки: Qwen3-TTS 1.7B" in caption.value for caption in ui.caption)
+
+
+def test_duration_feedback_is_available_in_cli_and_both_ui_languages(tmp_path, monkeypatch):
+    import wave
+    from brofessor.podcasts import duration_feedback
+
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.txt"
+    source.write_text("A measured result")
+    workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    original = service.submit(workspace, "podcast", minutes=60, start_worker=False)
+    data = {
+        "title": "Duration check",
+        "language": "ru",
+        "turns": [
+            {"speaker": "host", "text": "Вопрос", "citations": [citation]},
+            {"speaker": "guest", "text": "Ответ", "citations": [citation]},
+        ],
+    }
+    workspace.save_draft(original["id"], data)
+    rendered = service.render(workspace, original["id"], model="qwen3-0.6b", start_worker=False)
+    path = workspace.path / "jobs" / rendered["id"] / "test.wav"
+    path.parent.mkdir(parents=True)
+    with wave.open(str(path), "wb") as stream:
+        stream.setparams((1, 2, 24000, 0, "NONE", "none"))
+        stream.writeframes(b"\x01\x00" * 240)
+    # Synthetic UI metadata: the short fixture is not a real 61-minute render.
+    workspace.add_artifact(
+        rendered["id"],
+        path,
+        "audio",
+        {
+            "duration_seconds": 3700,
+            **duration_feedback(data, 60, 3700),
+        },
+    )
+    for job in (original, rendered):
+        workspace.update_job(job["id"], status="succeeded")
+    cli = CliRunner().invoke(app, ["-w", str(workspace.path), "job", "show", rendered["id"]])
+    assert cli.exit_code == 0
+    metadata = json.loads(cli.output)["artifacts"][0]["metadata"]
+    assert metadata["duration_matches"] is False
+    assert metadata["script_words"] == 2
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    assert not ui.exception
+    assert any("61:40" in caption.value for caption in ui.caption)
+    assert any("Слов в сценарии: 2" in caption.value for caption in ui.caption)
+    assert any("от 20 до 60 минут" in warning.value for warning in ui.warning)
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert any("Audio duration 61:40" in caption.value for caption in ui.caption)
+    assert any("Script: 2 words" in caption.value for caption in ui.caption)
