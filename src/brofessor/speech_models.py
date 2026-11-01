@@ -1,5 +1,8 @@
 """Pinned local speech models and a shared user cache; no inference during setup."""
 
+import copy
+import fcntl
+import hashlib
 import io
 import json
 import os
@@ -7,19 +10,34 @@ import platform
 import shutil
 import threading
 import time
+from functools import lru_cache
 from pathlib import Path
+
+import httpx
 
 from . import preferences
 from .executors import CancelledError
+from .workspace import atomic_json
 
 CATALOG = json.loads(Path(__file__).with_suffix(".json").read_text(encoding="utf-8"))
 DEFAULT_ID = "qwen3-0.6b"
 
 
-def get(model: str) -> dict:
+def _saved_spec(reference: str) -> Path:
+    key = hashlib.sha256(reference.encode()).hexdigest()
+    return cache_directory().parent / "specs" / f"{key}.json"
+
+
+def get(model: str | dict) -> dict:
+    if isinstance(model, dict):
+        return copy.deepcopy(model)
     for item in CATALOG:
-        if model in (item["id"], item["repo"], f"{item['repo']}@{item['revision']}"):
-            return dict(item)
+        if model in (item["id"], item.get("repo"), _reference(item)):
+            return copy.deepcopy(item)
+    if "@" in model:
+        saved = _saved_spec(model)
+        if saved.is_file():
+            return json.loads(saved.read_text(encoding="utf-8"))
     raise ValueError("Unknown TTS model. Run tts list to see supported models")
 
 
@@ -28,6 +46,8 @@ def cache_directory() -> Path:
 
 
 def snapshot(model: dict, cache: Path | None = None) -> Path:
+    if "url" in model:
+        return cache_directory().parent / "files" / model["id"] / model["revision"]
     return (
         (cache or cache_directory())
         / ("models--" + model["repo"].replace("/", "--"))
@@ -48,19 +68,37 @@ def _valid_bytes(model: dict, path: Path) -> int:
     return total
 
 
-def installed_path(model: str) -> Path | None:
+def installed_path(model: str | dict) -> Path | None:
     item = get(model)
     path = snapshot(item)
-    return path if _valid_bytes(item, path) == item["download_bytes"] else None
+    if _valid_bytes(item, path) != item["download_bytes"]:
+        return None
+    if "sha256" in item:
+        file = path / next(iter(item["files"]))
+        try:
+            stat = file.stat()
+            digest = _file_digest(file, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        except OSError:
+            return None
+        if digest != item["sha256"]:
+            return None
+    return path
+
+
+@lru_cache(maxsize=16)
+def _file_digest(path, size, mtime_ns, ctime_ns):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def list_models() -> list[dict]:
-    compatible = platform.system() == "Darwin" and platform.machine() == "arm64"
+    apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
     return [
         {
             **{key: value for key, value in item.items() if key != "files"},
             "installed": installed_path(item["id"]) is not None,
-            "compatible": compatible,
+            "compatible": apple_silicon
+            or (item.get("engine") == "silero" and platform.system() == "Linux"),
         }
         for item in CATALOG
     ]
@@ -84,7 +122,11 @@ def reference(model: str | None = None) -> str:
         if model is None:
             raise
         return choice  # Preserve the existing repo@revision/local-directory API.
-    return f"{item['repo']}@{item['revision']}"
+    return _reference(item)
+
+
+def _reference(item: dict) -> str:
+    return f"{item.get('repo', item['id'])}@{item['revision']}"
 
 
 def _legacy_caches() -> list[Path]:
@@ -106,7 +148,63 @@ def _snapshot_download(**kwargs):
     return snapshot_download(**kwargs)
 
 
-def download(model: str, *, cancelled=lambda: False, progress=lambda value: None) -> dict:
+def _download_file(item, target, check, report):
+    """One checksummed upstream file; Range resumes when the server supports it."""
+    filename = next(iter(item["files"]))
+    target.mkdir(parents=True, exist_ok=True)
+    with (target / ".download.lock").open("a") as lock:
+        while True:
+            check()
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                time.sleep(0.1)
+        if installed_path(item) is not None:
+            return
+        output = target / filename
+        partial = output.with_suffix(output.suffix + ".part")
+        offset = partial.stat().st_size if partial.exists() else 0
+        if offset == item["download_bytes"]:
+            with partial.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if digest == item["sha256"]:
+                check()
+                partial.replace(output)
+                report(offset)
+                return
+        if offset >= item["download_bytes"]:
+            partial.unlink()
+            offset = 0
+        headers = {"Range": f"bytes={offset}-"} if offset else {}
+        with httpx.stream(
+            "GET", item["url"], headers=headers, follow_redirects=True, timeout=30
+        ) as response:
+            response.raise_for_status()
+            resumed = offset and response.status_code == 206
+            if response.status_code == 206 and not response.headers.get(
+                "content-range", ""
+            ).startswith(f"bytes {offset}-"):
+                raise RuntimeError("Model server returned an invalid resume range")
+            completed = offset if resumed else 0
+            with partial.open("ab" if resumed else "wb") as stream:
+                for chunk in response.iter_bytes(1024 * 1024):
+                    check()
+                    completed += len(chunk)
+                    if completed > item["download_bytes"]:
+                        raise RuntimeError("Model download exceeds its pinned size")
+                    stream.write(chunk)
+                    report(completed)
+        with partial.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if completed != item["download_bytes"] or digest != item["sha256"]:
+            partial.unlink()
+            raise RuntimeError("Model download does not match its pinned size and SHA-256")
+        check()
+        partial.replace(output)
+
+
+def download(model: str | dict, *, cancelled=lambda: False, progress=lambda value: None) -> dict:
     item = get(model)
     target = snapshot(item)
 
@@ -126,7 +224,9 @@ def download(model: str, *, cancelled=lambda: False, progress=lambda value: None
         )
 
     report(_valid_bytes(item, target))
-    if installed_path(model) is None:
+    if "url" in item and installed_path(item) is None:
+        _download_file(item, target, check, report)
+    if installed_path(item) is None:
         # Reuse the user's complete legacy snapshots without another download.
         for cache in _legacy_caches():
             legacy = snapshot(item, cache)
@@ -149,7 +249,7 @@ def download(model: str, *, cancelled=lambda: False, progress=lambda value: None
                     temporary.unlink(missing_ok=True)
                 report(_valid_bytes(item, target))
             break
-    if installed_path(model) is None:
+    if installed_path(item) is None:
         try:
             from huggingface_hub.utils import tqdm
         except ImportError as error:
@@ -189,12 +289,13 @@ def download(model: str, *, cancelled=lambda: False, progress=lambda value: None
             tqdm_class=DownloadProgress,
         )
     check()
-    if installed_path(model) is None:
+    if installed_path(item) is None:
         raise RuntimeError("TTS model download is incomplete; retry the download to continue")
     report(item["download_bytes"])
+    atomic_json(_saved_spec(_reference(item)), item)
     return {
         "id": item["id"],
-        "repo": item["repo"],
+        **({"repo": item["repo"]} if "repo" in item else {"url": item["url"]}),
         "revision": item["revision"],
         "path": str(target),
     }

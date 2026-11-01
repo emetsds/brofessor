@@ -269,3 +269,17 @@ def test_checkpoint_identity_changes_with_ollama_port_only(
     assert len(calls) == expected_calls
     if provider == "ollama":
         assert calls == [11435, 11436]
+
+
+@pytest.mark.parametrize("kind", ["flashcards", "render_flashcards"])
+def test_unknown_job_kind_fails_before_generation(workspace, monkeypatch, kind):
+    from brofessor import executors, worker
+
+    monkeypatch.setattr(executors, "generate", lambda *a, **kw: pytest.fail("Unexpected inference"))
+    job = workspace.submit(kind, {})
+    worker.run(workspace, once=True)
+    result = workspace.job(job["id"])
+    assert result["status"] == "failed"
+    assert "Unsupported job kind" in result["error"]
+    assert workspace.draft(job["id"]) is None
+    assert not workspace.artifacts(job["id"])

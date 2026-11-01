@@ -161,6 +161,18 @@ Review the dialogue before the last command. The audio file path is returned in 
 
 `tts use` sets the default for future audio renders. To choose a model for one render, pass `draft render PODCAST_DRAFT_ID --tts-model qwen3-1.7b --wait`. Download it first. The render job records the exact model revision, so later preference changes do not alter that job.
 
+Silero CIS Base is also available for Russian speech on CPU, under MIT. Install its separate extra, download the model (~92 MB), then select it in the sidebar or CLI:
+
+```sh
+uv sync --locked --python 3.12 --extra ui --extra speech --extra silero
+uv run --no-sync brofessor tts download silero-cis-base --wait
+uv run --no-sync brofessor draft render PODCAST_DRAFT_ID --tts-model silero-cis-base --wait
+```
+
+Omit `--extra speech` if you only use Silero. The current preset voices are `ru_roman` and `ru_zhadyra`; English remains available through Qwen3. Silero CIS Base has **no automatic stress**: edit the draft to mark stressed vowels with `+`, for example `зам+ок`. Write numbers, Latin names, and unsupported symbols as Russian words before rendering. brofessor rejects unsupported text instead of letting the model silently drop it. These are limitations of this model, and pronunciation quality still needs listening review. See [upstream Silero documentation and licenses](https://github.com/snakers4/silero-models#text-to-speech).
+
+New download and audio jobs save the selected model specification, including its pinned revision and preset voices. Updating the catalog or choosing another default keeps that job's selection. Completed snapshots remain shared across projects. Silero downloads are verified against a pinned SHA-256; interrupted HTTP downloads resume when the server supports ranges.
+
 Start with a three-minute preview. `--minutes` is a target, not a guarantee: the app reports measured audio duration and warns if it differs by more than 10%. Long episodes and series are not yet verified. Use `--language en` for English; generate separate drafts for both languages.
 
 ### Edit a draft

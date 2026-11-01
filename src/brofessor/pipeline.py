@@ -12,6 +12,15 @@ from .workspace import Workspace, atomic_json
 def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     from . import executors
 
+    if job["kind"] not in (
+        "ask",
+        "slides",
+        "podcast",
+        "render_slides",
+        "render_podcast",
+        "download_model",
+    ):
+        raise ValueError(f"Unsupported job kind: {job['kind']}")
     params = job["params"]
     folder = workspace.path / "jobs" / job["id"]
     folder.mkdir(parents=True, exist_ok=True)
@@ -26,7 +35,9 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     if job["kind"] == "download_model":
         from .speech_models import download
 
-        result = download(params["model"], cancelled=cancelled, progress=progress)
+        result = download(
+            params.get("model_spec", params["model"]), cancelled=cancelled, progress=progress
+        )
         output = folder / "model.json"
         atomic_json(output, result)
         workspace.add_artifact(job["id"], output, "json", result)
@@ -67,7 +78,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
         atomic_json(checkpoint, value)
         return value
 
-    if job["kind"].startswith("render_"):
+    if job["kind"] in ("render_slides", "render_podcast"):
         from .media import render_audio, render_slides
 
         draft = workspace.draft(params["draft_job_id"], params["revision"])
@@ -78,13 +89,14 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             output = render_slides(draft["data"], folder / "presentation.pptx")
             check()
             workspace.add_artifact(job["id"], Path(output), "pptx", {"revision": draft["revision"]})
-        else:
+        elif job["kind"] == "render_podcast":
             segments = workspace.path / "audio-segments"
             result = render_audio(
                 draft["data"],
                 folder / "podcast.mp3",
                 segment_dir=segments,
                 model=params["model"],
+                **({"model_spec": params["model_spec"]} if "model_spec" in params else {}),
                 cancelled=cancelled,
                 progress=progress,
             )
@@ -158,7 +170,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             "3–5 brief bullets and speaker notes. Keep claims tied to citations.",
             Slides,
         )
-    else:
+    elif job["kind"] == "podcast":
         parts = max(1, math.ceil(params["minutes"] / 5))
         turns = []
         title = ""

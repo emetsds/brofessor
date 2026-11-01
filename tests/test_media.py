@@ -76,12 +76,16 @@ def test_corrupt_segment_is_rendered_again(tmp_path, speech, component):
 
 
 def test_model_and_voice_changes_invalidate_cache(tmp_path, speech, monkeypatch):
+    from brofessor import speech_models
+
     directory = tmp_path / "segments"
     media.render_audio(plan(), tmp_path / "a.wav", segment_dir=directory)
     revision = "mlx-community/another-CustomVoice@" + "a" * 40
     result = media.render_audio(plan(), tmp_path / "b.wav", segment_dir=directory, model=revision)
     assert all(not item["reused"] for item in result["segments"])
-    monkeypatch.setattr(media, "VOICES", {"host": "Aiden", "guest": "Vivian"})
+    models = [dict(item) for item in speech_models.CATALOG]
+    models[0]["voices"] = {"host": "Aiden", "guest": "Vivian"}
+    monkeypatch.setattr(speech_models, "CATALOG", models)
     result = media.render_audio(plan(), tmp_path / "c.wav", segment_dir=directory)
     assert [item["reused"] for item in result["segments"]] == [False, True]
 

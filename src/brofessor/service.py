@@ -80,19 +80,39 @@ def render(
     if original["kind"] not in ("podcast", "slides") or draft is None:
         raise ValueError("Generate a podcast or slides draft first")
     if original["kind"] == "podcast":
-        from .speech_models import reference
+        from .speech_models import get, reference
 
         model = reference(model)
-    result = workspace.submit(
-        "render_" + original["kind"],
-        {
-            "draft_job_id": draft_job_id,
-            "revision": draft["revision"],
-            "model": model,
-            "minutes": original["params"]["minutes"],
-        },
-        request_key,
-    )
+    kind = "render_" + original["kind"]
+    params = {
+        "draft_job_id": draft_job_id,
+        "revision": draft["revision"],
+        "model": model,
+        "minutes": original["params"]["minutes"],
+    }
+    previous = workspace.job_by_request_key(request_key) if request_key else None
+    if (
+        previous
+        and previous["kind"] == kind
+        and {key: value for key, value in previous["params"].items() if key != "model_spec"}
+        == params
+    ):
+        # The first submit owns its snapshot, including legacy jobs without one.
+        params = previous["params"]
+    elif original["kind"] == "podcast":
+        try:
+            spec = get(model)
+        except ValueError:
+            spec = None  # The existing explicit repo@revision/local-directory API.
+        if spec and draft["data"]["language"] not in spec["languages"]:
+            raise ValueError(f"Selected speech model does not support {draft['data']['language']}")
+        if spec:
+            from .speech import validate_text
+
+            for turn in draft["data"]["turns"]:
+                validate_text(spec, turn["text"])
+            params["model_spec"] = spec
+    result = workspace.submit(kind, params, request_key)
     if start_worker:
         from .worker import ensure_worker
 
@@ -100,11 +120,29 @@ def render(
     return result
 
 
+def render_request_key(workspace: Workspace, draft_job_id: str, model: str) -> str:
+    """Stable UI audio request identity, retaining matching pre-snapshot jobs."""
+    from .speech_models import reference
+
+    draft = workspace.draft(draft_job_id)
+    base = f"render:{draft_job_id}:{draft['revision']}"
+    resolved = reference(model)
+    legacy = f"{base}:{model}"
+    previous = workspace.job_by_request_key(legacy)
+    if (
+        previous
+        and previous["kind"] == "render_podcast"
+        and previous["params"]["model"] == resolved
+    ):
+        return legacy
+    return f"{base}:{resolved}"
+
+
 def download_model(workspace: Workspace, model: str, *, start_worker=True) -> dict:
     from .speech_models import get
 
     item = get(model)
-    job = workspace.submit("download_model", {"model": item["id"]})
+    job = workspace.submit("download_model", {"model": item["id"], "model_spec": item})
     if start_worker:
         from .worker import ensure_worker
 

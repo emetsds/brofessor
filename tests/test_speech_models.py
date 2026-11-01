@@ -18,6 +18,8 @@ def models(tmp_path, monkeypatch):
     monkeypatch.setattr(speech_models, "_legacy_caches", lambda: [])
     entries = []
     for index, original in enumerate(speech_models.CATALOG):
+        if "repo" not in original:
+            continue
         entries.append(
             {
                 **original,
@@ -157,7 +159,88 @@ def test_render_pins_selected_model_before_preferences_change(models, tmp_path):
     render = service.render(workspace, draft["id"], start_worker=False)
     speech_models.use(models[1]["id"])
     assert render["params"]["model"] == f"{models[0]['repo']}@{models[0]['revision']}"
+    models[0]["voices"] = {"host": "Changed", "guest": "Changed"}
+    assert render["params"]["model_spec"]["voices"] == {"host": "Ryan", "guest": "Vivian"}
     assert media._model_identity(models[0]["id"])["revision"] == models[0]["revision"]
+
+
+def test_retired_qwen_reference_uses_shared_installed_snapshot(models, monkeypatch):
+    import copy
+    from brofessor import speech
+
+    old = copy.deepcopy(models[0])
+    write_weights(speech_models.snapshot(old))
+    models[0]["revision"] = "e" * 40
+    calls = []
+    marker = object()
+
+    def load(spec, location):
+        calls.append(location)
+        return marker
+
+    monkeypatch.setattr(speech, "load", load)
+    monkeypatch.setattr(
+        "huggingface_hub.snapshot_download", lambda *a, **kw: pytest.fail("Unexpected network")
+    )
+    identity = media._model_identity(f"{old['repo']}@{old['revision']}")
+    assert media._load_speech_model(identity) is marker
+    assert calls == [speech_models.snapshot(old)]
+
+
+@pytest.mark.parametrize("legacy", [True, False])
+def test_render_request_key_survives_snapshot_addition_and_distinguishes_revisions(
+    models, tmp_path, legacy
+):
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.txt"
+    source.write_text("Synthetic evidence")
+    workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    draft = service.submit(workspace, "podcast", start_worker=False)
+    workspace.save_draft(
+        draft["id"],
+        {
+            "title": "Test",
+            "language": "ru",
+            "turns": [
+                {"speaker": "host", "text": "Вопрос?", "citations": [citation]},
+                {"speaker": "guest", "text": "Ответ.", "citations": [citation]},
+            ],
+        },
+    )
+    choice = models[0]["id"]
+    if legacy:
+        key = f"render:{draft['id']}:1:{choice}"
+        original = workspace.submit(
+            "render_podcast",
+            {
+                "draft_job_id": draft["id"],
+                "revision": 1,
+                "model": speech_models.reference(choice),
+                "minutes": 20,
+            },
+            key,
+        )
+    else:
+        key = service.render_request_key(workspace, draft["id"], choice)
+        original = service.render(
+            workspace, draft["id"], model=choice, request_key=key, start_worker=False
+        )
+    models[0]["notes"] = "Updated description, same requested model"
+    assert service.render_request_key(workspace, draft["id"], choice) == key
+    repeated = service.render(
+        workspace, draft["id"], model=choice, request_key=key, start_worker=False
+    )
+    assert repeated["id"] == original["id"]
+    models[0]["revision"] = "c" * 40
+    changed_key = service.render_request_key(workspace, draft["id"], choice)
+    assert changed_key != key
+    changed = service.render(
+        workspace, draft["id"], model=choice, request_key=changed_key, start_worker=False
+    )
+    assert changed["id"] != original["id"]
+    with pytest.raises(ValueError, match="different operation"):
+        service.render(workspace, draft["id"], model=choice, request_key=key, start_worker=False)
 
 
 def test_cli_download_uses_same_worker_and_returns_installed_result(models, tmp_path, monkeypatch):
@@ -173,3 +256,36 @@ def test_cli_download_uses_same_worker_and_returns_installed_result(models, tmp_
     assert result.exit_code == 0, result.output
     assert '"status": "succeeded"' in result.output
     assert speech_models.installed_path(models[0]["id"]) is not None
+
+
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_download_keeps_submitted_revision_when_catalog_changes(
+    models, tmp_path, monkeypatch, interrupted
+):
+    import copy
+
+    submitted = copy.deepcopy(models[0])
+    calls = []
+
+    def download(**kwargs):
+        calls.append(kwargs["revision"])
+        if interrupted and len(calls) == 1:
+            raise RuntimeError("Synthetic interruption")
+        write_weights(speech_models.snapshot(submitted))
+
+    monkeypatch.setattr(speech_models, "_snapshot_download", download)
+    workspace = Workspace(tmp_path / "workspace")
+    job = service.download_model(workspace, submitted["id"], start_worker=False)
+    if interrupted:
+        worker.run(workspace, once=True)
+        assert workspace.job(job["id"])["status"] == "failed"
+        workspace.resume(job["id"])
+    models[0]["revision"] = "f" * 40
+    worker.run(workspace, once=True)
+    assert workspace.job(job["id"])["status"] == "succeeded"
+    assert set(calls) == {submitted["revision"]}
+    artifact = workspace.artifacts(job["id"])[0]
+    assert artifact["metadata"]["revision"] == submitted["revision"]
+    old_reference = f"{submitted['repo']}@{submitted['revision']}"
+    assert speech_models.get(old_reference)["revision"] == submitted["revision"]
+    assert speech_models.installed_path(old_reference) == speech_models.snapshot(submitted)

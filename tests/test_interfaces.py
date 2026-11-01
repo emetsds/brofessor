@@ -356,7 +356,8 @@ def test_switching_projects_keeps_unsaved_draft_buffer(tmp_path, monkeypatch):
     assert workspace.draft(job["id"])["data"]["answer"] == "Original answer"
 
 
-def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatch):
+@pytest.mark.parametrize("choice", ["qwen3-1.7b", "silero-cis-base"])
+def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatch, choice):
     from brofessor import speech_models
 
     workspace = Workspace(tmp_path / "workspace")
@@ -369,12 +370,16 @@ def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatc
     ui = AppTest.from_file(
         str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
     ).run()
-    ui.selectbox(key="tts_model").select("qwen3-1.7b").run()
+    ui.selectbox(key="tts_model").select(choice).run()
     ui.button(key="download_tts_model").click().run()
     assert not ui.exception
-    assert speech_models.selected() == "qwen3-1.7b"
+    assert speech_models.selected() == choice
     assert workspace.jobs()[0]["kind"] == "download_model"
-    assert workspace.jobs()[0]["params"]["model"] == "qwen3-1.7b"
+    assert workspace.jobs()[0]["params"]["model"] == choice
+    assert (
+        workspace.jobs()[0]["params"]["model_spec"]["revision"]
+        == speech_models.get(choice)["revision"]
+    )
     assert ui.button(key="download_tts_model").disabled
 
 

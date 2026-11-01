@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.metadata
 import json
 import os
 import re
@@ -22,20 +21,15 @@ from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Inches, Pt
 
+from . import speech
+from .speech import SpeechCancelled as RenderCancelled, SpeechError as MediaError
+
 DEFAULT_TTS_MODEL = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit"
 DEFAULT_TTS_REVISION = "08c72cad5e2fd0f41730c8bd1f28149585e46361"
 VOICES = {"host": "Ryan", "guest": "Vivian"}
 LANGUAGES = {"ru": "Russian", "en": "English"}
 SPEECH_SETTINGS = {"temperature": 0.7, "max_tokens": 1500, "seed": 42}
 RENDERER_VERSION = "1"
-
-
-class MediaError(RuntimeError):
-    """An unavailable renderer or unusable artifact, never synthetic success."""
-
-
-class RenderCancelled(MediaError):
-    """Rendering stopped, preserving only complete reusable segments."""
 
 
 def _check_cancelled(cancelled: Callable[[], bool] | None) -> None:
@@ -186,13 +180,15 @@ def render_slides(plan: dict, output: Path) -> Path:
     return output
 
 
-def _model_identity(model: str | None) -> dict:
-    model = model or DEFAULT_TTS_MODEL
+def _model_identity(model: str | dict | None) -> dict:
     from .speech_models import get
 
+    model = model or DEFAULT_TTS_MODEL
     try:
         item = get(model)
-        return {"repo": item["repo"], "revision": item["revision"]}
+        if "repo" in item:
+            return {"repo": item["repo"], "revision": item["revision"]}
+        return {"id": item["id"], "revision": item["revision"]}
     except ValueError:
         pass
     if model == DEFAULT_TTS_MODEL:
@@ -214,79 +210,50 @@ def _model_identity(model: str | None) -> dict:
     raise ValueError("Use the default model, repo@commit-sha, or a local model directory")
 
 
-def _load_speech_model(identity: dict):
-    try:
-        from huggingface_hub import snapshot_download
-        from mlx_audio.tts.utils import load_model
-    except ImportError as exc:
-        raise MediaError(
-            f"Local speech requires Apple Silicon, Metal and uv sync --extra speech: {exc}"
-        ) from exc
-    try:
-        from .speech_models import get, installed_path
+def _load_speech_model(spec: dict):
+    from .speech_models import cache_directory, installed_path, snapshot
 
-        if "repo" in identity:
-            try:
-                known = get(f"{identity['repo']}@{identity['revision']}")
-            except ValueError:
-                known = None
-            if known is not None:
-                installed = installed_path(known["id"])
-                if installed is None:
-                    raise MediaError(
-                        f"Download this voice model first: brofessor tts download {known['id']} --wait"
+    try:
+        if "download_bytes" in spec:
+            location = installed_path(spec)
+            if location is None:
+                raise MediaError(
+                    f"Download this voice model first: brofessor tts download {spec['id']} --wait"
+                )
+        else:
+            # Older jobs and the explicit repo@revision/local-directory API remain usable.
+            location = Path(spec["path"]) if "path" in spec else snapshot(spec)
+            if not (location / "config.json").is_file():
+                from huggingface_hub import snapshot_download
+
+                location = Path(
+                    snapshot_download(
+                        spec["repo"],
+                        revision=spec["revision"],
+                        token=False,
+                        cache_dir=cache_directory(),
+                        allow_patterns=["*.json", "*.txt", "*.safetensors", "speech_tokenizer/*"],
                     )
-                identity = {**identity, "path": str(installed)}
-        location = identity.get("path") or snapshot_download(
-            identity["repo"],
-            revision=identity["revision"],
-            token=False,
-            allow_patterns=["*.json", "*.txt", "*.safetensors", "speech_tokenizer/*"],
-        )
-        model = load_model(location)
-        if not callable(getattr(model, "generate_custom_voice", None)):
-            raise MediaError("Speech model must support Qwen3 CustomVoice preset voices")
-        return model
+                )
+        return speech.load(spec, location)
     except MediaError:
         raise
-    except Exception as exc:
-        raise MediaError(f"Cannot load local Qwen3-TTS model: {exc}") from exc
+    except Exception as error:
+        raise MediaError(f"Cannot load local speech model: {error}") from error
 
 
-def _synthesize(
-    model, text: str, voice: str, language: str, output: Path, cancelled: Callable[[], bool] | None
-) -> None:
-    import mlx.core as mx
+def _synthesize(model, text, voice, language, output, cancelled) -> None:
     import numpy as np
     import soundfile as sf
 
-    mx.random.seed(SPEECH_SETTINGS["seed"])
-    chunks = []
-    tokens = 0
-    for result in model.generate_custom_voice(
-        text=text,
-        speaker=voice,
-        language=language,
-        stream=True,
-        streaming_interval=1.0,
-        temperature=SPEECH_SETTINGS["temperature"],
-        max_tokens=SPEECH_SETTINGS["max_tokens"],
-    ):
-        _check_cancelled(cancelled)
-        tokens += result.token_count
-        chunks.append(np.asarray(result.audio, dtype=np.float32).reshape(-1))
-    if tokens >= SPEECH_SETTINGS["max_tokens"]:
-        raise MediaError("Speech hit the generation limit; split or revise this turn")
-    if not chunks:
-        raise MediaError("Speech model returned no audio")
-    audio = np.concatenate(chunks)
+    audio, sample_rate = model.synthesize(text, voice, language, cancelled)
+    audio = np.asarray(audio, dtype=np.float32).reshape(-1)
     if not len(audio) or not np.isfinite(audio).all() or np.max(np.abs(audio)) < 1e-5:
         raise MediaError("Speech model returned empty, non-finite or silent audio")
-    # Only peak protection, never stretching audio to claim a target duration.
     peak = float(np.max(np.abs(audio)))
     if peak > 0.98:
         audio *= 0.98 / peak
-    sf.write(str(output), audio, model.sample_rate, format="WAV", subtype="PCM_16")
+    sf.write(str(output), audio, sample_rate, format="WAV", subtype="PCM_16")
 
 
 def _wav_info(path: Path) -> dict:
@@ -331,6 +298,7 @@ def render_audio(
     *,
     segment_dir: Path,
     model: str | None = None,
+    model_spec: dict | None = None,
     cancelled: Callable[[], bool] | None = None,
     progress: Callable[[dict], None] | None = None,
 ) -> dict:
@@ -340,30 +308,41 @@ def render_audio(
     Face. Inference is local. No reference recordings or voice cloning are used.
     Output is always accompanied by WAV. MP3 is created when FFmpeg is available.
     """
+    from .speech_models import get
+
+    try:
+        spec = get(model_spec or model or DEFAULT_TTS_MODEL)
+    except ValueError:
+        spec = _model_identity(model)
+    spec.setdefault("engine", "qwen3-mlx")
+    spec.setdefault("settings", dict(SPEECH_SETTINGS))
+    spec.setdefault("voices", dict(VOICES))
+    spec.setdefault("languages", list(LANGUAGES))
+    voices = spec["voices"]
     language = plan.get("language", "ru")
     if language not in LANGUAGES:
         raise ValueError("Speech language must be ru or en")
+    if language not in spec["languages"]:
+        raise ValueError(f"Selected speech model does not support {language}")
     turns = plan.get("turns")
     if not isinstance(turns, list) or not turns:
         raise ValueError("Podcast requires at least one turn")
     for turn in turns:
-        if not isinstance(turn, dict) or turn.get("speaker") not in VOICES:
+        if not isinstance(turn, dict) or turn.get("speaker") not in voices:
             raise ValueError("Each turn needs a host or guest speaker")
         if not isinstance(turn.get("text"), str) or not turn["text"].strip():
             raise ValueError("Each turn needs nonempty text")
         if len(turn["text"]) > 1000:
             raise ValueError("Split speech turns longer than 1000 characters before rendering")
+        speech.validate_text(spec, turn["text"])
     output = Path(output).resolve()
     if output.suffix.lower() not in {".wav", ".mp3"}:
         raise ValueError("Audio output must have a .wav or .mp3 suffix")
-    identity = _model_identity(model)
+    identity = _model_identity(spec) if "id" in spec else _model_identity(model)
     segment_dir = Path(segment_dir).resolve()
     segment_dir.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        runtime = importlib.metadata.version("mlx-audio")
-    except importlib.metadata.PackageNotFoundError:
-        runtime = "unavailable"
+    runtime = speech.runtime(spec)
     started = time.monotonic()
     loaded_model = None
     segments = []
@@ -371,10 +350,10 @@ def render_audio(
         _check_cancelled(cancelled)
         settings = {
             "text": turn["text"],
-            "voice": VOICES[turn["speaker"]],
+            "voice": voices[turn["speaker"]],
             "language": language,
             "model": identity,
-            "settings": SPEECH_SETTINGS,
+            "settings": spec["settings"],
             "renderer": RENDERER_VERSION,
             "runtime": runtime,
         }
@@ -393,7 +372,7 @@ def render_audio(
                     }
                 )
             if loaded_model is None:
-                loaded_model = _load_speech_model(identity)
+                loaded_model = _load_speech_model(spec)
             temporary = target.with_suffix(".tmp.wav")
             try:
                 try:
@@ -401,7 +380,7 @@ def render_audio(
                         loaded_model,
                         turn["text"],
                         settings["voice"],
-                        LANGUAGES[language],
+                        language,
                         temporary,
                         cancelled,
                     )
@@ -505,7 +484,8 @@ def render_audio(
         **_wav_info(wav_path),
         "segments": segments,
         "model": identity,
-        "voices": VOICES,
+        "voices": voices,
+        "engine": spec["engine"],
         "runtime": runtime,
         "warning": warning,
         "elapsed_seconds": round(time.monotonic() - started, 3),

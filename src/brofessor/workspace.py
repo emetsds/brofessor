@@ -175,6 +175,11 @@ class Workspace:
         with self.connect() as db:
             return [self._job(r) for r in db.execute("SELECT * FROM jobs ORDER BY created DESC")]
 
+    def job_by_request_key(self, key: str) -> dict | None:
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM jobs WHERE request_key=?", (key,)).fetchone()
+            return self._job(row) if row is not None else None
+
     def job(self, job_id: str) -> dict:
         with self.connect() as db:
             row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()

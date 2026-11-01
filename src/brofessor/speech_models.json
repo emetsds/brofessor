@@ -28,7 +28,14 @@
       "guest": "Vivian"
     },
     "license": "Apache-2.0",
-    "requirements": "Apple Silicon, macOS, speech extra"
+    "requirements": "Apple Silicon, macOS, speech extra",
+    "engine": "qwen3-mlx",
+    "settings": {
+      "temperature": 0.7,
+      "max_tokens": 1500,
+      "seed": 42
+    },
+    "notes": ""
   },
   {
     "id": "qwen3-1.7b",
@@ -59,6 +66,38 @@
       "guest": "Vivian"
     },
     "license": "Apache-2.0",
-    "requirements": "Apple Silicon, macOS, speech extra"
+    "requirements": "Apple Silicon, macOS, speech extra",
+    "engine": "qwen3-mlx",
+    "settings": {
+      "temperature": 0.7,
+      "max_tokens": 1500,
+      "seed": 42
+    },
+    "notes": ""
+  },
+  {
+    "id": "silero-cis-base",
+    "engine": "silero",
+    "name": "Silero CIS Base · CPU",
+    "url": "https://models.silero.ai/models/tts/ru/v5_cis_base.pt",
+    "revision": "ba41b18f6a707ad93605a162998865e7c087153d2e010a26dd02229dab0e672a",
+    "sha256": "ba41b18f6a707ad93605a162998865e7c087153d2e010a26dd02229dab0e672a",
+    "files": {
+      "model.pt": 91680514
+    },
+    "download_bytes": 91680514,
+    "languages": [
+      "ru"
+    ],
+    "voices": {
+      "host": "ru_roman",
+      "guest": "ru_zhadyra"
+    },
+    "license": "MIT",
+    "requirements": "CPU, silero extra",
+    "settings": {
+      "sample_rate": 48000
+    },
+    "notes": "Russian only. No automatic stress: mark stressed vowels with + in the draft. Write numbers and Latin names as Russian words."
   }
 ]

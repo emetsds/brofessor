@@ -193,10 +193,13 @@ def speech_status(choice):
     )
     st.caption(
         t(
-            "Requires Apple Silicon and the speech extra. License: {license}",
+            "Requirements: {requirements} · License: {license}",
+            requirements=t(item["requirements"]),
             license=item["license"],
         )
     )
+    if item.get("notes"):
+        st.caption(t(item["notes"]))
     st.caption(t("Installed" if item["installed"] else "Not installed"))
     pending = next(
         (
@@ -410,6 +413,7 @@ def results():
                     voice_name = speech_models.get(voice_reference)["name"]
                 except ValueError:
                     voice_name = voice_reference
+                voice_name = job["params"].get("model_spec", {}).get("name", voice_name)
                 st.caption(t("Voice model: {model}", model=voice_name))
                 rendered_draft = workspace.draft(
                     job["params"]["draft_job_id"], job["params"]["revision"]
@@ -523,18 +527,36 @@ def results():
                         job["kind"] == "podcast"
                         and speech_models.installed_path(voice_model) is None
                     )
+                    unsupported_language = (
+                        job["kind"] == "podcast"
+                        and draft["data"]["language"]
+                        not in speech_models.get(voice_model)["languages"]
+                    )
+                    if unsupported_language:
+                        st.caption(
+                            t("The selected voice model does not support this draft's language.")
+                        )
                     if missing_voice:
                         st.caption(t("Download the selected voice model before generating audio."))
-                    if st.button(label, key=f"render-{job['id']}", disabled=missing_voice):
-                        service.render(
-                            workspace,
-                            job["id"],
-                            model=voice_model if job["kind"] == "podcast" else None,
-                            request_key=f"render:{job['id']}:{draft['revision']}:{voice_model}"
-                            if job["kind"] == "podcast"
-                            else f"render:{job['id']}:{draft['revision']}",
-                        )
-                        st.rerun()
+                    if st.button(
+                        label,
+                        key=f"render-{job['id']}",
+                        disabled=missing_voice or unsupported_language,
+                    ):
+                        try:
+                            service.render(
+                                workspace,
+                                job["id"],
+                                model=voice_model if job["kind"] == "podcast" else None,
+                                request_key=service.render_request_key(
+                                    workspace, job["id"], voice_model
+                                )
+                                if job["kind"] == "podcast"
+                                else f"render:{job['id']}:{draft['revision']}",
+                            )
+                            st.rerun()
+                        except (OSError, ValueError) as error:
+                            st.error(t("Could not submit the job: {error}", error=error))
             for artifact in workspace.artifacts(job["id"]):
                 path = service.artifact_path(workspace, artifact["path"])
                 if not path.exists():
