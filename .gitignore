@@ -21,3 +21,6 @@ workspaces/
 outputs/
 models/
 *.log
+.python/
+.models-cache/
+.cache/

@@ -1,0 +1,70 @@
+"""The small set of model outputs accepted by the workflows."""
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class Output(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class Answer(Output):
+    answer: str = Field(min_length=1)
+    citations: list[str]
+    evidence_status: Literal["supported", "insufficient_evidence"] = "supported"
+
+    @model_validator(mode="after")
+    def supported_answer_has_citations(self):
+        if self.evidence_status == "supported" and not self.citations:
+            raise ValueError("A supported answer requires source citations")
+        return self
+
+
+class Notes(Output):
+    summary: str = Field(min_length=1)
+    citations: list[str] = Field(min_length=1)
+
+
+class Turn(Output):
+    speaker: Literal["host", "guest"]
+    text: str = Field(min_length=1, max_length=1000)
+    citations: list[str] = Field(min_length=1)
+
+
+class Podcast(Output):
+    title: str = Field(min_length=1)
+    language: Literal["ru", "en"]
+    turns: list[Turn] = Field(min_length=2)
+
+
+class Slide(Output):
+    title: str = Field(min_length=1)
+    bullets: list[str] = Field(min_length=1, max_length=6)
+    notes: str
+    citations: list[str] = Field(min_length=1)
+
+
+class Slides(Output):
+    title: str = Field(min_length=1)
+    language: Literal["ru", "en"]
+    slides: list[Slide] = Field(min_length=1, max_length=40)
+
+
+def validate_citations(value: dict, allowed: set[str]) -> None:
+    """Check referential integrity; this is not a factual correctness score."""
+
+    def visit(node):
+        if isinstance(node, dict):
+            for key, child in node.items():
+                if key == "citations":
+                    unknown = set(child) - allowed
+                    if unknown:
+                        raise ValueError(f"Unknown source citations: {sorted(unknown)}")
+                else:
+                    visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(value)

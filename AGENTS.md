@@ -8,7 +8,7 @@ Read `README.md`, `docs/requirements.md`, `docs/architecture.md`, and the releva
 
 This is an independent repository. Do not import process requirements or private context from unrelated projects. The implementation plan is the single task list. Update it when scope or completion changes instead of maintaining competing plans.
 
-The repository currently contains planning documents only. Do not describe planned commands, integrations, or tests as implemented. A request to plan remains planning-only. When implementation is requested, carry the authorized work through relevant verification and document its actual outcome.
+Implementation is authorized. Build and verify the working product incrementally in this repository. Do not describe planned integrations or tests as implemented. Record actual outcomes in the implementation plan.
 
 ## Invariants
 
@@ -26,7 +26,7 @@ The repository currently contains planning documents only. Do not describe plann
 
 The proposed stack is Python 3.12, uv, Typer, Pydantic, SQLite, and Streamlit, with a small Node/PptxGenJS renderer. Revisit a choice only when evidence improves the user outcome. Prefer a local worker over external queue infrastructure.
 
-Keep shared skills portable. Host-specific discovery/configuration is a small adapter. A skill invoked inside Codex or Claude should use the current host for reasoning instead of automatically nesting another agent process.
+Keep the architecture small: one SQLite workspace, one OS-locked local worker, and three bounded text adapters. Do not introduce worker leases, a separate host-agent protocol, workspace archive formats, or speculative future features. CLI documentation is sufficient for existing agents to use the product.
 
 ## Verification and reporting
 
