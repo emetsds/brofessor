@@ -25,17 +25,16 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
 
     def generate(prompt, schema, citation_scope=None):
         check()
-        fingerprint = hashlib.sha256(
-            json.dumps(
-                {
-                    "prompt": prompt,
-                    "schema": schema.model_json_schema(),
-                    "provider": params["provider"],
-                    "model": params["model"],
-                },
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
+        ollama_port = params.get("ollama_port", executors.DEFAULT_OLLAMA_PORT)
+        identity = {
+            "prompt": prompt,
+            "schema": schema.model_json_schema(),
+            "provider": params["provider"],
+            "model": params["model"],
+        }
+        if params["provider"] == "ollama" and ollama_port != executors.DEFAULT_OLLAMA_PORT:
+            identity["ollama_port"] = ollama_port
+        fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         checkpoint = folder / "checkpoints" / f"{fingerprint}.json"
         if checkpoint.exists():
             result = json.loads(checkpoint.read_text())
@@ -45,6 +44,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
                 schema.model_json_schema(),
                 params["provider"],
                 params["model"],
+                ollama_port=ollama_port,
                 workdir=folder,
                 cancelled=cancelled,
             )

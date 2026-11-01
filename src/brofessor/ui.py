@@ -10,10 +10,12 @@ from pathlib import Path
 import streamlit as st
 
 from brofessor import service
+from brofessor.executors import DEFAULT_OLLAMA_PORT
 from brofessor.workspace import Workspace
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--workspace", default=".brofessor/workspace")
+parser.add_argument("--ollama-port", type=int, default=DEFAULT_OLLAMA_PORT)
 args, _ = parser.parse_known_args()
 st.set_page_config(page_title="brofessor", page_icon="🎙", layout="wide")
 st.title("brofessor")
@@ -22,6 +24,19 @@ with st.sidebar:
     workspace_path = st.text_input("Каталог материалов", args.workspace)
     provider = st.selectbox("Исполнитель", ["codex", "claude", "ollama"])
     model = st.text_input("Модель (пусто - выбор исполнителя)") or None
+    ollama_port = st.session_state.get("selected_ollama_port", args.ollama_port)
+    if provider == "ollama":
+        ollama_port = st.number_input(
+            "Порт Ollama",
+            min_value=1,
+            max_value=65535,
+            value=ollama_port,
+            step=1,
+            key="ollama_port",
+            help="Порт уже запущенного сервера Ollama на 127.0.0.1.",
+        )
+        # Hidden widgets lose their state; preserve the port when switching providers.
+        st.session_state["selected_ollama_port"] = ollama_port
     st.caption(
         "Codex и Claude отправляют выбранный текст своему провайдеру. Ollama и речь работают локально."
     )
@@ -29,7 +44,7 @@ with st.sidebar:
         from brofessor.executors import doctor
 
         try:
-            st.json(doctor(provider, model))
+            st.json(doctor(provider, model, ollama_port=ollama_port))
         except Exception as error:
             st.error(str(error))
 
@@ -103,6 +118,7 @@ with create_tab:
                         language,
                         provider,
                         model,
+                        ollama_port if provider == "ollama" else None,
                         minutes,
                         slide_count,
                     ],
@@ -120,6 +136,7 @@ with create_tab:
                 language=language,
                 provider=provider,
                 model=model,
+                ollama_port=ollama_port,
                 minutes=minutes,
                 slide_count=slide_count,
                 request_key=st.session_state.request_key,

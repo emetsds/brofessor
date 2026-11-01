@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from .executors import DEFAULT_OLLAMA_PORT, ollama_url
 from .models import Answer, Podcast, Slides, validate_citations
 from .workspace import Workspace, atomic_json
 
@@ -15,6 +16,7 @@ def submit(
     language="ru",
     provider="codex",
     model=None,
+    ollama_port=DEFAULT_OLLAMA_PORT,
     minutes=20,
     slide_count=8,
     request_key=None,
@@ -24,6 +26,7 @@ def submit(
         raise ValueError("Choose ask, podcast or slides")
     if provider not in ("codex", "claude", "ollama"):
         raise ValueError("Choose codex, claude or ollama")
+    ollama_url(ollama_port)
     if language not in ("ru", "en"):
         raise ValueError("Choose ru or en")
     if not 1 <= minutes <= 60 or not 1 <= slide_count <= 40:
@@ -34,19 +37,19 @@ def submit(
         raise ValueError("Select existing sources before starting a job")
     if kind == "ask" and not focus.strip():
         raise ValueError("A question is required")
-    result = workspace.submit(
-        kind,
-        {
-            "source_ids": ids,
-            "focus": focus,
-            "language": language,
-            "provider": provider,
-            "model": model,
-            "minutes": minutes,
-            "slide_count": slide_count,
-        },
-        request_key,
-    )
+    params = {
+        "source_ids": ids,
+        "focus": focus,
+        "language": language,
+        "provider": provider,
+        "model": model,
+        "minutes": minutes,
+        "slide_count": slide_count,
+    }
+    # Omit the default to preserve request keys for jobs created before port selection.
+    if provider == "ollama" and ollama_port != DEFAULT_OLLAMA_PORT:
+        params["ollama_port"] = ollama_port
+    result = workspace.submit(kind, params, request_key)
     if start_worker:
         from .worker import ensure_worker
 

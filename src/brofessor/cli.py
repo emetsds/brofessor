@@ -5,12 +5,18 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from click import ClickException
 
 from . import service
+from .executors import DEFAULT_OLLAMA_PORT
 from .workspace import Workspace
+
+OllamaPort = Annotated[
+    int, typer.Option(min=1, max=65535, help="Port of the local Ollama server (127.0.0.1).")
+]
 
 app = typer.Typer(no_args_is_help=True, help="brofessor: sources, podcasts and presentations")
 source_app = typer.Typer(no_args_is_help=True)
@@ -106,6 +112,7 @@ def submit_and_show(
     slide_count,
     wait,
     request_key,
+    ollama_port=DEFAULT_OLLAMA_PORT,
 ):
     job = service.submit(
         workspace,
@@ -115,6 +122,7 @@ def submit_and_show(
         language=language,
         provider=provider,
         model=model,
+        ollama_port=ollama_port,
         minutes=minutes,
         slide_count=slide_count,
         request_key=request_key,
@@ -132,6 +140,7 @@ def ask(
     question: str,
     provider: str = "codex",
     model: str | None = None,
+    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
     language: str = "ru",
     source: list[str] = typer.Option(None),
     wait: bool = False,
@@ -139,7 +148,18 @@ def ask(
 ):
     """Ask a grounded question over the selected sources."""
     submit_and_show(
-        ctx.obj, "ask", source, question, language, provider, model, 20, 8, wait, request_key
+        ctx.obj,
+        "ask",
+        source,
+        question,
+        language,
+        provider,
+        model,
+        20,
+        8,
+        wait,
+        request_key,
+        ollama_port=ollama_port,
     )
 
 
@@ -151,13 +171,25 @@ def podcast(
     language: str = "ru",
     provider: str = "codex",
     model: str | None = None,
+    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
     source: list[str] = typer.Option(None),
     wait: bool = False,
     request_key: str | None = None,
 ):
     """Prepare an editable dialogue. Use draft render to synthesize it."""
     submit_and_show(
-        ctx.obj, "podcast", source, focus, language, provider, model, minutes, 8, wait, request_key
+        ctx.obj,
+        "podcast",
+        source,
+        focus,
+        language,
+        provider,
+        model,
+        minutes,
+        8,
+        wait,
+        request_key,
+        ollama_port=ollama_port,
     )
 
 
@@ -169,13 +201,25 @@ def slides(
     language: str = "ru",
     provider: str = "codex",
     model: str | None = None,
+    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
     source: list[str] = typer.Option(None),
     wait: bool = False,
     request_key: str | None = None,
 ):
     """Prepare editable slide content. Use draft render to create PPTX."""
     submit_and_show(
-        ctx.obj, "slides", source, focus, language, provider, model, 20, count, wait, request_key
+        ctx.obj,
+        "slides",
+        source,
+        focus,
+        language,
+        provider,
+        model,
+        20,
+        count,
+        wait,
+        request_key,
+        ollama_port=ollama_port,
     )
 
 
@@ -231,11 +275,15 @@ def render_draft(
 
 
 @app.command()
-def doctor(provider: str = "codex", model: str | None = None):
+def doctor(
+    provider: str = "codex",
+    model: str | None = None,
+    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+):
     """Report local executor capabilities without performing inference."""
     from .executors import doctor as diagnose
 
-    show(diagnose(provider, model))
+    show(diagnose(provider, model, ollama_port=ollama_port))
 
 
 @app.command()
@@ -249,7 +297,11 @@ def worker(ctx: typer.Context, once: bool = False):
 
 
 @app.command()
-def ui(ctx: typer.Context, port: int = 8501):
+def ui(
+    ctx: typer.Context,
+    port: int = typer.Option(8501, min=1, max=65535, help="Port for the local web UI."),
+    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+):
     """Open the local Streamlit interface for this workspace."""
     module = Path(__file__).with_name("ui.py")
     raise typer.Exit(
@@ -267,6 +319,8 @@ def ui(ctx: typer.Context, port: int = 8501):
                 "--",
                 "--workspace",
                 str(ctx.obj.path),
+                "--ollama-port",
+                str(ollama_port),
             ]
         )
     )

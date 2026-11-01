@@ -39,7 +39,7 @@ In the web UI, make this choice in the sidebar: **Исполнитель** (Prov
 
 This choice controls text generation. Audio synthesis and PPTX rendering run locally afterward. brofessor uses the official CLI login for Codex/Claude and does not require an API key or switch to paid API billing.
 
-For Ollama, start the **server** with `OLLAMA_NO_CLOUD=1`. It must listen on `127.0.0.1:11434`, report cloud disabled through `/api/status`, and have the named model installed. Setting the variable only in the brofessor terminal is insufficient.
+For Ollama, start the **server** with `OLLAMA_NO_CLOUD=1`. It must listen on `127.0.0.1` (port `11434` by default), report cloud disabled through `/api/status`, and have the named model installed. Setting the variable only in the brofessor terminal is insufficient. Both the UI and Ollama ports can be [changed](#choose-ports).
 
 Check the chosen provider before generating anything:
 
@@ -63,6 +63,33 @@ Open [localhost:8501](http://localhost:8501). The UI currently uses Russian labe
 4. For slides, click **Собрать PPTX** (Build PPTX). For a podcast, [install local speech](#create-a-podcast) first, then click **Озвучить** (Generate audio). Open the new render job to download the file or play the audio.
 
 The UI and CLI see the same data when they use the same workspace. Jobs run in the background, so closing the browser does not cancel them.
+
+### Choose ports
+
+The web UI uses port **8501** by default. To open it on **8502** and set its Ollama port to **11435**:
+
+```sh
+uv run --no-sync brofessor ui --port 8502 --ollama-port 11435
+```
+
+Open [localhost:8502](http://localhost:8502), select **ollama** in the sidebar, and enter your installed model name. You can change **Порт Ollama** (Ollama port) there too. Changing that field affects new jobs, not the web UI's address or existing jobs.
+
+`--ollama-port` tells brofessor where to connect; it does not start or reconfigure Ollama. Run the Ollama server on the matching port in another terminal:
+
+```sh
+OLLAMA_HOST=127.0.0.1:11435 OLLAMA_NO_CLOUD=1 ollama serve
+```
+
+If you run Ollama as a desktop app or service, configure and restart that server instead; see [Ollama server settings](https://docs.ollama.com/faq#how-do-i-configure-ollama-server).
+
+For CLI use, pass the port when checking the connection and creating a job:
+
+```sh
+uv run --no-sync brofessor doctor --provider ollama --model INSTALLED_MODEL --ollama-port 11435
+uv run --no-sync brofessor ask "What was measured?" --provider ollama --model INSTALLED_MODEL --ollama-port 11435 --language en --wait
+```
+
+The same `--ollama-port` option is available on `slides` and `podcast`. Each job keeps its selected port when resumed. Both ports accept values from 1 to 65535; both connections stay on this computer (`127.0.0.1`).
 
 ## Use the CLI
 

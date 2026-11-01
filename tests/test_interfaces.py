@@ -89,3 +89,113 @@ def test_external_edit_preserves_unsaved_ui_buffer(tmp_path, monkeypatch):
     assert not ui.exception
     assert any("Draft changed" in error.value for error in ui.error)
     assert workspace.draft(job["id"])["data"]["answer"] == "CLI correction"
+
+
+@pytest.mark.parametrize("command", ["ask", "slides", "podcast"])
+def test_cli_saves_custom_ollama_port_with_job(tmp_path, monkeypatch, command):
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "chapter.md"
+    source.write_text("A bridge carries 1200 kilograms.")
+    workspace.add_source(source)
+    monkeypatch.setattr("brofessor.worker.ensure_worker", lambda workspace: None)
+    args = ["-w", str(workspace.path), command]
+    if command == "ask":
+        args.append("What was measured?")
+    result = CliRunner().invoke(
+        app, [*args, "--provider", "ollama", "--model", "tiny", "--ollama-port", "11435"]
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["params"]["ollama_port"] == 11435
+    assert Workspace(workspace.path).jobs()[0]["params"]["ollama_port"] == 11435
+
+
+def test_cli_doctor_uses_selected_ollama_port(tmp_path, monkeypatch):
+    calls = []
+
+    def diagnose(provider, model, *, ollama_port):
+        calls.append((provider, model, ollama_port))
+        return {"available": True}
+
+    monkeypatch.setattr("brofessor.executors.doctor", diagnose)
+    result = CliRunner().invoke(
+        app, ["-w", str(tmp_path), "doctor", "--provider", "ollama", "--ollama-port", "11435"]
+    )
+    assert result.exit_code == 0, result.output
+    assert calls == [("ollama", None, 11435)]
+
+
+def test_ui_launch_passes_both_ports_to_streamlit(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr("brofessor.cli.subprocess.call", lambda args: calls.append(args) or 0)
+    result = CliRunner().invoke(
+        app, ["-w", str(tmp_path), "ui", "--port", "8502", "--ollama-port", "11435"]
+    )
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    assert "--server.address=127.0.0.1" in calls[0]
+    assert "--server.port=8502" in calls[0]
+    app_args = calls[0][calls[0].index("--") + 1 :]
+    assert app_args == ["--workspace", str(tmp_path), "--ollama-port", "11435"]
+
+
+@pytest.mark.parametrize("port", ["0", "65536"])
+@pytest.mark.parametrize(
+    "args", [["ui", "--port"], ["ui", "--ollama-port"], ["doctor", "--ollama-port"]]
+)
+def test_invalid_cli_ports_fail_before_launch(tmp_path, monkeypatch, args, port):
+    monkeypatch.setattr("brofessor.cli.subprocess.call", lambda *a: pytest.fail("Must not launch"))
+    monkeypatch.setattr(
+        "brofessor.executors.doctor", lambda *a, **k: pytest.fail("Must not connect")
+    )
+    result = CliRunner().invoke(app, ["-w", str(tmp_path), *args, port])
+    assert result.exit_code == 2, result.output
+    assert "range" in result.output
+
+
+def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "chapter.md"
+    source.write_text("A bridge carries 1200 kilograms.")
+    workspace.add_source(source)
+    monkeypatch.setattr("brofessor.worker.ensure_worker", lambda workspace: None)
+    calls = []
+
+    def diagnose(provider, model, *, ollama_port):
+        calls.append((provider, model, ollama_port))
+        return {"available": True}
+
+    monkeypatch.setattr("brofessor.executors.doctor", diagnose)
+    monkeypatch.setattr(
+        "sys.argv", ["ui.py", "--workspace", str(workspace.path), "--ollama-port", "11435"]
+    )
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    next(field for field in ui.selectbox if field.label == "Исполнитель").select("ollama").run()
+    next(field for field in ui.text_input if field.label.startswith("Модель")).set_value(
+        "tiny"
+    ).run()
+    assert not ui.exception
+    assert ui.number_input(key="ollama_port").value == 11435
+    ui.number_input(key="ollama_port").set_value(11436).run()
+    next(field for field in ui.selectbox if field.label == "Исполнитель").select("codex").run()
+    next(field for field in ui.selectbox if field.label == "Исполнитель").select("ollama").run()
+    assert ui.number_input(key="ollama_port").value == 11436
+    for button in ui.button:
+        if button.label == "Проверить подключение":
+            button.click().run()
+            break
+    assert calls == [("ollama", "tiny", 11436)]
+    for button in ui.button:
+        if button.label == "Подготовить":
+            button.click().run()
+            break
+    assert not ui.exception
+    assert workspace.jobs()[0]["params"]["ollama_port"] == 11436
+    ui.number_input(key="ollama_port").set_value(11437).run()
+    for button in ui.button:
+        if button.label == "Подготовить":
+            button.click().run()
+            break
+    assert not ui.exception
+    assert {job["params"]["ollama_port"] for job in workspace.jobs()} == {11436, 11437}
