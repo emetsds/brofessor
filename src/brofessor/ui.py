@@ -243,6 +243,52 @@ def speech_controls():
             on_change=choose_speech_model,
         )
         speech_status(choice)
+        if choices[choice].get("requires_reference"):
+            from brofessor import speech_references
+
+            st.caption(
+                t(
+                    "Set one WAV sample and its exact transcript for each speaker. Samples stay on this computer."
+                )
+            )
+            ref_language = st.selectbox(
+                t("Voice sample language"),
+                choices[choice]["languages"],
+                key=f"reference_language:{choice}",
+            )
+            profiles = speech_references.list_references(ref_language)
+            for role in ("host", "guest"):
+                with st.expander(t("Voice sample: {role}", role=role)):
+                    if role in profiles:
+                        st.caption(t("Voice sample saved"))
+                    audio = st.file_uploader(
+                        t("PCM16 WAV, 2–20 seconds"),
+                        type=["wav"],
+                        max_upload_size=10,
+                        key=f"reference_audio:{ref_language}:{role}",
+                    )
+                    transcript = st.text_area(
+                        t("Exact transcript"),
+                        value=profiles.get(role, {}).get("text", ""),
+                        key=f"reference_text:{ref_language}:{role}",
+                    )
+                    if st.button(
+                        t("Save voice sample"),
+                        key=f"save_reference:{ref_language}:{role}",
+                        disabled=(audio is None and role not in profiles) or not transcript.strip(),
+                    ):
+                        try:
+                            speech_references.save(
+                                role,
+                                ref_language,
+                                audio.getvalue()
+                                if audio is not None
+                                else Path(profiles[role]["path"]).read_bytes(),
+                                transcript,
+                            )
+                            st.rerun()
+                        except (OSError, ValueError) as error:
+                            st.error(t("Could not save edits: {error}", error=error))
 
 
 with st.sidebar:

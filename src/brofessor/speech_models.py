@@ -70,6 +70,8 @@ def _valid_bytes(model: dict, path: Path) -> int:
 
 def installed_path(model: str | dict) -> Path | None:
     item = get(model)
+    if any(installed_path(dependency) is None for dependency in item.get("dependencies", [])):
+        return None
     path = snapshot(item)
     if _valid_bytes(item, path) != item["download_bytes"]:
         return None
@@ -96,6 +98,7 @@ def list_models() -> list[dict]:
     return [
         {
             **{key: value for key, value in item.items() if key != "files"},
+            "download_bytes": total_bytes(item),
             "installed": installed_path(item["id"]) is not None,
             "compatible": apple_silicon
             or (item.get("engine") == "silero" and platform.system() == "Linux"),
@@ -205,6 +208,34 @@ def _download_file(item, target, check, report):
 
 
 def download(model: str | dict, *, cancelled=lambda: False, progress=lambda value: None) -> dict:
+    item = get(model)
+    total, completed = total_bytes(item), 0
+    for component in [*item.get("dependencies", []), item]:
+
+        def report(value):
+            progress(
+                {
+                    **value,
+                    "model": item["id"],
+                    "completed": completed + value["completed"],
+                    "total": total,
+                }
+            )
+
+        result = _download_one(component, cancelled=cancelled, progress=report)
+        completed += component["download_bytes"]
+    return result
+
+
+def total_bytes(item):
+    return item["download_bytes"] + sum(
+        dep["download_bytes"] for dep in item.get("dependencies", [])
+    )
+
+
+def _download_one(
+    model: str | dict, *, cancelled=lambda: False, progress=lambda value: None
+) -> dict:
     item = get(model)
     target = snapshot(item)
 

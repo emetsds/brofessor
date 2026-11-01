@@ -1,4 +1,4 @@
-"""Two local speech engines; segment caching and assembly belong to media.py."""
+"""Local speech engines; segment caching and assembly belong to media.py."""
 
 import importlib.metadata
 import re
@@ -18,6 +18,16 @@ def _check(cancelled):
 
 
 def runtime(spec):
+    if spec.get("engine") == "f5":
+        try:
+            return (
+                "f5-tts/"
+                + importlib.metadata.version("f5-tts")
+                + "/torch/"
+                + importlib.metadata.version("torch")
+            )
+        except importlib.metadata.PackageNotFoundError:
+            return "unavailable"
     package = "torch" if spec.get("engine") == "silero" else "mlx-audio"
     try:
         return importlib.metadata.version(package)
@@ -35,13 +45,15 @@ def validate_text(spec, text):
 
 def load(spec, location):
     try:
+        if spec.get("engine") == "f5":
+            return _F5(spec, location)
         if spec.get("engine") == "silero":
             return _Silero(spec, location)
         if spec.get("engine", "qwen3-mlx") == "qwen3-mlx":
             return _Qwen(spec, location)
         raise SpeechError(f"Unsupported speech engine: {spec['engine']}")
     except ImportError as error:
-        extra = "silero" if spec.get("engine") == "silero" else "speech"
+        extra = {"silero": "silero", "f5": "f5"}.get(spec.get("engine"), "speech")
         raise SpeechError(
             f"Install local speech support: uv sync --extra {extra}: {error}"
         ) from error
@@ -106,3 +118,81 @@ class _Silero:
             audio = self.model.apply_tts(text=text, speaker=voice, sample_rate=self.sample_rate)
         _check(cancelled)
         return audio.cpu().numpy(), self.sample_rate
+
+
+class _F5:
+    def __init__(self, spec, location):
+        import torch
+        from f5_tts.infer.utils_infer import load_model, load_vocoder
+        from f5_tts.model import DiT
+        from .speech_models import installed_path
+
+        if not torch.backends.mps.is_available():
+            raise SpeechError("F5-TTS currently requires an Apple Silicon Mac with Metal")
+        self.device = "mps"
+        self.spec = spec
+        vocoder_path = installed_path(spec["dependencies"][0])
+        if vocoder_path is None:
+            raise SpeechError("Download the selected model and its Vocos weights first")
+        self.model = load_model(
+            DiT,
+            spec["model_config"],
+            str(location / spec["checkpoint"]),
+            vocab_file=str(location / spec["vocab"]),
+            device=self.device,
+        )
+        self.vocoder = load_vocoder(is_local=True, local_path=str(vocoder_path), device=self.device)
+        self.references = {}
+
+    def synthesize(self, text, voice, language, cancelled):
+        import hashlib
+        from pathlib import Path
+        import numpy as np
+        import soundfile as sf
+        import torch
+        from f5_tts.infer.utils_infer import infer_batch_process
+
+        ref = self.spec["references"][voice]
+        if voice not in self.references:
+            path = Path(ref["path"])
+            if hashlib.sha256(path.read_bytes()).hexdigest() != ref["sha256"]:
+                raise SpeechError("Saved voice sample is damaged")
+            audio, sample_rate = sf.read(str(path), dtype="float32", always_2d=True)
+            self.references[voice] = (
+                torch.from_numpy(audio.mean(axis=1)).unsqueeze(0),
+                sample_rate,
+            )
+        _check(cancelled)
+        torch.manual_seed(self.spec["settings"]["seed"])
+        # Supplying the exact transcript avoids upstream ASR and its implicit downloads.
+        # Sequential streaming keeps MPS bounded and checks cancellation between chunks.
+        seconds = ref["duration_seconds"]
+        budget = max(40, int(len(ref["text"].encode("utf-8")) / seconds * (22 - seconds)))
+        batches, current = [], ""
+        for word in text.split():
+            candidate = (current + " " + word).strip()
+            if current and len(candidate.encode("utf-8")) > budget:
+                batches.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            batches.append(current)
+        chunks = []
+        for audio, sample_rate in infer_batch_process(
+            self.references[voice],
+            ref["text"],
+            batches,
+            self.model,
+            self.vocoder,
+            device=self.device,
+            streaming=True,
+            progress=None,
+            nfe_step=self.spec["settings"]["nfe_step"],
+            speed=self.spec["settings"]["speed"],
+        ):
+            _check(cancelled)
+            chunks.append(audio)
+        if not chunks:
+            raise SpeechError("F5-TTS returned no audio")
+        return np.concatenate(chunks), sample_rate

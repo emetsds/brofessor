@@ -24,6 +24,10 @@ job_app = typer.Typer(no_args_is_help=True)
 draft_app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True, help="Create, open and select local projects.")
 tts_app = typer.Typer(no_args_is_help=True, help="List, download and select local speech models.")
+voice_app = typer.Typer(
+    no_args_is_help=True, help="Set WAV voice samples and transcripts for F5/ESpeech."
+)
+tts_app.add_typer(voice_app, name="voice")
 app.add_typer(source_app, name="source")
 app.add_typer(job_app, name="job")
 app.add_typer(draft_app, name="draft")
@@ -118,6 +122,25 @@ def download_tts_model(ctx: typer.Context, model: str, wait: bool = False):
     show(job)
     if wait and job["status"] != "succeeded":
         raise typer.Exit(1)
+
+
+@voice_app.command("list")
+def list_voice_samples(language: str = "ru"):
+    from .speech_references import list_references
+
+    show(list_references(language))
+
+
+@voice_app.command("set")
+def set_voice_sample(
+    role: str,
+    audio: Path = typer.Option(..., exists=True, dir_okay=False),
+    text: str = typer.Option(...),
+    language: str = "ru",
+):
+    from .speech_references import save
+
+    show(save(role, language, audio.read_bytes(), text))
 
 
 @app.command()

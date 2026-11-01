@@ -91,12 +91,21 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             workspace.add_artifact(job["id"], Path(output), "pptx", {"revision": draft["revision"]})
         elif job["kind"] == "render_podcast":
             segments = workspace.path / "audio-segments"
+            model_options = {}
+            if "model_spec" in params:
+                from .speech_models import get
+                from .speech_references import resolve
+
+                spec = get(params["model_spec"])
+                if spec.get("references"):
+                    spec["references"] = resolve(workspace.path, spec["references"])
+                model_options["model_spec"] = spec
             result = render_audio(
                 draft["data"],
                 folder / "podcast.mp3",
                 segment_dir=segments,
                 model=params["model"],
-                **({"model_spec": params["model_spec"]} if "model_spec" in params else {}),
+                **model_options,
                 cancelled=cancelled,
                 progress=progress,
             )

@@ -18,7 +18,7 @@ def models(tmp_path, monkeypatch):
     monkeypatch.setattr(speech_models, "_legacy_caches", lambda: [])
     entries = []
     for index, original in enumerate(speech_models.CATALOG):
-        if "repo" not in original:
+        if original.get("engine") != "qwen3-mlx":
             continue
         entries.append(
             {

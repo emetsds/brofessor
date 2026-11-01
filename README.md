@@ -173,6 +173,22 @@ Omit `--extra speech` if you only use Silero. The current preset voices are `ru_
 
 New download and audio jobs save the selected model specification, including its pinned revision and preset voices. Updating the catalog or choosing another default keeps that job's selection. Completed snapshots remain shared across projects. Silero downloads are verified against a pinned SHA-256; interrupted HTTP downloads resume when the server supports ranges.
 
+F5-TTS v1 (English) and ESpeech RL-V2 (Russian) use the same local F5 runtime on Apple Silicon. Add `--extra f5` to your install command, then download `f5-tts` or `espeech-rl-v2`. The shared Vocos vocoder is downloaded once. F5 weights are CC-BY-NC-4.0 (personal/noncommercial use); ESpeech declares Apache-2.0.
+
+These models need a WAV voice sample and its **exact transcript for each speaker**. In the UI, select the model, expand its **Voice sample: host/guest** controls, and save both samples. Use PCM16 WAV, 2–20 seconds, with clean speech. Voice profiles stay in your local user data directory and can be reused across projects. Each audio job also saves copies of its selected samples inside the project, together with the transcripts.
+
+The same setup is available from the CLI:
+
+```sh
+uv sync --locked --python 3.12 --extra ui --extra speech --extra silero --extra f5
+uv run --no-sync brofessor tts download espeech-rl-v2 --wait
+uv run --no-sync brofessor tts voice set host --language ru --audio host.wav --text "Exact words spoken in host.wav."
+uv run --no-sync brofessor tts voice set guest --language ru --audio guest.wav --text "Exact words spoken in guest.wav."
+uv run --no-sync brofessor draft render PODCAST_DRAFT_ID --tts-model espeech-rl-v2 --wait
+```
+
+For F5 English, use `f5-tts` and `--language en` when saving samples. brofessor does not download an ASR model to guess transcripts. ESpeech can use manually marked stress (`+`); automatic RUAccent processing is not included. Use samples you have permission to use. [Upstream F5](https://github.com/SWivid/F5-TTS), [ESpeech RL-V2](https://huggingface.co/ESpeech/ESpeech-TTS-1_RL-V2).
+
 Start with a three-minute preview. `--minutes` is a target, not a guarantee: the app reports measured audio duration and warns if it differs by more than 10%. Long episodes and series are not yet verified. Use `--language en` for English; generate separate drafts for both languages.
 
 ### Edit a draft

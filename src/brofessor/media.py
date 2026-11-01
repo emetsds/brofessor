@@ -187,7 +187,14 @@ def _model_identity(model: str | dict | None) -> dict:
     try:
         item = get(model)
         if "repo" in item:
-            return {"repo": item["repo"], "revision": item["revision"]}
+            identity = {"repo": item["repo"], "revision": item["revision"]}
+            if item.get("model_config"):
+                identity["config"] = item["model_config"]
+            if item.get("dependencies"):
+                identity["dependencies"] = [
+                    {"repo": d["repo"], "revision": d["revision"]} for d in item["dependencies"]
+                ]
+            return identity
         return {"id": item["id"], "revision": item["revision"]}
     except ValueError:
         pass
@@ -304,8 +311,8 @@ def render_audio(
 ) -> dict:
     """Render a RU/EN dialogue with stock voices and content-addressed checkpoints.
 
-    The first uncached invocation downloads the explicitly selected model from Hugging
-    Face. Inference is local. No reference recordings or voice cloning are used.
+    Catalog weights must be installed explicitly. Reference-based engines use the
+    voice samples saved in the job snapshot; inference remains local.
     Output is always accompanied by WAV. MP3 is created when FFmpeg is available.
     """
     from .speech_models import get
@@ -319,6 +326,8 @@ def render_audio(
     spec.setdefault("voices", dict(VOICES))
     spec.setdefault("languages", list(LANGUAGES))
     voices = spec["voices"]
+    if spec.get("requires_reference") and not spec.get("references"):
+        raise ValueError("Provide saved voice samples and transcripts before rendering")
     language = plan.get("language", "ru")
     if language not in LANGUAGES:
         raise ValueError("Speech language must be ru or en")
@@ -357,6 +366,9 @@ def render_audio(
             "renderer": RENDERER_VERSION,
             "runtime": runtime,
         }
+        if spec.get("requires_reference"):
+            ref = spec["references"][turn["speaker"]]
+            settings["reference"] = {key: ref[key] for key in ("sha256", "text")}
         key = hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()
         target, metadata = segment_dir / f"{key}.wav", segment_dir / f"{key}.json"
         reused = _segment_valid(target, metadata, key)

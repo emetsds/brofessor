@@ -6,6 +6,17 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Requires WAV voice samples and transcripts. Weights are for noncommercial use.": "Нужны WAV-образцы голосов с расшифровками. Веса — для некоммерческого использования.",
+    "Requires WAV voice samples and transcripts. Automatic stress is not included; use + when needed.": "Нужны WAV-образцы голосов с расшифровками. Автоматических ударений нет; при необходимости используйте +.",
+    "Apple Silicon, f5 extra": "Apple Silicon, установка f5",
+    "Requires a WAV voice sample and its transcript for each speaker. F5 weights are noncommercial; ESpeech uses manual stress marks when needed.": "Нужен WAV-образец голоса с расшифровкой для каждого ведущего. Веса F5 допускают некоммерческое использование; для ESpeech при необходимости размечайте ударения вручную.",
+    "Set one WAV sample and its exact transcript for each speaker. Samples stay on this computer.": "Укажите WAV-образец и точную расшифровку для каждого ведущего. Образцы остаются на этом компьютере.",
+    "Voice sample language": "Язык образцов голоса",
+    "Voice sample: {role}": "Образец голоса: {role}",
+    "Voice sample saved": "Образец голоса сохранён",
+    "PCM16 WAV, 2–20 seconds": "PCM16 WAV, 2–20 секунд",
+    "Exact transcript": "Точная расшифровка",
+    "Save voice sample": "Сохранить образец голоса",
     "Speech models": "Модели озвучки",
     "Voice model": "Модель озвучки",
     "Voice model: {model}": "Модель озвучки: {model}",

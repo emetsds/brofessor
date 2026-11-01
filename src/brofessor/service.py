@@ -111,6 +111,10 @@ def render(
 
             for turn in draft["data"]["turns"]:
                 validate_text(spec, turn["text"])
+            if spec.get("requires_reference"):
+                from .speech_references import freeze, selected
+
+                spec["references"] = freeze(workspace.path, selected(draft["data"]["language"]))
             params["model_spec"] = spec
     result = workspace.submit(kind, params, request_key)
     if start_worker:
@@ -127,6 +131,22 @@ def render_request_key(workspace: Workspace, draft_job_id: str, model: str) -> s
     draft = workspace.draft(draft_job_id)
     base = f"render:{draft_job_id}:{draft['revision']}"
     resolved = reference(model)
+    from .speech_models import get
+
+    try:
+        spec = get(model)
+    except ValueError:
+        spec = {}
+    if spec.get("requires_reference"):
+        import hashlib
+        import json
+        from .speech_references import selected
+
+        refs = {
+            role: {key: value for key, value in item.items() if key in ("sha256", "text")}
+            for role, item in selected(draft["data"]["language"]).items()
+        }
+        resolved += ":" + hashlib.sha256(json.dumps(refs, sort_keys=True).encode()).hexdigest()[:16]
     legacy = f"{base}:{model}"
     previous = workspace.job_by_request_key(legacy)
     if (

@@ -356,7 +356,7 @@ def test_switching_projects_keeps_unsaved_draft_buffer(tmp_path, monkeypatch):
     assert workspace.draft(job["id"])["data"]["answer"] == "Original answer"
 
 
-@pytest.mark.parametrize("choice", ["qwen3-1.7b", "silero-cis-base"])
+@pytest.mark.parametrize("choice", ["qwen3-1.7b", "silero-cis-base", "f5-tts", "espeech-rl-v2"])
 def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatch, choice):
     from brofessor import speech_models
 
