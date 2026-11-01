@@ -8,6 +8,8 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 RUSSIAN = {
     "Speech models": "Модели озвучки",
     "Voice model": "Модель озвучки",
+    "Voice model: {model}": "Модель озвучки: {model}",
+    "Output language: {output_language}": "Язык результата: {output_language}",
     "Languages: {languages} · Download: {size} MB": "Языки: {languages} · Скачивание: {size} МБ",
     "Requires Apple Silicon and the speech extra. License: {license}": "Нужны Apple Silicon и установка speech. Лицензия: {license}",
     "Installed": "Установлена",

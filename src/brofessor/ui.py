@@ -404,6 +404,25 @@ def results():
             "interrupted": "Interrupted",
         }[job["status"]]
         with st.expander(f"{t(kind_name)} · {t(status_name)} · {job['id']}"):
+            if job["kind"] == "render_podcast":
+                voice_reference = job["params"].get("model") or speech_models.DEFAULT_ID
+                try:
+                    voice_name = speech_models.get(voice_reference)["name"]
+                except ValueError:
+                    voice_name = voice_reference
+                st.caption(t("Voice model: {model}", model=voice_name))
+                rendered_draft = workspace.draft(
+                    job["params"]["draft_job_id"], job["params"]["revision"]
+                )
+                if rendered_draft:
+                    st.caption(
+                        t(
+                            "Output language: {output_language}",
+                            output_language=ui_language.LANGUAGE_NAMES[
+                                rendered_draft["data"]["language"]
+                            ],
+                        )
+                    )
             progress = job["progress"]
             stage = {
                 "reading": "Reading sources",

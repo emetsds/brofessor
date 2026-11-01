@@ -376,3 +376,36 @@ def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatc
     assert workspace.jobs()[0]["kind"] == "download_model"
     assert workspace.jobs()[0]["params"]["model"] == "qwen3-1.7b"
     assert ui.button(key="download_tts_model").disabled
+
+
+def test_audio_result_shows_recorded_model_even_if_default_changes(tmp_path, monkeypatch):
+    from brofessor import speech_models
+
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.txt"
+    source.write_text("A measured result")
+    workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    original = service.submit(workspace, "podcast", start_worker=False)
+    workspace.save_draft(
+        original["id"],
+        {
+            "title": "Voice check",
+            "language": "ru",
+            "turns": [
+                {"speaker": "host", "text": "Question?", "citations": [citation]},
+                {"speaker": "guest", "text": "Answer.", "citations": [citation]},
+            ],
+        },
+    )
+    rendered = service.render(workspace, original["id"], model="qwen3-1.7b", start_worker=False)
+    workspace.update_job(rendered["id"], status="succeeded")
+    speech_models.use("qwen3-0.6b")
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    workspace.update_job(original["id"], status="succeeded")
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    assert not ui.exception
+    assert ui.selectbox(key="tts_model").value == "qwen3-0.6b"
+    assert any("Модель озвучки: Qwen3-TTS 1.7B" in caption.value for caption in ui.caption)
