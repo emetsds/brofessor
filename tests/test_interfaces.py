@@ -1,12 +1,22 @@
 import json
 from pathlib import Path
 
+import pytest
 from streamlit.testing.v1 import AppTest
+from streamlit.testing.v1.util import patch_config_options
 from typer.testing import CliRunner
 
-from brofessor.cli import app
 from brofessor import service
+from brofessor.cli import app
 from brofessor.workspace import Workspace
+
+
+@pytest.fixture(autouse=True)
+def offline_streamlit_config():
+    # AppTest otherwise collects page-profile telemetry, including installed
+    # agents/skills from the host filesystem. That is outside these UI contracts.
+    with patch_config_options({"browser.gatherUsageStats": False}):
+        yield
 
 
 def test_cli_import_is_visible_in_ui(tmp_path, monkeypatch):
