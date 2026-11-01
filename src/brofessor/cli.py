@@ -24,6 +24,9 @@ job_app = typer.Typer(no_args_is_help=True)
 draft_app = typer.Typer(no_args_is_help=True)
 project_app = typer.Typer(no_args_is_help=True, help="Create, open and select local projects.")
 tts_app = typer.Typer(no_args_is_help=True, help="List, download and select local speech models.")
+series_app = typer.Typer(
+    no_args_is_help=True, help="Plan a podcast series and prepare its episodes."
+)
 voice_app = typer.Typer(
     no_args_is_help=True, help="Set WAV voice samples and transcripts for F5/ESpeech."
 )
@@ -33,6 +36,7 @@ app.add_typer(job_app, name="job")
 app.add_typer(draft_app, name="draft")
 app.add_typer(project_app, name="project")
 app.add_typer(tts_app, name="tts")
+app.add_typer(series_app, name="series")
 
 
 def show(value):
@@ -215,6 +219,7 @@ def submit_and_show(
     wait,
     request_key,
     ollama_port=DEFAULT_OLLAMA_PORT,
+    episode_count=3,
 ):
     job = service.submit(
         workspace,
@@ -227,6 +232,7 @@ def submit_and_show(
         ollama_port=ollama_port,
         minutes=minutes,
         slide_count=slide_count,
+        episode_count=episode_count,
         request_key=request_key,
     )
     if wait:
@@ -323,6 +329,55 @@ def slides(
         request_key,
         ollama_port=ollama_port,
     )
+
+
+@series_app.command("plan")
+def plan_series(
+    ctx: typer.Context,
+    focus: str = "",
+    episodes: int = 3,
+    minutes: int = 20,
+    language: str = "ru",
+    provider: str = "codex",
+    model: str | None = None,
+    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    source: list[str] = typer.Option(None),
+    wait: bool = False,
+    request_key: str | None = None,
+):
+    """Save an editable series plan. Minutes is the target for each episode."""
+    submit_and_show(
+        ctx.obj,
+        "podcast_series",
+        source,
+        focus,
+        language,
+        provider,
+        model,
+        minutes,
+        8,
+        wait,
+        request_key,
+        ollama_port=ollama_port,
+        episode_count=episodes,
+    )
+
+
+@series_app.command("episode")
+def prepare_series_episode(
+    ctx: typer.Context,
+    series_id: str,
+    number: int,
+    revision: int | None = None,
+    wait: bool = False,
+):
+    """Prepare one episode from a saved plan revision, then use draft render."""
+    job = service.series_episode(ctx.obj, series_id, number, revision=revision)
+    if wait:
+        job = wait_for_job(ctx.obj, job["id"])
+    show(job)
+    if wait and job["status"] != "succeeded":
+        raise typer.Exit(1)
 
 
 @job_app.command("list")

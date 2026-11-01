@@ -20,11 +20,12 @@ def submit(
     ollama_port=DEFAULT_OLLAMA_PORT,
     minutes=20,
     slide_count=8,
+    episode_count=3,
     request_key=None,
     start_worker=True,
 ) -> dict:
-    if kind not in ("ask", "podcast", "slides"):
-        raise ValueError("Choose ask, podcast or slides")
+    if kind not in ("ask", "podcast", "slides", "podcast_series"):
+        raise ValueError("Choose ask, podcast, slides or podcast_series")
     if provider not in ("codex", "claude", "ollama"):
         raise ValueError("Choose codex, claude or ollama")
     ollama_url(ollama_port)
@@ -32,6 +33,10 @@ def submit(
         raise ValueError("Choose ru or en")
     if not 1 <= minutes <= 60 or not 1 <= slide_count <= 40:
         raise ValueError("Minutes must be 1–60 (under 20 is preview), slides 1–40")
+    if kind == "podcast_series" and (
+        type(episode_count) is not int or not 2 <= episode_count <= 12 or minutes < 20
+    ):
+        raise ValueError("Series need 2–12 episodes, each 20–60 minutes")
     ids = source_ids if source_ids is not None else [s["id"] for s in workspace.sources()]
     known = {s["id"] for s in workspace.sources()}
     if not ids or not set(ids) <= known:
@@ -50,6 +55,8 @@ def submit(
     # Omit the default to preserve request keys for jobs created before port selection.
     if provider == "ollama" and ollama_port != DEFAULT_OLLAMA_PORT:
         params["ollama_port"] = ollama_port
+    if kind == "podcast_series":
+        params["episode_count"] = episode_count
     result = workspace.submit(kind, params, request_key)
     if start_worker:
         from .worker import ensure_worker
@@ -59,8 +66,12 @@ def submit(
 
 
 def edit_draft(workspace: Workspace, job_id: str, data: dict, expected_revision: int) -> dict:
+    from .series import Series
+
     job = workspace.job(job_id)
-    schema = {"ask": Answer, "podcast": Podcast, "slides": Slides}.get(job["kind"])
+    schema = {"ask": Answer, "podcast": Podcast, "slides": Slides, "podcast_series": Series}.get(
+        job["kind"]
+    )
     if schema is None:
         raise ValueError("This job has no editable draft")
     value = schema.model_validate(data).model_dump()
@@ -71,6 +82,31 @@ def edit_draft(workspace: Workspace, job_id: str, data: dict, expected_revision:
     atomic_json(output, saved["data"])
     workspace.add_artifact(job_id, output, "json", {"revision": saved["revision"]})
     return saved
+
+
+def series_episode(workspace, series_job_id, number, *, revision=None, start_worker=True):
+    """Pin one saved plan revision; repeated requests reuse the same episode job."""
+    from .series import Series, episode_context
+
+    parent = workspace.job(series_job_id)
+    if parent["kind"] != "podcast_series" or parent["status"] != "succeeded":
+        raise ValueError("Choose a completed podcast series plan")
+    draft = workspace.draft(series_job_id, revision)
+    if draft is None:
+        raise ValueError("The requested series plan revision does not exist")
+    plan = Series.model_validate(draft["data"]).model_dump()
+    episode_context(plan, number)
+    params = {key: value for key, value in parent["params"].items() if key != "episode_count"}
+    params["language"] = plan["language"]
+    params["series"] = {"job_id": series_job_id, "revision": draft["revision"], "episode": number}
+    result = workspace.submit(
+        "podcast", params, f"series:{series_job_id}:r{draft['revision']}:episode:{number}"
+    )
+    if start_worker:
+        from .worker import ensure_worker
+
+        ensure_worker(workspace)
+    return result
 
 
 def render(

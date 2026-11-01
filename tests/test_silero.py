@@ -130,7 +130,10 @@ def test_interrupted_http_download_resumes_original_revision(silero, tmp_path, m
     assert (speech_models.snapshot(submitted) / "model.pt").read_bytes() == weights
 
 
-def test_silero_engine_uses_its_voices_and_common_audio_cache(silero, tmp_path, monkeypatch):
+@pytest.mark.parametrize("text,spoken", [("Вопр+ос?", "Вопр+ос?"), ("„Вопр+ос?“", '"Вопр+ос?"')])
+def test_silero_engine_uses_its_voices_and_common_audio_cache(
+    silero, tmp_path, monkeypatch, text, spoken
+):
     import numpy as np
 
     spec, weights = silero
@@ -173,7 +176,7 @@ def test_silero_engine_uses_its_voices_and_common_audio_cache(silero, tmp_path, 
     plan = {
         "language": "ru",
         "turns": [
-            {"speaker": "host", "text": "Вопр+ос?"},
+            {"speaker": "host", "text": text},
             {"speaker": "guest", "text": "Отв+ет."},
         ],
     }
@@ -181,6 +184,8 @@ def test_silero_engine_uses_its_voices_and_common_audio_cache(silero, tmp_path, 
         plan, tmp_path / "one.wav", segment_dir=tmp_path / "segments", model_spec=spec
     )
     assert [call["speaker"] for call in calls] == list(spec["voices"].values())
+    assert calls[0]["text"] == spoken
+    assert plan["turns"][0]["text"] == text
     assert result["engine"] == "silero" and result["duration_seconds"] == 2.25
     repeated = media.render_audio(
         plan, tmp_path / "two.wav", segment_dir=tmp_path / "segments", model_spec=spec

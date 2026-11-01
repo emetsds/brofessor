@@ -6,6 +6,18 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Podcast series": "Серия подкастов",
+    "Episodes: {count} · Target per episode: {minutes} min · Text provider: {provider}": "Выпусков: {count} · Цель для каждого: {minutes} мин · Исполнитель текста: {provider}",
+    "Number of episodes": "Количество выпусков",
+    "Episode duration, minutes": "Длительность одного выпуска, минут",
+    "Review the series plan, then prepare its episodes individually.": "Проверьте план серии, затем подготовьте нужные выпуски по отдельности.",
+    "Planning series": "Планирование серии",
+    "Shared terminology": "Общая терминология",
+    "Episode": "Выпуск",
+    "Prepare episode": "Подготовить выпуск",
+    "Save or load the latest plan before preparing an episode.": "Сохраните или загрузите последнюю версию плана перед подготовкой выпуска.",
+    "Reading notes reused from the series plan.": "Использованы заметки чтения из плана серии.",
+    "Series {id} · Plan revision {revision} · Episode {number}": "Серия {id} · Версия плана {revision} · Выпуск {number}",
     "Long Russian tests produced repeats and omissions. Start with a preview; try Silero for Russian episodes.": "В длинных русских тестах были повторы и пропуски речи. Начните с образца; для русского выпуска попробуйте Silero.",
     "Audio duration {actual} · Target {target}": "Длительность аудио {actual} · Цель {target}",
     "Actual duration {actual}, target {target}. Edit the script to match the target within 10% and keep full episodes between 20 and 60 minutes.": "Получилось {actual} вместо {target}. Отредактируйте сценарий для попадания в цель с допуском 10%; полный выпуск должен длиться от 20 до 60 минут.",

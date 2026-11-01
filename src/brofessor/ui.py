@@ -359,6 +359,7 @@ with create_tab:
     with st.container(border=True):
         kinds = {
             "podcast": t("Podcast"),
+            "podcast_series": t("Podcast series"),
             "slides": t("Presentation"),
             "ask": t("Answer a question"),
         }
@@ -370,13 +371,25 @@ with create_tab:
             format_func=ui_language.LANGUAGE_NAMES.__getitem__,
             key="output_language",
         )
-        minutes = st.select_slider(
-            t("Podcast duration, minutes"), [3, 20, 30, 45, 60], value=20, key="minutes"
+        episode_count = 3
+        if kind == "podcast_series":
+            episode_count = st.number_input(t("Number of episodes"), 2, 12, 3, key="episode_count")
+            minutes = st.select_slider(
+                t("Episode duration, minutes"), [20, 30, 45, 60], value=20, key="series_minutes"
+            )
+            st.caption(t("Review the series plan, then prepare its episodes individually."))
+        else:
+            minutes = st.select_slider(
+                t("Podcast duration, minutes"), [3, 20, 30, 45, 60], value=20, key="minutes"
+            )
+            st.caption(
+                t("3 minutes is a short script and voice preview. Full episodes: 20–60 minutes.")
+            )
+        slide_count = (
+            8
+            if kind == "podcast_series"
+            else st.number_input(t("Number of slides"), 1, 40, 8, key="slide_count")
         )
-        st.caption(
-            t("3 minutes is a short script and voice preview. Full episodes: 20–60 minutes.")
-        )
-        slide_count = st.number_input(t("Number of slides"), 1, 40, 8, key="slide_count")
         submitted = st.button(t("Prepare"), disabled=not selected, key="prepare")
     if submitted:
         try:
@@ -393,6 +406,7 @@ with create_tab:
                         ollama_port if provider == "ollama" else None,
                         minutes,
                         slide_count,
+                        episode_count if kind == "podcast_series" else None,
                     ],
                     ensure_ascii=False,
                 ).encode()
@@ -411,6 +425,7 @@ with create_tab:
                 ollama_port=ollama_port,
                 minutes=minutes,
                 slide_count=slide_count,
+                episode_count=episode_count,
                 request_key=st.session_state.request_key,
             )
             st.success(t("Job {id} submitted. Find the result in Jobs and results.", id=job["id"]))
@@ -439,6 +454,7 @@ def results():
         kind_name = {
             "ask": "Answer",
             "podcast": "Podcast script",
+            "podcast_series": "Podcast series",
             "slides": "Slide outline",
             "render_podcast": "Audio",
             "render_slides": "Presentation",
@@ -453,6 +469,16 @@ def results():
             "interrupted": "Interrupted",
         }[job["status"]]
         with st.expander(f"{t(kind_name)} · {t(status_name)} · {job['id']}"):
+            if job["params"].get("series"):
+                reference = job["params"]["series"]
+                st.caption(
+                    t(
+                        "Series {id} · Plan revision {revision} · Episode {number}",
+                        id=reference["job_id"],
+                        revision=reference["revision"],
+                        number=reference["episode"],
+                    )
+                )
             if job["kind"] == "render_podcast":
                 voice_reference = job["params"].get("model") or speech_models.DEFAULT_ID
                 try:
@@ -477,6 +503,7 @@ def results():
             stage = {
                 "reading": "Reading sources",
                 "outline": "Planning episode",
+                "series_plan": "Planning series",
                 "consolidating": "Consolidating reading notes",
                 "script": "Writing script",
                 "speech": "Generating speech",
@@ -513,6 +540,8 @@ def results():
             draft = workspace.draft(job["id"])
             coverage = service.coverage(workspace, job["id"])
             if coverage and coverage.get("units"):
+                if coverage.get("series"):
+                    st.caption(t("Reading notes reused from the series plan."))
                 st.caption(
                     t(
                         "Read {read} of {total} fragments · Excluded {excluded} · Cited {cited}",
@@ -547,6 +576,24 @@ def results():
                         hide_index=True,
                     )
             if draft:
+                if job["kind"] == "podcast_series":
+                    st.write(draft["data"]["title"])
+                    st.caption(
+                        t(
+                            "Episodes: {count} · Target per episode: {minutes} min · Text provider: {provider}",
+                            count=len(draft["data"]["episodes"]),
+                            minutes=job["params"]["minutes"],
+                            provider=job["params"]["provider"],
+                        )
+                    )
+                    topics = {topic["id"]: topic for topic in draft["data"]["topics"]}
+                    for number, episode in enumerate(draft["data"]["episodes"], 1):
+                        st.write(f"{number}. {episode['title']}")
+                        st.caption(" · ".join(topics[key]["title"] for key in episode["topic_ids"]))
+                    if draft["data"]["terms"]:
+                        with st.expander(t("Shared terminology")):
+                            for term in draft["data"]["terms"]:
+                                st.write(f"{term['term']}: {term['meaning']}")
                 if job["kind"] == "ask":
                     st.write(draft["data"]["answer"])
                     for citation in draft["data"]["citations"]:
@@ -603,6 +650,34 @@ def results():
                         st.rerun()
                     except (ValueError, TypeError) as error:
                         st.error(t("Could not save edits: {error}", error=error))
+                if job["kind"] == "podcast_series":
+                    number = st.selectbox(
+                        t("Episode"),
+                        range(1, len(draft["data"]["episodes"]) + 1),
+                        format_func=lambda n: f"{n}. {draft['data']['episodes'][n - 1]['title']}",
+                        key=f"series-episode-{job['id']}",
+                    )
+                    try:
+                        saved_plan = (
+                            json.loads(text) == draft["data"]
+                            and loaded_revision == draft["revision"]
+                        )
+                    except ValueError:
+                        saved_plan = False
+                    if not saved_plan:
+                        st.caption(t("Save or load the latest plan before preparing an episode."))
+                    if st.button(
+                        t("Prepare episode"),
+                        key=f"prepare-episode-{job['id']}",
+                        disabled=not saved_plan or job["status"] != "succeeded",
+                    ):
+                        try:
+                            service.series_episode(
+                                workspace, job["id"], number, revision=draft["revision"]
+                            )
+                            st.rerun()
+                        except (OSError, ValueError) as error:
+                            st.error(t("Could not submit the job: {error}", error=error))
                 if job["kind"] in ("podcast", "slides"):
                     label = t("Generate audio" if job["kind"] == "podcast" else "Build PPTX")
                     voice_model = st.session_state.get("tts_model", speech_models.selected())

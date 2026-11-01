@@ -35,8 +35,14 @@ def runtime(spec):
         return "unavailable"
 
 
+def _silero_text(text):
+    return text.translate(str.maketrans({"„": '"', "“": '"', "”": '"', "‘": "'", "’": "'"}))
+
+
 def validate_text(spec, text):
-    if spec.get("engine") == "silero" and re.search(r"[^\sа-яёА-ЯЁ+.,!?;:—–‑\-()«»\"'…]", text):
+    if spec.get("engine") == "silero" and re.search(
+        r"[^\sа-яёА-ЯЁ+.,!?;:—–‑\-()«»\"'…]", _silero_text(text)
+    ):
         raise ValueError(
             "Silero CIS Base needs numbers and Latin names or symbols written as Russian words; "
             "edit the draft or choose Qwen3-TTS"
@@ -115,7 +121,9 @@ class _Silero:
 
         _check(cancelled)
         with torch.inference_mode():
-            audio = self.model.apply_tts(text=text, speaker=voice, sample_rate=self.sample_rate)
+            audio = self.model.apply_tts(
+                text=_silero_text(text), speaker=voice, sample_rate=self.sample_rate
+            )
         _check(cancelled)
         return audio.cpu().numpy(), self.sample_rate
 

@@ -508,3 +508,87 @@ def test_duration_feedback_is_available_in_cli_and_both_ui_languages(tmp_path, m
     assert not ui.exception
     assert any("Audio duration 61:40" in caption.value for caption in ui.caption)
     assert any("Script: 2 words" in caption.value for caption in ui.caption)
+
+
+def test_series_cli_ui_share_plan_episode_and_unsaved_edit_protection(tmp_path, monkeypatch):
+    from brofessor import worker
+
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "chapter.md"
+    source.write_text("A bridge carries 1200 kilograms. Flood resistance is unknown.")
+    workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    monkeypatch.setattr(worker, "ensure_worker", lambda *_: None)
+    runner = CliRunner()
+    prefix = ["-w", str(workspace.path)]
+    result = runner.invoke(
+        app, [*prefix, "series", "plan", "--episodes", "2", "--focus", "Testing"]
+    )
+    assert result.exit_code == 0, result.output
+    parent = json.loads(result.output)
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    ui.selectbox(key="kind").select("podcast_series").run()
+    ui.number_input(key="episode_count").set_value(2).run()
+    ui.text_area(key="focus").set_value("Testing").run()
+    ui.button(key="prepare").click().run()
+    assert not ui.exception
+    assert workspace.jobs()[0]["params"] == parent["params"]
+    assert workspace.jobs()[0]["kind"] == "podcast_series"
+    value = {
+        "title": "Испытания моста",
+        "language": "ru",
+        "terms": [{"term": "Нагрузка", "meaning": "Измеренный вес", "citations": [citation]}],
+        "topics": [
+            {"id": "t1", "title": "Испытания", "brief": "Что известно", "citations": [citation]},
+            {
+                "id": "t2",
+                "title": "Ограничения",
+                "brief": "Что неизвестно",
+                "citations": [citation],
+            },
+        ],
+        "episodes": [
+            {"title": "Факты", "topic_ids": ["t1"]},
+            {"title": "Вопросы", "topic_ids": ["t2"]},
+        ],
+    }
+    monkeypatch.setattr("brofessor.executors.generate", lambda *a, **kw: value)
+    worker.run(workspace, once=True)
+    ui.run()
+    assert any(expander.label == "Общая терминология" for expander in ui.expander)
+    assert any(
+        "Цель для каждого: 20 мин · Исполнитель текста: codex" in c.value for c in ui.caption
+    )
+    ui.button(key=f"prepare-episode-{parent['id']}").click().run()
+    assert not ui.exception
+    result = runner.invoke(
+        app, [*prefix, "series", "episode", parent["id"], "1", "--revision", "1"]
+    )
+    assert result.exit_code == 0, result.output
+    episode = json.loads(result.output)
+    assert len([j for j in workspace.jobs() if j["kind"] == "podcast"]) == 1
+    assert episode["params"]["series"] == {"job_id": parent["id"], "revision": 1, "episode": 1}
+    buffer = f"editor:{workspace.path}:{parent['id']}:text"
+    changed = json.loads(ui.text_area(key=buffer).value)
+    changed["terms"][0]["term"] = "Допустимая нагрузка"
+    edited = json.dumps(changed, ensure_ascii=False)
+    ui.text_area(key=buffer).set_value(edited).run()
+    assert ui.button(key=f"prepare-episode-{parent['id']}").disabled
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception and ui.text_area(key=buffer).value == edited
+    assert any("Save or load the latest plan" in c.value for c in ui.caption)
+    assert any("Target per episode: 20 min · Text provider: codex" in c.value for c in ui.caption)
+    ui.button(key=f"save-{parent['id']}").click().run()
+    assert not ui.exception
+    ui.button(key=f"prepare-episode-{parent['id']}").click().run()
+    assert not ui.exception
+    new = next(
+        j
+        for j in workspace.jobs()
+        if j["kind"] == "podcast" and j["params"]["series"]["revision"] == 2
+    )
+    assert new["id"] != episode["id"]
+    assert workspace.draft(parent["id"], 1)["data"] == value
