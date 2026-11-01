@@ -23,13 +23,21 @@ Examples use `uv run --no-sync` to run the environment you just installed. After
 
 ### Choose a text provider
 
+brofessor needs a text model to read your sources and write answers, slide outlines, and podcast scripts. A **provider** is the tool it uses to access that model: Codex CLI, Claude Code CLI, or a local Ollama server.
+
 | Provider | Set up first | Flags for generation | Where source text is processed |
 |---|---|---|---|
 | Codex | Official Codex CLI, signed in with ChatGPT via `codex login` | `--provider codex` | OpenAI |
 | Claude Code | Official Claude Code CLI, signed in with its own subscription via `claude auth login` | `--provider claude` | Anthropic |
 | Ollama | Local server and a downloaded text model | `--provider ollama --model INSTALLED_MODEL` | Your computer |
 
-Codex is the default. The `--provider` and `--model` flags work on `doctor`, `ask`, `slides`, and `podcast`; choose the same provider in the UI sidebar. brofessor uses the official CLI login for Codex/Claude and does not require an API key or switch to paid API billing.
+In the terminal, `--provider` selects the tool. For example, `--provider claude` asks brofessor to use Claude Code to write the text. Codex is the default, so you can omit `--provider codex`.
+
+`--model` selects a specific text model within that tool. With Codex or Claude Code, leave it out to use the tool's default model. With Ollama, it is required: replace `INSTALLED_MODEL` in the table with the name of a model you have already downloaded.
+
+In the web UI, make this choice in the sidebar: **Исполнитель** (Provider) selects the tool and **Модель** (Model) selects the text model. Leave Model empty for the Codex or Claude Code default. These settings apply to jobs you create in the UI; they do not change your CLI commands.
+
+This choice controls text generation. Audio synthesis and PPTX rendering run locally afterward. brofessor uses the official CLI login for Codex/Claude and does not require an API key or switch to paid API billing.
 
 For Ollama, start the **server** with `OLLAMA_NO_CLOUD=1`. It must listen on `127.0.0.1:11434`, report cloud disabled through `/api/status`, and have the named model installed. Setting the variable only in the brofessor terminal is insufficient.
 
