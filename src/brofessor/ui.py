@@ -476,6 +476,7 @@ def results():
             progress = job["progress"]
             stage = {
                 "reading": "Reading sources",
+                "consolidating": "Consolidating reading notes",
                 "script": "Writing script",
                 "speech": "Generating speech",
                 "draft_ready": "Draft ready",
@@ -509,6 +510,41 @@ def results():
                     ensure_worker(workspace)
                     st.rerun()
             draft = workspace.draft(job["id"])
+            coverage = service.coverage(workspace, job["id"])
+            if coverage and coverage.get("units"):
+                st.caption(t("Reading coverage"))
+                st.caption(
+                    t(
+                        "Read {read} of {total} fragments · Excluded {excluded} · Cited {cited}",
+                        read=coverage["count"],
+                        total=len(coverage["units"]) - len(coverage["excluded"]),
+                        excluded=len(coverage["excluded"]),
+                        cited=coverage["cited_count"],
+                    )
+                )
+                st.caption(
+                    t("Reading coverage does not guarantee that every fact is in the result.")
+                )
+                st.dataframe(
+                    [
+                        {
+                            t("Reading status"): t(
+                                {"read": "Read", "pending": "Pending", "excluded": "Excluded"}[
+                                    unit["status"]
+                                ]
+                            ),
+                            t("Cited in result"): unit["cited"],
+                            t("Source"): unit["source"],
+                            t("Fragment"): unit["locator"],
+                            "ID": unit["id"],
+                            t("Exclusion reason"): t("No text extracted")
+                            if unit["reason"] == "empty"
+                            else unit["reason"],
+                        }
+                        for unit in coverage["units"]
+                    ],
+                    hide_index=True,
+                )
             if draft:
                 if job["kind"] == "ask":
                     st.write(draft["data"]["answer"])

@@ -37,6 +37,44 @@ def test_cli_import_is_visible_in_ui(tmp_path, monkeypatch):
     assert Workspace(path).sources()[0]["name"] == "chapter.md"
 
 
+def test_cli_and_both_ui_languages_show_shared_coverage(tmp_path, monkeypatch):
+    from brofessor import pipeline
+
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "chapter.md"
+    source.write_text("A reliable bridge carries 1200 kilograms.")
+    workspace.add_source(source)
+    partial = tmp_path / "partial.txt"
+    partial.write_text("\n" * 100 + "A second fact.")
+    workspace.add_source(partial)
+    citation = next(unit["id"] for unit in workspace.units() if unit["status"] == "ready")
+    monkeypatch.setattr(
+        "brofessor.executors.generate",
+        lambda *a, **k: {"answer": "1200 kilograms", "citations": [citation]},
+    )
+    job = service.submit(workspace, "ask", focus="Load?", start_worker=False)
+    pipeline.execute(workspace, job)
+    workspace.update_job(job["id"], status="succeeded")
+    result = CliRunner().invoke(app, ["-w", str(workspace.path), "job", "coverage", job["id"]])
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert report == service.coverage(workspace, job["id"])
+    assert report["count"] == 2
+    assert report["cited_count"] == len(report["excluded"]) == 1
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+    ).run()
+    assert not ui.exception
+    assert any("Прочитано 2 из 2" in caption.value for caption in ui.caption)
+    assert len(ui.dataframe) == 1
+    assert set(ui.dataframe[0].value["Статус чтения"]) == {"Прочитан", "Исключён"}
+    ui.selectbox(key="ui_language").select("en").run()
+    assert not ui.exception
+    assert any("Read 2 of 2" in caption.value for caption in ui.caption)
+    assert set(ui.dataframe[0].value["Reading status"]) == {"Read", "Excluded"}
+
+
 def test_cli_and_ui_submit_same_service(tmp_path, monkeypatch):
     path = tmp_path / "workspace"
     source = tmp_path / "chapter.md"

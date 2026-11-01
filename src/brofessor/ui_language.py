@@ -6,6 +6,18 @@ LANGUAGE_NAMES = {"ru": "Русский", "en": "English"}
 
 # English messages are the identifiers; the UI calls text() with the same wording.
 RUSSIAN = {
+    "Reading coverage": "Покрытие чтения",
+    "Consolidating reading notes": "Обобщение прочитанного",
+    "Read {read} of {total} fragments · Excluded {excluded} · Cited {cited}": "Прочитано {read} из {total} фрагментов · Исключено {excluded} · Цитируется {cited}",
+    "Reading coverage does not guarantee that every fact is in the result.": "Покрытие чтения не гарантирует, что все факты вошли в результат.",
+    "Source": "Источник",
+    "Fragment": "Фрагмент",
+    "Reading status": "Статус чтения",
+    "Cited in result": "Есть ссылка в результате",
+    "Exclusion reason": "Причина исключения",
+    "Read": "Прочитан",
+    "Pending": "Ожидает",
+    "Excluded": "Исключён",
     "Requires WAV voice samples and transcripts. Weights are for noncommercial use.": "Нужны WAV-образцы голосов с расшифровками. Веса — для некоммерческого использования.",
     "Requires WAV voice samples and transcripts. Automatic stress is not included; use + when needed.": "Нужны WAV-образцы голосов с расшифровками. Автоматических ударений нет; при необходимости используйте +.",
     "Apple Silicon, f5 extra": "Apple Silicon, установка f5",

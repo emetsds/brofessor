@@ -340,6 +340,12 @@ def cancel_job(ctx: typer.Context, job_id: str):
     show(ctx.obj.cancel(job_id))
 
 
+@job_app.command("coverage")
+def show_coverage(ctx: typer.Context, job_id: str):
+    """Show fragment reading status and citations in the saved result."""
+    show(service.coverage(ctx.obj, job_id))
+
+
 @job_app.command("resume")
 def resume_job(ctx: typer.Context, job_id: str):
     from .worker import ensure_worker

@@ -198,13 +198,18 @@ def test_real_pipeline_reuses_accepted_checkpoints_after_failure(workspace, tmp_
 
     def generate(prompt, schema, *args, **kwargs):
         nonlocal fail_once
-        if schema["title"] == "Notes":
-            unit = json.loads(prompt.split("\n", 1)[1])["source"]
-            calls.append(unit["id"])
-            if unit["id"] == units[1]["id"] and fail_once:
+        if schema["title"] == "ReadingBatch":
+            batch = json.loads(prompt.split("\n", 1)[1])["fragments"]
+            calls.append([unit["id"] for unit in batch])
+            if len(calls) == 2 and fail_once:
                 fail_once = False
                 raise RuntimeError("Temporary failure after the first accepted result")
-            return {"summary": "Synthetic lighthouse evidence.", "citations": [unit["id"]]}
+            return {
+                "notes": [
+                    {"summary": "Synthetic lighthouse evidence.", "citations": [unit["id"]]}
+                    for unit in batch
+                ]
+            }
         return {"answer": "The source describes a lighthouse.", "citations": [units[0]["id"]]}
 
     monkeypatch.setattr(executors, "generate", generate)
@@ -215,9 +220,9 @@ def test_real_pipeline_reuses_accepted_checkpoints_after_failure(workspace, tmp_
     workspace.resume(submitted["id"])
     worker.run(workspace, once=True)
     assert workspace.job(submitted["id"])["status"] == "succeeded"
-    assert calls.count(units[0]["id"]) == 1
-    assert calls.count(units[1]["id"]) == 2
-    assert set(calls) == {unit["id"] for unit in units}
+    assert len(calls) == 3
+    assert calls[1] == calls[2]
+    assert set(calls[0]) | set(calls[2]) == {unit["id"] for unit in units}
     coverage = json.loads((checkpoints.parent / "coverage.json").read_text())
     assert set(coverage["read"]) == {unit["id"] for unit in units}
 

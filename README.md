@@ -2,7 +2,7 @@
 
 Turn books and other source materials into answers with citations, two-voice podcasts, and editable PowerPoint presentations. Choose a text model, set the focus, review the draft, then generate the file. Work in a local web UI or use the same workspace from a terminal or coding agent.
 
-**Early working version.** Short Russian and English podcasts and PPTX generation work. Full-book quality, 20–60-minute episodes, and podcast series are still being developed and tested.
+**Early working version.** Short Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/experiments/whole-book.md). Broader content quality, 20–60-minute episodes, and podcast series are still being developed and tested.
 
 [Get started](#get-started) · [Web UI](#use-the-web-ui) · [CLI workflows](#use-the-cli) · [For agents](#for-agents) · [Troubleshooting](#troubleshooting)
 
@@ -141,6 +141,20 @@ uv run --no-sync brofessor draft show ASK_ID
 
 `ask` returns a job, not the answer text. `draft show` returns the answer in `data.answer`, with `data.citations` and `data.evidence_status`. Use `source list` and `source show SOURCE_ID` to read the source fragments behind those citations.
 
+### Check reading coverage
+
+Long sources are read in batches, with a checkpoint after each accepted batch. Every readable fragment is processed; the final answer, script, or slide outline uses condensed notes selected for your focus. Very large note sets are condensed again. This can lose detail: check important claims against the original source.
+
+In **Jobs and results**, open a job to see **Reading coverage**: read, pending, and excluded fragments, their original locations, and which fragments the saved draft cites. The CLI shows the same report:
+
+```sh
+uv run --no-sync brofessor job coverage JOB_ID
+```
+
+`count` is the number of read fragments; `excluded` lists fragments with no readable text. `units` includes each fragment's status, locator, and `cited` flag. Citation flags follow the latest saved draft; for a render job they follow the revision it rendered. A high reading count is not a factual accuracy score or a guarantee that every fact appears in the result. Resume an interrupted job with `job resume JOB_ID` to reuse accepted reading checkpoints.
+
+EPUB locators follow the file's reading order. Their `chapter N` labels are import positions and can differ from the chapter numbers printed in the book; the original fragment text remains the reference.
+
 ### Create a podcast
 
 On an Apple Silicon Mac, add local speech support before starting the UI or a render job:
@@ -208,6 +222,7 @@ Use the CLI above to operate brofessor. If changing the code, also read [AGENTS.
 
 - **Project:** use `project list` and `project use NAME`, or pass an explicit workspace, for example `uv run --no-sync brofessor -w /path/to/workspace job list`. Without `-w` or `BROFESSOR_WORKSPACE`, commands use the remembered project. Do not assume environment variables persist between tool calls.
 - **Source scope:** without `--source`, generation uses all sources in the workspace. Get IDs with `source list`; repeat `--source SOURCE_ID` to select a subset. `--language` defaults to `ru`.
+- **Coverage:** use `job coverage ID` to inspect reading progress and citations. `null` means no reading report exists yet. Read original fragments with `source show SOURCE_ID` before treating a citation as supporting a claim.
 - **Results:** data commands print JSON; errors may use stderr. Check both the exit status and returned fields. `doctor` can exit successfully with `available: false`.
 - **Jobs:** save the returned `id`. Without `--wait`, submission returns immediately; poll `job show ID`. `queued` and `running` are active; `succeeded`, `failed`, `cancelled`, and `interrupted` are terminal. Inspect `error` on failure. `--wait` exits nonzero unless the job succeeds. List jobs with `job list`; cancel the intended job with `job cancel ID`.
 - **Retries:** supply `--request-key KEY` on generation or rendering when a submission may be retried. Reuse the key only for the same operation and parameters. A new key creates a new job; a changed request with the old key is rejected. To continue a failed job, use `job resume` rather than resubmitting it.

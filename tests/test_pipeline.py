@@ -125,7 +125,7 @@ def test_chapter_summary_cannot_cite_unseen_chapter(workspace, tmp_path, monkeyp
     units = workspace.units([added["id"]])
     monkeypatch.setattr(
         "brofessor.executors.generate",
-        lambda *a, **k: {"summary": "A fact", "citations": [units[-1]["id"]]},
+        lambda *a, **k: {"notes": [{"summary": "A fact", "citations": [units[-1]["id"]]}]},
     )
     job = service.submit(workspace, "slides", source_ids=[added["id"]], start_worker=False)
     with pytest.raises(ValueError, match="Unknown source"):

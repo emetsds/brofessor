@@ -1,5 +1,6 @@
 """User operations shared by the CLI and Streamlit. No frontend imports."""
 
+import json
 from pathlib import Path
 
 from .executors import DEFAULT_OLLAMA_PORT, ollama_url
@@ -175,3 +176,53 @@ def artifact_path(workspace: Workspace, path: str) -> Path:
     if not resolved.is_relative_to(workspace.path):
         raise ValueError("Artifact is outside the workspace")
     return resolved
+
+
+def coverage(workspace: Workspace, job_id: str) -> dict | None:
+    """Reading progress and citations from the current saved draft, including edits."""
+    job = workspace.job(job_id)
+    if job["kind"] in ("render_slides", "render_podcast"):
+        job_id = job["params"]["draft_job_id"]
+        draft = workspace.draft(job_id, job["params"]["revision"])
+    else:
+        draft = workspace.draft(job_id)
+    path = workspace.path / "jobs" / job_id / "coverage.json"
+    if not path.exists():
+        return None
+    report = json.loads(path.read_text())
+    if "units" not in report:
+        source_job = workspace.job(job_id)
+        report["units"] = [
+            {
+                "id": unit["id"],
+                "source_id": unit["source_id"],
+                "locator": unit["locator"],
+                "status": "read"
+                if unit["id"] in report["read"]
+                else "excluded"
+                if unit["status"] != "ready"
+                else "pending",
+                "reason": "" if unit["status"] == "ready" else unit["status"],
+            }
+            for unit in workspace.units(source_job["params"]["source_ids"])
+        ]
+    cited = set()
+
+    def visit(node):
+        if isinstance(node, dict):
+            cited.update(node.get("citations", []))
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    if draft:
+        visit(draft["data"])
+    names = {source["id"]: source["name"] for source in workspace.sources()}
+    for unit in report.get("units", []):
+        unit["source"] = names.get(unit["source_id"], unit["source_id"])
+        unit["cited"] = unit["id"] in cited
+    report["cited_count"] = len(cited)
+    report["draft_revision"] = draft["revision"] if draft else None
+    return report

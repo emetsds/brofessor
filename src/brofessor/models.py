@@ -21,11 +21,6 @@ class Answer(Output):
         return self
 
 
-class Notes(Output):
-    summary: str = Field(min_length=1)
-    citations: list[str] = Field(min_length=1)
-
-
 class Turn(Output):
     speaker: Literal["host", "guest"]
     text: str = Field(min_length=1, max_length=1000)
