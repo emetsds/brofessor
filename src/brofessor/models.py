@@ -29,6 +29,18 @@ class Answer(Output):
         return self
 
 
+class Note(Output):
+    title: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=100000)
+    citations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def not_blank(self):
+        if not self.title.strip() or not self.text.strip():
+            raise ValueError("Note title and text must not be blank")
+        return self
+
+
 class Turn(Output):
     speaker: Literal["host", "guest"]
     text: str = Field(min_length=1, max_length=1000)

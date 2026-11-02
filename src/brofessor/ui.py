@@ -77,7 +77,10 @@ def open_project():
 
 # Keep unsaved draft buffers when their project's widgets are temporarily hidden.
 for state_key in list(st.session_state):
-    if state_key.startswith("editor:"):
+    if state_key.startswith("editor:") or (
+        state_key.startswith("note:")
+        and state_key.rsplit(":", 1)[-1] in ("title", "text", "citations", "revision", "history")
+    ):
         st.session_state[state_key] = st.session_state[state_key]
 
 
@@ -167,7 +170,7 @@ except Exception as error:
     st.error(t("Could not open the workspace: {error}", error=error))
     st.stop()
 
-tab_labels = [t("Sources"), t("Create"), t("Jobs and results")]
+tab_labels = [t("Sources"), t("Create"), t("Jobs and results"), t("Notes")]
 
 
 def remember_tab():
@@ -296,7 +299,7 @@ with st.sidebar:
     speech_controls()
 
 
-sources_tab, create_tab, results_tab = st.tabs(
+sources_tab, create_tab, results_tab, notes_tab = st.tabs(
     tab_labels,
     key="active_tab",
     on_change=remember_tab,
@@ -632,6 +635,28 @@ def results():
                             for term in draft["data"]["terms"]:
                                 st.write(f"{term['term']}: {term['meaning']}")
                 if job["kind"] == "ask":
+                    if job["params"].get("conversation"):
+                        context = service.question_context(workspace, job["id"])
+                        parent = job["params"]["conversation"][-1]
+                        st.caption(
+                            t(
+                                "Follow-up to {id} · Answer revision {revision}",
+                                id=parent["job_id"],
+                                revision=parent["revision"],
+                            )
+                        )
+                        with st.expander(t("Conversation context")):
+                            for turn in context["turns"]:
+                                st.caption(f"{turn['job_id']} · r{turn['revision']}")
+                                st.text(turn["question"])
+                                st.text(turn["answer"])
+                        if context["omitted"]:
+                            st.info(
+                                t(
+                                    "Earlier turns omitted from model context: {count}. They remain in job history.",
+                                    count=context["omitted"],
+                                )
+                            )
                     st.caption(t("Question"))
                     st.write(job["params"]["focus"])
                     st.write(draft["data"]["answer"])
@@ -696,6 +721,86 @@ def results():
                         st.rerun()
                     except (ValueError, TypeError) as error:
                         st.error(t("Could not save edits: {error}", error=error))
+                try:
+                    saved_draft = (
+                        json.loads(text) == draft["data"] and loaded_revision == draft["revision"]
+                    )
+                except ValueError:
+                    saved_draft = False
+                if job["kind"] == "ask":
+                    if not saved_draft:
+                        st.caption(
+                            t(
+                                "Save or load the latest answer before saving a note or asking a follow-up."
+                            )
+                        )
+                    ready_answer = saved_draft and job["status"] == "succeeded"
+                    if st.button(
+                        t("Save answer as note"),
+                        key=f"answer-note-{job['id']}",
+                        disabled=not ready_answer,
+                    ):
+                        try:
+                            note = service.note_from_answer(
+                                workspace, job["id"], revision=draft["revision"]
+                            )
+                            st.session_state[f"answer-note-saved:{job['id']}"] = note["id"]
+                            st.rerun()
+                        except ValueError as error:
+                            st.error(t("Could not save note: {error}", error=error))
+                    if st.session_state.get(f"answer-note-saved:{job['id']}"):
+                        st.success(
+                            t(
+                                "Note saved: {id}. Open Notes to edit it.",
+                                id=st.session_state[f"answer-note-saved:{job['id']}"],
+                            )
+                        )
+                    with st.expander(t("Ask a follow-up")):
+                        st.caption(
+                            t(
+                                "Uses this answer's sources and text provider: {provider}.",
+                                provider=job["params"]["provider"],
+                            )
+                        )
+                        follow_key = f"editor:{workspace.path}:{job['id']}:follow-up"
+                        follow_text = st.text_area(t("Follow-up question"), key=follow_key)
+                        follow_language = st.selectbox(
+                            t("Follow-up language"),
+                            list(ui_language.LANGUAGE_NAMES),
+                            index=list(ui_language.LANGUAGE_NAMES).index(job["params"]["language"]),
+                            format_func=ui_language.LANGUAGE_NAMES.__getitem__,
+                            key=follow_key + ":language",
+                        )
+                        if st.button(
+                            t("Submit follow-up"),
+                            key=f"follow-submit-{job['id']}",
+                            disabled=not ready_answer or not follow_text.strip(),
+                        ):
+                            try:
+                                fingerprint = hashlib.sha256(
+                                    json.dumps(
+                                        [job["id"], draft["revision"], follow_text, follow_language]
+                                    ).encode()
+                                ).hexdigest()
+                                child = service.follow_up(
+                                    workspace,
+                                    job["id"],
+                                    follow_text,
+                                    revision=draft["revision"],
+                                    language=follow_language,
+                                    request_key=f"follow-up:{fingerprint}",
+                                )
+                                st.session_state[follow_key + ":submitted"] = child["id"]
+                                st.rerun()
+                            except (OSError, ValueError) as error:
+                                st.error(t("Could not submit the job: {error}", error=error))
+                        if st.session_state.get(follow_key + ":submitted"):
+                            st.success(
+                                t(
+                                    "Job {id} submitted. Find the result in Jobs and results.",
+                                    id=st.session_state[follow_key + ":submitted"],
+                                )
+                            )
                 if job["kind"] == "podcast_series":
                     number = st.selectbox(
                         t("Episode"),
@@ -703,19 +808,12 @@ def results():
                         format_func=lambda n: f"{n}. {draft['data']['episodes'][n - 1]['title']}",
                         key=f"series-episode-{job['id']}",
                     )
-                    try:
-                        saved_plan = (
-                            json.loads(text) == draft["data"]
-                            and loaded_revision == draft["revision"]
-                        )
-                    except ValueError:
-                        saved_plan = False
-                    if not saved_plan:
+                    if not saved_draft:
                         st.caption(t("Save or load the latest plan before preparing an episode."))
                     if st.button(
                         t("Prepare episode"),
                         key=f"prepare-episode-{job['id']}",
-                        disabled=not saved_plan or job["status"] != "succeeded",
+                        disabled=not saved_draft or job["status"] != "succeeded",
                     ):
                         try:
                             service.series_episode(
@@ -809,3 +907,126 @@ def results():
 
 with results_tab:
     results()
+
+
+with notes_tab:
+    st.caption(
+        t("Notes are your editable commentary. They are not automatically used as source evidence.")
+    )
+    note_names = {
+        u["id"]: f"{s['name']} · {u['locator']}"
+        for s in workspace.sources()
+        for u in workspace.units([s["id"]])
+        if u["status"] == "ready"
+    }
+    new_key = f"note:{workspace.path}:new"
+
+    def create_note(prefix=new_key):
+        try:
+            note = service.save_note(
+                workspace,
+                {
+                    "title": st.session_state.get(prefix + ":title", ""),
+                    "text": st.session_state.get(prefix + ":text", ""),
+                    "citations": st.session_state.get(prefix + ":citations", []),
+                },
+            )
+            st.session_state[prefix + ":saved"] = note["id"]
+            st.session_state[prefix + ":title"] = ""
+            st.session_state[prefix + ":text"] = ""
+            st.session_state[prefix + ":citations"] = []
+            st.session_state.pop(prefix + ":error", None)
+        except (OSError, ValueError) as error:
+            st.session_state[prefix + ":error"] = str(error)
+
+    with st.expander(t("Create note")):
+        st.text_input(t("Note title"), key=new_key + ":title")
+        st.text_area(t("Note text"), key=new_key + ":text")
+        st.multiselect(
+            t("Source references"),
+            list(note_names),
+            format_func=note_names.__getitem__,
+            key=new_key + ":citations",
+        )
+        st.button(t("Create note"), key=new_key + ":create", on_click=create_note)
+        if st.session_state.get(new_key + ":error"):
+            st.error(t("Could not save note: {error}", error=st.session_state[new_key + ":error"]))
+        if st.session_state.get(new_key + ":saved"):
+            st.success(t("Note saved: {id}.", id=st.session_state[new_key + ":saved"]))
+    for note in workspace.notes():
+        with st.expander(note["data"]["title"]):
+            prefix = f"note:{workspace.path}:{note['id']}"
+
+            def reload_note(note_id=note["id"], key=prefix):
+                current = workspace.note(note_id)
+                st.session_state[key + ":revision"] = current["revision"]
+                for field in ("title", "text", "citations"):
+                    st.session_state[key + ":" + field] = current["data"][field]
+
+            if prefix + ":revision" not in st.session_state:
+                reload_note()
+            loaded = st.session_state[prefix + ":revision"]
+            st.caption(
+                t(
+                    "Editing revision: {loaded}. Latest: {latest}",
+                    loaded=loaded,
+                    latest=note["revision"],
+                )
+            )
+            st.caption(f"ID: {note['id']}")
+            if loaded != note["revision"]:
+                st.warning(
+                    t("A newer revision is available. Your unsaved edits are still in the editor.")
+                )
+            title = st.text_input(t("Note title"), key=prefix + ":title")
+            body = st.text_area(t("Note text"), height=220, key=prefix + ":text")
+            citations = st.multiselect(
+                t("Source references"),
+                list(note_names),
+                format_func=note_names.__getitem__,
+                key=prefix + ":citations",
+            )
+            st.button(t("Load latest revision"), key=prefix + ":reload", on_click=reload_note)
+            if st.button(t("Save note"), key=prefix + ":save"):
+                try:
+                    saved = service.save_note(
+                        workspace,
+                        {"title": title, "text": body, "citations": citations},
+                        note_id=note["id"],
+                        expected_revision=loaded,
+                    )
+                    st.session_state[prefix + ":revision"] = saved["revision"]
+                    st.rerun()
+                except (OSError, ValueError) as error:
+                    st.error(t("Could not save note: {error}", error=error))
+            with st.expander(t("Revision history")):
+                number = st.selectbox(
+                    t("Saved revision"),
+                    range(1, note["revision"] + 1),
+                    index=note["revision"] - 1,
+                    key=prefix + ":history",
+                )
+                previous = workspace.note(note["id"], number)
+                st.text(previous["data"]["title"])
+                st.text(previous["data"]["text"])
+            for item in service.note_evidence(workspace, note["id"]):
+                with st.expander(f"{item['source']} · {item['locator']} · {item['citation']}"):
+                    st.text(item["text"])
+            if note["origin"]:
+                origin = note["origin"]
+                with st.expander(
+                    t(
+                        "Saved answer: {id} · revision {revision}",
+                        id=origin["job_id"],
+                        revision=origin["revision"],
+                    )
+                ):
+                    parent = workspace.job(origin["job_id"])
+                    st.text(parent["params"]["focus"])
+                    st.text(workspace.draft(origin["job_id"], origin["revision"])["data"]["answer"])
+                    for item in service.answer_evidence(
+                        workspace, origin["job_id"], origin["revision"]
+                    ):
+                        st.caption(f"{item['source']} · {item['locator']}")
+                        for quote in item["quotes"]:
+                            st.text(quote)

@@ -361,7 +361,7 @@ def test_ui_language_is_remembered_across_sessions_and_workspaces(tmp_path, monk
     ui = AppTest.from_file(script, default_timeout=10).run()
     ui.selectbox(key="ui_language").select("en").run()
     assert not ui.exception
-    assert [tab.label for tab in ui.tabs] == ["Sources", "Create", "Jobs and results"]
+    assert [tab.label for tab in ui.tabs] == ["Sources", "Create", "Jobs and results", "Notes"]
     assert ui.selectbox(key="output_language").value == "ru"
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "second")])
     reopened = AppTest.from_file(script, default_timeout=10).run()

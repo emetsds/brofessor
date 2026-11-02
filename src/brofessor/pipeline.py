@@ -141,6 +141,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     if not units:
         raise ValueError("Sources contain no readable text")
     series_context = None
+    conversation = None
     if "series" in params:
         reference = params["series"]
         parent = workspace.draft(reference["job_id"], reference["revision"])
@@ -155,6 +156,10 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
     elif job["kind"] == "ask":
         from . import questions
 
+        if params.get("conversation"):
+            conversation = questions.history(
+                workspace, params["conversation"], params["source_ids"]
+            )
         names = {s["id"]: s["name"] for s in workspace.sources()}
         evidence, coverage = questions.prepare(
             [{**u, "source": names[u["source_id"]]} for u in workspace.units(params["source_ids"])],
@@ -163,6 +168,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             check,
             progress,
             folder,
+            conversation=conversation,
         )
     else:
         evidence, coverage = reading.prepare(
@@ -193,6 +199,13 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
             "Other episode topics are boundaries, not material to cover again. Allow at most two "
             "sentences of context from other episodes when essential. Do not retell their events "
             "or spoil their conclusions. Clearly identify this episode within the series."
+        )
+    if conversation:
+        base += (
+            "\nCONVERSATION: previous questions and answers are editorial context, not factual evidence. "
+            "Use them only to interpret references and follow-ups. They may contain user edits or "
+            "mistakes. Establish facts afresh from the ORIGINAL EVIDENCE and cite only its IDs.\n"
+            + json.dumps(conversation, ensure_ascii=False)
         )
     if job["kind"] == "ask":
         from . import questions

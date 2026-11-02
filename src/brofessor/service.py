@@ -94,6 +94,118 @@ def edit_draft(workspace: Workspace, job_id: str, data: dict, expected_revision:
     return saved
 
 
+def follow_up(
+    workspace,
+    job_id,
+    question,
+    *,
+    revision=None,
+    language=None,
+    request_key=None,
+    start_worker=True,
+):
+    from . import questions
+
+    if not question.strip():
+        raise ValueError("A question is required")
+    parent, draft = questions.saved_answer(workspace, job_id, revision)
+    params = {
+        key: value
+        for key, value in parent["params"].items()
+        if key not in ("conversation", "conversation_omitted")
+    }
+    params["focus"] = question
+    params["language"] = language if language is not None else params["language"]
+    if params["language"] not in ("ru", "en"):
+        raise ValueError("Choose ru or en")
+    references = [
+        *parent["params"].get("conversation", []),
+        {"job_id": job_id, "revision": draft["revision"]},
+    ]
+    omitted = parent["params"].get("conversation_omitted", 0)
+    while True:
+        try:
+            questions.history(workspace, references, params["source_ids"])
+            break
+        except questions.HistoryLimit:
+            if len(references) == 1:
+                raise
+            references.pop(0)
+            omitted += 1
+    params["conversation"] = references
+    if omitted:
+        params["conversation_omitted"] = omitted
+    result = workspace.submit("ask", params, request_key)
+    if start_worker:
+        from .worker import ensure_worker
+
+        ensure_worker(workspace)
+    return result
+
+
+def save_note(workspace, data, *, note_id=None, expected_revision=0):
+    from .models import Note
+
+    value = Note.model_validate(data).model_dump()
+    validate_citations(value, {u["id"] for u in workspace.units() if u["status"] == "ready"})
+    if note_id is None:
+        if expected_revision != 0:
+            raise ValueError("New notes start at revision 1")
+        return workspace.create_note(value)
+    return workspace.save_note(note_id, value, expected_revision)
+
+
+def note_from_answer(workspace, job_id, *, revision=None, title=None):
+    import hashlib
+    from .questions import saved_answer
+    from .models import Note
+
+    job, draft = saved_answer(workspace, job_id, revision)
+    origin = {"job_id": job_id, "revision": draft["revision"]}
+    note_id = hashlib.sha256(f"answer:{job_id}:r{draft['revision']}".encode()).hexdigest()[:16]
+    value = Note(
+        title=title if title is not None else job["params"]["focus"][:120],
+        text=draft["data"]["answer"],
+        citations=draft["data"]["citations"],
+    ).model_dump()
+    validate_citations(value, {u["id"] for u in workspace.units() if u["status"] == "ready"})
+    result = workspace.create_note(value, note_id=note_id, origin=origin)
+    if result["origin"] != origin:
+        raise ValueError("Note ID collision")
+    return result
+
+
+def note_evidence(workspace, note_id, revision=None):
+    note = workspace.note(note_id, revision)
+    if note is None:
+        raise ValueError("The requested note revision does not exist")
+    names = {s["id"]: s["name"] for s in workspace.sources()}
+    units = {u["id"]: u for u in workspace.units()}
+    return [
+        {
+            "citation": key,
+            "source": names[units[key]["source_id"]],
+            "locator": units[key]["locator"],
+            "text": units[key]["text"],
+        }
+        for key in note["data"]["citations"]
+    ]
+
+
+def question_context(workspace, job_id):
+    from .questions import history
+
+    job = workspace.job(job_id)
+    if job["kind"] != "ask":
+        raise ValueError("Choose a question job")
+    return {
+        "turns": history(
+            workspace, job["params"].get("conversation", []), job["params"]["source_ids"]
+        ),
+        "omitted": job["params"].get("conversation_omitted", 0),
+    }
+
+
 def series_episode(workspace, series_job_id, number, *, revision=None, start_worker=True):
     """Pin one saved plan revision; repeated requests reuse the same episode job."""
     from .series import Series, episode_context

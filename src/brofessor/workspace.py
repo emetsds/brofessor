@@ -30,9 +30,9 @@ class Workspace:
         self.path.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
+            if version not in (0, 1, 2):
                 raise ValueError(f"Unsupported workspace schema {version}")
-            if version == 1:
+            if version == 2:
                 return
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS sources (
@@ -55,7 +55,10 @@ class Workspace:
                     job_id TEXT NOT NULL REFERENCES jobs(id), path TEXT NOT NULL,
                     kind TEXT NOT NULL, metadata TEXT NOT NULL,
                     PRIMARY KEY(job_id,path));
-                PRAGMA user_version=1;
+                CREATE TABLE IF NOT EXISTS notes (
+                    id TEXT NOT NULL, revision INTEGER NOT NULL, data TEXT NOT NULL,
+                    origin TEXT, created REAL NOT NULL, PRIMARY KEY(id,revision));
+                PRAGMA user_version=2;
             """)
 
     @contextmanager
@@ -277,6 +280,76 @@ class Workspace:
                 "INSERT OR REPLACE INTO artifacts VALUES (?,?,?,?)",
                 (job_id, str(relative), kind, json.dumps(metadata, ensure_ascii=False)),
             )
+
+    @staticmethod
+    def _note(row):
+        return (
+            None
+            if row is None
+            else {
+                **dict(row),
+                "data": json.loads(row["data"]),
+                "origin": json.loads(row["origin"]) if row["origin"] else None,
+            }
+        )
+
+    def note(self, note_id: str, revision: int | None = None):
+        with self.connect() as db:
+            if revision is None:
+                row = db.execute(
+                    "SELECT * FROM notes WHERE id=? ORDER BY revision DESC LIMIT 1", (note_id,)
+                ).fetchone()
+            else:
+                row = db.execute(
+                    "SELECT * FROM notes WHERE id=? AND revision=?", (note_id, revision)
+                ).fetchone()
+        return self._note(row)
+
+    def notes(self):
+        with self.connect() as db:
+            return [
+                self._note(row)
+                for row in db.execute(
+                    "SELECT * FROM notes WHERE (id,revision) IN (SELECT id,MAX(revision) FROM notes GROUP BY id) ORDER BY created DESC,id"
+                )
+            ]
+
+    def create_note(self, data, *, note_id=None, origin=None):
+        """A supplied ID creates once; retries return the latest saved revision."""
+        note_id = note_id or uuid.uuid4().hex[:16]
+        with self.connect() as db:
+            db.execute(
+                "INSERT OR IGNORE INTO notes VALUES (?,1,?,?,?)",
+                (
+                    note_id,
+                    json.dumps(data, ensure_ascii=False),
+                    json.dumps(origin) if origin else None,
+                    time.time(),
+                ),
+            )
+        return self.note(note_id)
+
+    def save_note(self, note_id, data, expected_revision):
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            previous = db.execute(
+                "SELECT * FROM notes WHERE id=? ORDER BY revision DESC LIMIT 1", (note_id,)
+            ).fetchone()
+            if previous is None:
+                raise ValueError("Note does not exist")
+            if previous["revision"] != expected_revision:
+                raise ValueError("Note changed. Reload it before saving your edits.")
+            db.execute(
+                "INSERT INTO notes VALUES (?,?,?,?,?)",
+                (
+                    note_id,
+                    expected_revision + 1,
+                    json.dumps(data, ensure_ascii=False),
+                    previous["origin"],
+                    time.time(),
+                ),
+            )
+        return self.note(note_id, expected_revision + 1)
 
     def artifacts(self, job_id: str) -> list[dict]:
         with self.connect() as db:

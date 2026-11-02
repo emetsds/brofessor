@@ -22,6 +22,9 @@ app = typer.Typer(no_args_is_help=True, help="brofessor: sources, podcasts and p
 source_app = typer.Typer(no_args_is_help=True)
 job_app = typer.Typer(no_args_is_help=True)
 draft_app = typer.Typer(no_args_is_help=True)
+note_app = typer.Typer(
+    no_args_is_help=True, help="Create and edit project notes without a model call."
+)
 project_app = typer.Typer(no_args_is_help=True, help="Create, open and select local projects.")
 tts_app = typer.Typer(no_args_is_help=True, help="List, download and select local speech models.")
 series_app = typer.Typer(
@@ -34,6 +37,7 @@ tts_app.add_typer(voice_app, name="voice")
 app.add_typer(source_app, name="source")
 app.add_typer(job_app, name="job")
 app.add_typer(draft_app, name="draft")
+app.add_typer(note_app, name="note")
 app.add_typer(project_app, name="project")
 app.add_typer(tts_app, name="tts")
 app.add_typer(series_app, name="series")
@@ -248,18 +252,49 @@ def ask(
     provider: str = "codex",
     model: str | None = None,
     ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
-    language: str = "ru",
+    language: str | None = None,
     source: list[str] = typer.Option(None),
     wait: bool = False,
     request_key: str | None = None,
+    reply_to: str | None = typer.Option(
+        None, help="Continue a saved answer; inherits its sources and provider."
+    ),
+    revision: int | None = typer.Option(None, help="Saved parent-answer revision for --reply-to."),
 ):
     """Ask a grounded question over the selected sources."""
+    if reply_to is not None:
+        if any(
+            getattr(ctx.get_parameter_source(name), "name", None) == "COMMANDLINE"
+            for name in ("source", "provider", "model", "ollama_port")
+        ):
+            raise typer.BadParameter(
+                "Follow-ups inherit sources, provider, model and Ollama port; omit those flags."
+            )
+        try:
+            job = service.follow_up(
+                ctx.obj,
+                reply_to,
+                question,
+                revision=revision,
+                language=language,
+                request_key=request_key,
+            )
+        except ValueError as error:
+            raise typer.BadParameter(str(error)) from error
+        if wait:
+            job = wait_for_job(ctx.obj, job["id"])
+        show(job)
+        if wait and job["status"] != "succeeded":
+            raise typer.Exit(1)
+        return
+    if revision is not None:
+        raise typer.BadParameter("--revision requires --reply-to")
     submit_and_show(
         ctx.obj,
         "ask",
         source,
         question,
-        language,
+        language or "ru",
         provider,
         model,
         20,
@@ -268,6 +303,54 @@ def ask(
         request_key,
         ollama_port=ollama_port,
     )
+
+
+@note_app.command("create")
+def create_note(
+    ctx: typer.Context, title: str, path: Path, citation: list[str] = typer.Option(None)
+):
+    """Create a note from a UTF-8 text/Markdown file."""
+    show(
+        service.save_note(
+            ctx.obj,
+            {"title": title, "text": path.read_text(encoding="utf-8"), "citations": citation or []},
+        )
+    )
+
+
+@note_app.command("list")
+def list_notes(ctx: typer.Context):
+    show(ctx.obj.notes())
+
+
+@note_app.command("show")
+def show_note(ctx: typer.Context, note_id: str, revision: int | None = None):
+    note = ctx.obj.note(note_id, revision)
+    if note is None:
+        raise typer.BadParameter("The requested note revision does not exist")
+    note["evidence"] = service.note_evidence(ctx.obj, note_id, note["revision"])
+    show(note)
+
+
+@note_app.command("save")
+def save_note(ctx: typer.Context, note_id: str, path: Path, expected_revision: int):
+    """Save only the edited data object as JSON, preserving note origin and history."""
+    show(
+        service.save_note(
+            ctx.obj,
+            json.loads(path.read_text(encoding="utf-8")),
+            note_id=note_id,
+            expected_revision=expected_revision,
+        )
+    )
+
+
+@note_app.command("from-answer")
+def note_from_answer(
+    ctx: typer.Context, job_id: str, revision: int | None = None, title: str | None = None
+):
+    """Save an answer revision once; repeating this preserves your note edits."""
+    show(service.note_from_answer(ctx.obj, job_id, revision=revision, title=title))
 
 
 @app.command()
@@ -414,6 +497,8 @@ def show_draft(ctx: typer.Context, job_id: str):
     draft = ctx.obj.draft(job_id)
     if draft and ctx.obj.job(job_id)["kind"] == "ask":
         draft["evidence"] = service.answer_evidence(ctx.obj, job_id, draft["revision"])
+        if ctx.obj.job(job_id)["params"].get("conversation"):
+            draft["conversation"] = service.question_context(ctx.obj, job_id)
     show(draft)
 
 
