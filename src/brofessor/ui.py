@@ -79,7 +79,7 @@ def open_project():
 for state_key in list(st.session_state):
     if state_key.startswith("editor:") or (
         state_key.startswith("note:")
-        and state_key.rsplit(":", 1)[-1] in ("title", "text", "citations", "revision", "history")
+        and state_key.rsplit(":", 1)[-1] in ("title", "text", "citations", "revision")
     ):
         st.session_state[state_key] = st.session_state[state_key]
 
@@ -767,7 +767,9 @@ def results():
                         follow_language = st.selectbox(
                             t("Follow-up language"),
                             list(ui_language.LANGUAGE_NAMES),
-                            index=list(ui_language.LANGUAGE_NAMES).index(job["params"]["language"]),
+                            index=list(ui_language.LANGUAGE_NAMES).index(job["params"]["language"])
+                            if follow_key + ":language" not in st.session_state
+                            else None,
                             format_func=ui_language.LANGUAGE_NAMES.__getitem__,
                             key=follow_key + ":language",
                         )

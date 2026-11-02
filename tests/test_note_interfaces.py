@@ -57,7 +57,7 @@ def make_answer(tmp_path):
     return w, job
 
 
-def test_cli_note_ui_edit_conflict_reload_and_revision_history(tmp_path, monkeypatch):
+def test_cli_note_ui_edit_conflict_reload_and_revision_history(tmp_path, monkeypatch, caplog):
     w = Workspace(tmp_path / "workspace")
     path = tmp_path / "note.md"
     path.write_text("Первая мысль.\nВторая строка.")
@@ -71,6 +71,7 @@ def test_cli_note_ui_edit_conflict_reload_and_revision_history(tmp_path, monkeyp
     ui.text_area(key=key + ":text").set_value("Unsaved UI wording.").run()
     ui.selectbox(key="ui_language").select("en").run()
     assert not ui.exception and ui.text_area(key=key + ":text").value == "Unsaved UI wording."
+    assert "was created with a default value" not in caplog.text
     data = {**note["data"], "text": "Saved from CLI."}
     path.write_text(json.dumps(data))
     saved = runner.invoke(app, ["-w", str(w.path), "note", "save", note["id"], str(path), "1"])
