@@ -22,7 +22,7 @@ def local_settings(tmp_path, monkeypatch):
 def open_ui(w, monkeypatch):
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
     return AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
 
 

@@ -4,6 +4,7 @@ import json
 import pytest
 
 from brofessor import pipeline, service, worker
+from brofessor.models import validate_citations
 from brofessor.workspace import Workspace
 
 
@@ -295,3 +296,11 @@ def test_unknown_job_kind_fails_before_generation(workspace, monkeypatch, kind):
     assert "Unsupported job kind" in result["error"]
     assert workspace.draft(job["id"]) is None
     assert not workspace.artifacts(job["id"])
+
+
+def test_invalid_citation_error_does_not_copy_model_text():
+    private_text = '{citation: wrong, text: "private-source-text"}'
+    with pytest.raises(ValueError, match="Unknown source citations: 1 invalid ID") as error:
+        validate_citations({"citations": [private_text]}, {"source:1"})
+    assert private_text not in str(error.value)
+    assert "private-source-text" not in str(error.value)

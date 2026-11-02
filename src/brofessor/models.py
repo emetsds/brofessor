@@ -100,7 +100,10 @@ def validate_citations(value: dict, allowed: set[str]) -> None:
                 if key == "citations":
                     unknown = set(child) - allowed
                     if unknown:
-                        raise ValueError(f"Unknown source citations: {sorted(unknown)}")
+                        raise ValueError(
+                            f"Unknown source citations: {len(unknown)} invalid ID(s); "
+                            "use original fragment IDs"
+                        )
                 else:
                     visit(child)
         elif isinstance(node, list):

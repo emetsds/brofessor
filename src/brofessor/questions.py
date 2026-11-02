@@ -220,9 +220,14 @@ def write(base, evidence, generate, units, language):
         "contradiction present both positions, citing and quoting both; do not silently choose a "
         "winner. An explicitly superseded version is a historical change, not an unresolved "
         "conflict. If evidence is insufficient, state what cannot be established; do not use "
-        "outside knowledge. Attach quotes as {citation: original ID, text: exact original text}. "
+        "outside knowledge. The citations field is a list of bare original fragment ID strings. "
+        "Do not put quote objects or their string representations in citations. "
+        "The separate quotes field is a list of objects with citation (one original ID) and "
+        "text (the exact original text). "
         "Every cited ID needs a quote. Copy short CONTIGUOUS substrings character for character, "
         "including whitespace and punctuation; never translate or paraphrase within quotes. "
+        "Use separate quote objects for non-adjacent passages; never join sentences with "
+        "intervening text omitted. Prefer one short sentence per quote. "
         "Keep negations, units and qualifications needed to support the answer. Quotes may remain "
         "in the source language while the answer uses the requested language.",
         Answer,

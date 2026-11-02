@@ -166,7 +166,9 @@ def test_subprocess_timeout_and_cancel_terminate_group(tmp_path, cancel):
     assert time.monotonic() - started < 3
 
 
-def ollama_transport(monkeypatch, *, cloud_disabled=True, remote=False, chunks=None, status=200):
+def ollama_transport(
+    monkeypatch, *, cloud_disabled=True, remote=False, chunks=None, status=200, thinking=None
+):
     requests = []
 
     def handler(request):
@@ -184,6 +186,7 @@ def ollama_transport(monkeypatch, *, cloud_disabled=True, remote=False, chunks=N
                 json={
                     "remote_host": "https://example.com" if remote else "",
                     "details": {"format": "gguf"},
+                    **({"thinking": thinking} if thinking is not None else {}),
                 },
             )
         if request.url.path == "/api/chat":
@@ -220,6 +223,28 @@ def test_ollama_checks_server_and_weights_before_sending_source(
     assert body["format"] == SCHEMA
     assert body["stream"] is True
     assert "tools" not in body
+
+
+@pytest.mark.parametrize(
+    "thinking,disabled",
+    [
+        ({"values": [False, "medium"], "default": "medium"}, True),
+        ({"values": [False]}, True),
+        ({"values": ["low", "high"], "default": "high"}, False),
+        ({"values": [0]}, False),
+        (None, False),
+    ],
+)
+def test_ollama_disables_thinking_only_when_model_advertises_support(
+    tmp_path, monkeypatch, thinking, disabled
+):
+    requests = ollama_transport(monkeypatch, thinking=thinking)
+    ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path)
+    body = json.loads(requests[-1].content)
+    if disabled:
+        assert body["think"] is False
+    else:
+        assert "think" not in body
 
 
 @pytest.mark.parametrize("options,port", [({}, 11434), ({"ollama_port": 11435}, 11435)])

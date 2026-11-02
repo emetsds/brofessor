@@ -464,14 +464,21 @@ async def _ollama_preflight(client: httpx.AsyncClient, model: str | None) -> dic
     details = await _get_object(client, "POST", "/api/show", json={"model": model})
     if _remote(details):
         raise RuntimeError("Ollama selected model points to a remote model")
-    return {"local_only_verified": True, "model": name, "digest": entry.get("digest")}
+    result = {"local_only_verified": True, "model": name, "digest": entry.get("digest")}
+    thinking = details.get("thinking")
+    values = thinking.get("values") if isinstance(thinking, dict) else None
+    if isinstance(values, list) and any(value is False for value in values):
+        # Bounded transformations need the final JSON. Only disable reasoning when
+        # this exact model advertises support; other models keep their default.
+        result["think"] = False
+    return result
 
 
 async def _ollama_request(prompt: str, schema: dict, model: str | None, url: str) -> dict:
     async with httpx.AsyncClient(
         base_url=url, timeout=30, trust_env=False, follow_redirects=False
     ) as client:
-        await _ollama_preflight(client, model)
+        profile = await _ollama_preflight(client, model)
         content, total, done = [], 0, False
         async with client.stream(
             "POST",
@@ -484,6 +491,7 @@ async def _ollama_request(prompt: str, schema: dict, model: str | None, url: str
                 ],
                 "format": schema,
                 "stream": True,
+                **({"think": profile["think"]} if "think" in profile else {}),
             },
             timeout=None,
         ) as response:

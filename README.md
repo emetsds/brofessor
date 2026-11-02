@@ -47,7 +47,9 @@ Check the chosen provider before generating anything:
 uv run --no-sync brofessor doctor --provider codex
 ```
 
-Look for `"available": true`. If false, follow `diagnostic`. This checks connection and setup without generating content. Real generation has been verified with Codex; Claude Code and Ollama have automated adapter tests, but real generation still needs verification. See [integration results](docs/experiments/first-slice.md#интеграции).
+Look for `"available": true`. If false, follow `diagnostic`. This checks connection and setup without generating content. Real workflows have been checked with Codex CLI 0.162.1, Claude Code 2.1.185, and Ollama 0.40.6 with a local 27B model on this Mac. Generated drafts still needed editorial corrections; smaller local models had substantial failures. See [acceptance results and limits](docs/experiments/v1-acceptance.md).
+
+For Ollama models that explicitly advertise support for `think: false`, brofessor disables thinking to keep these text transformations bounded. Other models keep their default. `doctor` reports the selected `think` value when applicable. The server also needs enough context for the request: the local acceptance profile used `OLLAMA_CONTEXT_LENGTH=32768` on a 32 GB Mac. This short-source check does not establish whole-book quality or memory requirements for every local model. See [Ollama context settings](https://docs.ollama.com/faq#how-can-i-specify-the-context-window-size).
 
 ## Use the web UI
 
@@ -344,7 +346,7 @@ Files are limited to 100 MiB each. Source search and individual questions have b
 
 Workspace schema is now 2. Existing schemas 0/1 upgrade automatically when opened; earlier app versions understand only schema 1. Sources, jobs, answer revisions, and artifacts are retained.
 
-Measured results: [first workflow and providers](docs/experiments/first-slice.md), [local speech](docs/experiments/media.md), [PPTX layouts](docs/experiments/pptx-quality.md), [source questions](docs/experiments/source-questions.md), [notes and follow-ups](docs/experiments/notes-and-followups.md).
+Measured results: [current acceptance and providers](docs/experiments/v1-acceptance.md), [first workflow](docs/experiments/first-slice.md), [local speech](docs/experiments/media.md), [PPTX layouts](docs/experiments/pptx-quality.md), [source questions](docs/experiments/source-questions.md), [notes and follow-ups](docs/experiments/notes-and-followups.md).
 
 ## Development
 
@@ -358,4 +360,4 @@ uv run --no-sync ruff format --check .
 
 Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. For project work, read [AGENTS.md](AGENTS.md). The [implementation plan](docs/implementation-plan.md), [requirements](docs/requirements.md), [architecture](docs/architecture.md), and [technical research](docs/research.md) are in Russian.
 
-Keep personal materials, generated files, credentials, and model weights out of Git. A distribution license has not yet been selected.
+Keep personal materials, generated files, credentials, and model weights out of Git. brofessor's source code is [MIT licensed](LICENSE). Dependencies, model weights, and your source materials retain their own licenses; the application license does not replace them.

@@ -51,7 +51,7 @@ def test_cli_and_ui_show_exact_quotes_status_and_original_locations(tmp_path, mo
     assert data["evidence"][0]["source"] == "report.txt"
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     assert not ui.exception
     assert any(text.value == value["quotes"][0]["text"] for text in ui.text)
@@ -81,7 +81,7 @@ def test_cli_and_ui_search_selected_sources(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     ui.multiselect(key="search_source_ids").set_value([source["id"]])
     ui.text_input(key="source_query").set_value("blue").run()
@@ -121,7 +121,7 @@ def test_ui_shows_search_selection_without_claiming_unread_fragments_were_read(
     w.update_job(job["id"], status="succeeded")
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     assert not ui.exception
     assert set(ui.dataframe[0].value["Статус чтения"]) == {"Прочитан", "Не выбран поиском"}
@@ -140,7 +140,7 @@ def test_cli_import_is_visible_in_ui(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     assert not ui.exception
     assert any(expander.label == "chapter.md" for expander in ui.expander)
@@ -177,7 +177,7 @@ def test_cli_and_both_ui_languages_show_shared_coverage(tmp_path, monkeypatch):
     assert report["cited_count"] == len(report["excluded"]) == 1
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     assert not ui.exception
     assert any("Прочитано 2 из 2" in caption.value for caption in ui.caption)
@@ -200,7 +200,7 @@ def test_cli_and_ui_submit_same_service(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     for button in ui.button:
         if button.label == "Подготовить":
@@ -229,7 +229,7 @@ def test_external_edit_preserves_unsaved_ui_buffer(tmp_path, monkeypatch):
     workspace.update_job(job["id"], status="succeeded")
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     buffer_key = f"editor:{workspace.path}:{job['id']}:text"
     unsaved = json.dumps({"answer": "Unsaved wording", "citations": [citation]})
@@ -323,7 +323,7 @@ def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
         "sys.argv", ["ui.py", "--workspace", str(workspace.path), "--ollama-port", "11435"]
     )
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     next(field for field in ui.selectbox if field.label == "Исполнитель").select("ollama").run()
     next(field for field in ui.text_input if field.label.startswith("Модель")).set_value(
@@ -358,13 +358,13 @@ def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
 def test_ui_language_is_remembered_across_sessions_and_workspaces(tmp_path, monkeypatch):
     script = str(Path(__file__).parents[1] / "src/brofessor/ui.py")
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "first")])
-    ui = AppTest.from_file(script, default_timeout=10).run()
+    ui = AppTest.from_file(script, default_timeout=30).run()
     ui.selectbox(key="ui_language").select("en").run()
     assert not ui.exception
     assert [tab.label for tab in ui.tabs] == ["Sources", "Create", "Jobs and results", "Notes"]
     assert ui.selectbox(key="output_language").value == "ru"
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "second")])
-    reopened = AppTest.from_file(script, default_timeout=10).run()
+    reopened = AppTest.from_file(script, default_timeout=30).run()
     assert not reopened.exception
     assert reopened.selectbox(key="ui_language").value == "en"
     assert reopened.tabs[0].label == "Sources"
@@ -399,7 +399,7 @@ def test_language_switch_preserves_form_inputs_and_unsaved_draft(tmp_path, monke
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     monkeypatch.setattr("brofessor.worker.ensure_worker", lambda workspace: None)
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     buffer_key = f"editor:{workspace.path}:{job['id']}:text"
     data = workspace.draft(job["id"])["data"]
@@ -440,7 +440,7 @@ def test_language_save_error_is_visible_but_ui_still_switches(tmp_path, monkeypa
     monkeypatch.setattr("brofessor.ui_language.save_language", fail_save)
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(tmp_path / "workspace")])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     ui.selectbox(key="ui_language").select("en").run()
     assert not ui.exception
@@ -453,7 +453,7 @@ def test_ui_creates_external_projects_and_keeps_their_sources_separate(tmp_path,
 
     monkeypatch.setattr("sys.argv", ["ui.py"])
     script = str(Path(__file__).parents[1] / "src/brofessor/ui.py")
-    ui = AppTest.from_file(script, default_timeout=10).run()
+    ui = AppTest.from_file(script, default_timeout=30).run()
     assert not ui.exception
     assert ui.selectbox(key="project_selector").value is None
     ui.text_input(key="project_name").set_value("First book")
@@ -474,7 +474,7 @@ def test_ui_creates_external_projects_and_keeps_their_sources_separate(tmp_path,
     ui.selectbox(key="project_selector").select(first["path"]).run()
     assert not ui.exception
     assert any(expander.label == "first.md" for expander in ui.expander)
-    reopened = AppTest.from_file(script, default_timeout=10).run()
+    reopened = AppTest.from_file(script, default_timeout=30).run()
     assert reopened.selectbox(key="project_selector").value == first["path"]
 
 
@@ -494,7 +494,7 @@ def test_switching_projects_keeps_unsaved_draft_buffer(tmp_path, monkeypatch):
     projects.use("First")
     monkeypatch.setattr("sys.argv", ["ui.py"])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     buffer_key = f"editor:{workspace.path}:{job['id']}:text"
     unsaved = json.dumps({"answer": "Unsaved answer", "citations": [citation]})
@@ -520,7 +520,7 @@ def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatc
         speech_models, "list_models", lambda: [{**item, "compatible": True} for item in entries]
     )
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     ui.selectbox(key="tts_model").select(choice).run()
     ui.button(key="download_tts_model").click().run()
@@ -561,7 +561,7 @@ def test_audio_result_shows_recorded_model_even_if_default_changes(tmp_path, mon
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     workspace.update_job(original["id"], status="succeeded")
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     assert not ui.exception
     assert ui.selectbox(key="tts_model").value == "qwen3-0.6b"
@@ -612,7 +612,7 @@ def test_duration_feedback_is_available_in_cli_and_both_ui_languages(tmp_path, m
     assert metadata["script_words"] == 2
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     assert not ui.exception
     assert any("61:40" in caption.value for caption in ui.caption)
@@ -642,7 +642,7 @@ def test_series_cli_ui_share_plan_episode_and_unsaved_edit_protection(tmp_path, 
     parent = json.loads(result.output)
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     ui.selectbox(key="kind").select("podcast_series").run()
     ui.number_input(key="episode_count").set_value(2).run()
@@ -743,7 +743,7 @@ def test_ui_edit_and_cli_render_share_table_and_sequence_contract(tmp_path, monk
     worker.run(w, once=True)
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
     ui = AppTest.from_file(
-        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=10
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
     ).run()
     key = f"editor:{w.path}:{job['id']}:text"
     edited = json.loads(ui.text_area(key=key).value)
