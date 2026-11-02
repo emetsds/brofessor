@@ -196,14 +196,8 @@ def test_search_source_scope_is_shared_and_does_not_guess_on_no_match(tmp_path):
         service.search(w, "blue", source_ids=["unknown"])
 
 
-def test_control_corpus_has_twenty_cases_and_exact_gold_quotes():
+def test_control_corpus_gold_quotes_resolve_to_original_documents():
     corpus = json.loads((Path(__file__).parent / "fixtures/questions.json").read_text())
-    assert len(corpus["cases"]) == 20
-    assert {case["status"] for case in corpus["cases"]} == {
-        "supported",
-        "insufficient_evidence",
-        "conflicting_evidence",
-    }
     for case in corpus["cases"]:
         for name, quote in case["gold"]:
             assert quote in corpus["documents"][name]

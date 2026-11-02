@@ -1,5 +1,6 @@
 """User operations shared by the CLI and Streamlit. No frontend imports."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -232,6 +233,17 @@ def series_episode(workspace, series_job_id, number, *, revision=None, start_wor
     return result
 
 
+def _render_key(params):
+    identity = dict(params)
+    if "model_spec" in params:
+        identity["model_spec"] = {
+            key: value
+            for key, value in params["model_spec"].items()
+            if key not in ("name", "notes", "requirements", "license")
+        }
+    return "render:" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
 def render(
     workspace: Workspace, draft_job_id: str, *, model=None, request_key=None, start_worker=True
 ) -> dict:
@@ -239,10 +251,14 @@ def render(
     draft = workspace.draft(draft_job_id)
     if original["kind"] not in ("podcast", "slides") or draft is None:
         raise ValueError("Generate a podcast or slides draft first")
+    spec = None
     if original["kind"] == "podcast":
-        from .speech_models import get, reference
+        from .speech_models import get, reference, selected as selected_model
 
-        model = reference(model)
+        spec = get(model or selected_model())
+        model = reference(spec)
+    else:
+        model = None
     kind = "render_" + original["kind"]
     params = {
         "draft_job_id": draft_job_id,
@@ -250,17 +266,18 @@ def render(
         "model": model,
         "minutes": original["params"]["minutes"],
     }
-    previous = workspace.job_by_request_key(request_key) if request_key else None
-    if (
-        previous
-        and previous["kind"] == kind
-        and {key: value for key, value in previous["params"].items() if key != "model_spec"}
-        == params
-    ):
-        # The first submit owns its snapshot, including legacy jobs without one.
+    explicit_key = request_key is not None
+    previous = workspace.job_by_request_key(request_key) if explicit_key else None
+    if previous is not None:
+        if (
+            previous["kind"] != kind
+            or {key: value for key, value in previous["params"].items() if key != "model_spec"}
+            != params
+        ):
+            raise ValueError("Request key already belongs to a different operation")
+        # Explicit retries keep the first snapshot, even if preferences changed.
         params = previous["params"]
-    elif original["kind"] == "podcast":
-        spec = get(model)
+    elif spec is not None:
         if draft["data"]["language"] not in spec["languages"]:
             raise ValueError(f"Selected speech model does not support {draft['data']['language']}")
         from .speech import validate_text
@@ -268,47 +285,36 @@ def render(
         for turn in draft["data"]["turns"]:
             validate_text(spec, turn["text"])
         if spec.get("requires_reference"):
-            from .speech_references import freeze, selected
+            from .speech_references import freeze, selected as selected_references
 
-            spec["references"] = freeze(workspace.path, selected(draft["data"]["language"]))
+            spec["references"] = freeze(
+                workspace.path, selected_references(draft["data"]["language"])
+            )
         params["model_spec"] = spec
-    result = workspace.submit(kind, params, request_key)
+    if not explicit_key:
+        # Derive identity from the same frozen inputs that execution will use.
+        request_key = _render_key(params)
+    try:
+        result = workspace.submit(kind, params, request_key)
+    except ValueError:
+        # Another client may have submitted between lookup/freeze and enqueue.
+        previous = workspace.job_by_request_key(request_key)
+        if previous is None or previous["kind"] != kind:
+            raise
+        if explicit_key:
+            matches = {k: v for k, v in previous["params"].items() if k != "model_spec"} == {
+                k: v for k, v in params.items() if k != "model_spec"
+            }
+        else:
+            matches = _render_key(previous["params"]) == request_key
+        if not matches:
+            raise
+        result = previous
     if start_worker:
         from .worker import ensure_worker
 
         ensure_worker(workspace)
     return result
-
-
-def render_request_key(workspace: Workspace, draft_job_id: str, model: str) -> str:
-    """Stable UI audio request identity, retaining matching pre-snapshot jobs."""
-    from .speech_models import reference
-
-    draft = workspace.draft(draft_job_id)
-    base = f"render:{draft_job_id}:{draft['revision']}"
-    resolved = reference(model)
-    from .speech_models import get
-
-    spec = get(model)
-    if spec.get("requires_reference"):
-        import hashlib
-        import json
-        from .speech_references import selected
-
-        refs = {
-            role: {key: value for key, value in item.items() if key in ("sha256", "text")}
-            for role, item in selected(draft["data"]["language"]).items()
-        }
-        resolved += ":" + hashlib.sha256(json.dumps(refs, sort_keys=True).encode()).hexdigest()[:16]
-    legacy = f"{base}:{model}"
-    previous = workspace.job_by_request_key(legacy)
-    if (
-        previous
-        and previous["kind"] == "render_podcast"
-        and previous["params"]["model"] == resolved
-    ):
-        return legacy
-    return f"{base}:{resolved}"
 
 
 def download_model(workspace: Workspace, model: str, *, start_worker=True) -> dict:

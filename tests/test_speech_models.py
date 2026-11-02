@@ -225,7 +225,7 @@ def test_new_render_rejects_models_outside_catalog_before_queueing(
 
 
 @pytest.mark.parametrize("legacy", [True, False])
-def test_render_request_key_survives_snapshot_addition_and_distinguishes_revisions(
+def test_explicit_render_retry_preserves_snapshot_and_rejects_a_different_model(
     models, tmp_path, legacy
 ):
     workspace = Workspace(tmp_path / "workspace")
@@ -259,22 +259,17 @@ def test_render_request_key_survives_snapshot_addition_and_distinguishes_revisio
             key,
         )
     else:
-        key = service.render_request_key(workspace, draft["id"], choice)
+        key = "explicit-render-retry"
         original = service.render(
             workspace, draft["id"], model=choice, request_key=key, start_worker=False
         )
     models[0]["notes"] = "Updated description, same requested model"
-    assert service.render_request_key(workspace, draft["id"], choice) == key
     repeated = service.render(
         workspace, draft["id"], model=choice, request_key=key, start_worker=False
     )
     assert repeated["id"] == original["id"]
     models[0]["revision"] = "c" * 40
-    changed_key = service.render_request_key(workspace, draft["id"], choice)
-    assert changed_key != key
-    changed = service.render(
-        workspace, draft["id"], model=choice, request_key=changed_key, start_worker=False
-    )
+    changed = service.render(workspace, draft["id"], model=choice, start_worker=False)
     assert changed["id"] != original["id"]
     with pytest.raises(ValueError, match="different operation"):
         service.render(workspace, draft["id"], model=choice, request_key=key, start_worker=False)

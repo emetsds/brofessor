@@ -32,6 +32,8 @@ Keep the architecture small: one SQLite workspace, one OS-locked local worker, a
 
 Test behavior at module boundaries: source provenance, task contracts, job recovery, interface parity, and output usability. Do not substitute JSON validity for factual correctness or PPTX file existence for visual review.
 
+Each test should detect a concrete behavioral regression. Mock expensive external boundaries, not the behavior being tested. Avoid fixed fixture counts, required helper calls, and decorative layout choices. Exact vendor flags and file-format rules are legitimate external contracts; snapshot preservation and avoiding repeated model calls are domain contracts. When removing a test, identify where its useful protection remains. Prefer a targeted controlled fault over adding assertions solely to increase test or coverage counts.
+
 Record real runner/model checks separately from offline contract tests. Mark unavailable integrations as unverified rather than passing. Run only checks appropriate to the change and report material limitations.
 
 Planning and user-facing explanations are in Russian unless requested otherwise. Keep the public README and code identifiers in English. No global configuration changes, paid purchases, remote repository creation, push, or deployment without a corresponding user request.

@@ -1,12 +1,14 @@
 """Deterministic CLI wait lifecycle checks; no model, subprocess, or wall-clock delay."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
 from click import ClickException
 from typer.testing import CliRunner
 
-from brofessor import cli, worker
+from brofessor import cli, service, worker
+from brofessor.workspace import Workspace
 
 
 class Clock:
@@ -93,21 +95,42 @@ def test_process_start_error_has_actionable_diagnostic(tmp_path, monkeypatch, cl
         cli.wait_for_job(workspace, "job")
 
 
-@pytest.mark.parametrize(
-    "command", [["ask", "Question?", "--wait"], ["draft", "render", "draft-id", "--wait"]]
-)
-def test_both_cli_wait_paths_use_recovery_helper(tmp_path, monkeypatch, command):
-    calls = []
-    job = {"id": "fixture", "status": "queued"}
-    monkeypatch.setattr(cli.service, "submit", lambda *a, **k: job)
-    monkeypatch.setattr(cli.service, "render", lambda *a, **k: job)
+@pytest.mark.parametrize("command", ["ask", "render"])
+def test_cli_wait_reports_persisted_interruption_and_failure_exit(tmp_path, monkeypatch, command):
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.txt"
+    source.write_text("A synthetic experiment was performed.")
+    workspace.add_source(source)
+    if command == "ask":
+        args = ["ask", "What happened?", "--wait"]
+    else:
+        original = service.submit(workspace, "slides", start_worker=False)
+        citation = workspace.units()[0]["id"]
+        workspace.save_draft(
+            original["id"],
+            {
+                "title": "Test",
+                "language": "en",
+                "slides": [
+                    {
+                        "title": "An experiment",
+                        "bullets": ["It was performed"],
+                        "notes": "A synthetic source",
+                        "citations": [citation],
+                    }
+                ],
+            },
+        )
+        workspace.update_job(original["id"], status="succeeded")
+        args = ["draft", "render", original["id"], "--wait"]
 
-    def wait(workspace, job_id):
-        calls.append(job_id)
-        return {"id": job_id, "status": "interrupted"}
+    def interrupted_worker(store):
+        if store.claim() is not None:
+            store.recover()
 
-    monkeypatch.setattr(cli, "wait_for_job", wait)
-    result = CliRunner().invoke(cli.app, ["-w", str(tmp_path), *command])
-    assert result.exit_code == 1
-    assert '"status": "interrupted"' in result.output
-    assert calls == ["fixture"]
+    monkeypatch.setattr(worker, "ensure_worker", interrupted_worker)
+    result = CliRunner().invoke(cli.app, ["-w", str(workspace.path), *args])
+    assert result.exit_code == 1, result.output
+    returned = json.loads(result.output)
+    assert returned["status"] == "interrupted"
+    assert Workspace(workspace.path).job(returned["id"])["status"] == "interrupted"

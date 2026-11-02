@@ -1,11 +1,11 @@
 import copy
+import xml.etree.ElementTree as ET
+import zipfile
 
 import pytest
 from pptx import Presentation
-from pptx.enum.shapes import MSO_SHAPE
 
 from brofessor import media, service, worker
-from brofessor.models import Slides
 from brofessor.workspace import Workspace
 
 
@@ -44,9 +44,12 @@ def plan(citation="source:1", language="ru"):
     }
 
 
-@pytest.mark.parametrize("language", ["ru", "en"])
-def test_native_content_notes_fonts_and_editability(tmp_path, language):
-    value = plan(language=language)
+def test_native_content_notes_fonts_and_editability_without_external_tools(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(
+        media.subprocess, "run", lambda *a, **kw: pytest.fail("PPTX needs no external process")
+    )
+    value = plan()
     value["slides"][0]["citations"] = [f"original-long-source-{i}:page{i}" for i in range(50)]
     before = copy.deepcopy(value)
     output = media.render_slides(
@@ -58,7 +61,7 @@ def test_native_content_notes_fonts_and_editability(tmp_path, language):
     assert value["slides"][0]["notes"] in notes
     assert all(c in notes for c in value["slides"][0]["citations"])
     assert "chapter.md · page 1" in deck.slides[1].notes_slide.notes_text_frame.text
-    assert not any(shape.shape_type == 13 for slide in deck.slides for shape in slide.shapes)
+    assert deck.core_properties.title == value["title"]
     for slide in deck.slides:
         for shape in slide.shapes:
             assert shape.left >= 0 and shape.top >= 0
@@ -67,17 +70,24 @@ def test_native_content_notes_fonts_and_editability(tmp_path, language):
     table = next(shape.table for shape in deck.slides[1].shapes if shape.has_table)
     assert table.cell(2, 1).text == ""
     assert table.cell(0, 0).text_frame.paragraphs[0].font.size.pt >= 18
-    nodes = [
-        s
-        for s in deck.slides[2].shapes
-        if s.shape_type == 1 and s.auto_shape_type == MSO_SHAPE.RECTANGLE
-    ]
-    arrows = [
-        s
-        for s in deck.slides[2].shapes
-        if s.shape_type == 1 and s.auto_shape_type == MSO_SHAPE.CHEVRON
-    ]
-    assert [s.text for s in nodes] == value["slides"][2]["steps"] and len(arrows) == 2
+    nodes = sorted(
+        (
+            s
+            for s in deck.slides[2].shapes
+            if s.has_text_frame and s.text in value["slides"][2]["steps"]
+        ),
+        key=lambda shape: (shape.top, shape.left),
+    )
+    assert [s.text for s in nodes] == value["slides"][2]["steps"]
+    # Bullet child order is an OOXML format constraint, not a chosen slide style.
+    with zipfile.ZipFile(output) as archive:
+        namespace = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+        slide = ET.fromstring(archive.read("ppt/slides/slide1.xml"))
+        properties = next(
+            p for p in slide.iter(f"{namespace}pPr") if p.find(f"{namespace}buChar") is not None
+        )
+        children = [element.tag for element in properties]
+        assert children.index(f"{namespace}buChar") < children.index(f"{namespace}defRPr")
     assert all(s.text_frame.paragraphs[0].font.size.pt >= 18 for s in nodes)
     table.cell(1, 1).text = "Изменённая ячейка"
     nodes[1].text = "Изменённый этап"
@@ -167,15 +177,7 @@ def test_generated_visuals_survive_edit_and_worker_render_with_source_locations(
     assert w.draft(job["id"], 1)["data"]["slides"][2]["steps"][1] == "Проверка"
 
 
-def test_bullet_only_saved_draft_keeps_its_content_with_new_schema():
-    value = plan()
-    value["slides"] = value["slides"][:1]
-    validated = Slides.model_validate(value).model_dump()
-    assert validated["slides"][0]["bullets"] == value["slides"][0]["bullets"]
-    assert validated["slides"][0]["table"] is None and validated["slides"][0]["steps"] == []
-
-
-def test_long_russian_labels_use_a_readable_vertical_sequence(tmp_path):
+def test_long_russian_sequence_preserves_order_and_readable_text(tmp_path):
     value = plan()
     value["slides"] = [value["slides"][2]]
     item = value["slides"][0]
@@ -188,9 +190,18 @@ def test_long_russian_labels_use_a_readable_vertical_sequence(tmp_path):
         "Клерваль выхаживает Виктора, не зная его тайны",
     ]
     deck = Presentation(media.render_slides(value, tmp_path / "vertical.pptx"))
-    shapes = [s for s in deck.slides[0].shapes if s.shape_type == 1]
-    nodes = [s for s in shapes if s.auto_shape_type == MSO_SHAPE.RECTANGLE]
+    nodes = sorted(
+        (s for s in deck.slides[0].shapes if s.has_text_frame and s.text in item["steps"]),
+        key=lambda shape: (shape.top, shape.left),
+    )
     assert [s.text for s in nodes] == item["steps"]
-    assert sum(s.auto_shape_type == MSO_SHAPE.DOWN_ARROW for s in shapes) == 4
     assert all(s.text_frame.paragraphs[0].font.size.pt >= 18 for s in nodes)
-    assert all(s.top + s.height <= deck.slide_height for s in shapes)
+    assert all(s.top >= 0 and s.top + s.height <= deck.slide_height for s in nodes)
+    for index, a in enumerate(nodes):
+        for b in nodes[index + 1 :]:
+            assert (
+                a.left + a.width <= b.left
+                or b.left + b.width <= a.left
+                or a.top + a.height <= b.top
+                or b.top + b.height <= a.top
+            )

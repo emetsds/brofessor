@@ -134,7 +134,9 @@ uv run --no-sync brofessor draft show DRAFT_ID
 uv run --no-sync brofessor draft render DRAFT_ID --wait
 ```
 
-Rendering creates a **new job ID**. Its output includes `artifacts[].path`, relative to the project folder reported by `project list`. For example, a project at `/path/to/my-book` with artifact `jobs/abc123/presentation.pptx` produces `/path/to/my-book/jobs/abc123/presentation.pptx`. Open that file in your presentation editor. PPTX generation needs neither speech dependencies nor an installed office application.
+Rendering creates a **separate render job ID**. Its output includes `artifacts[].path`, relative to the project folder reported by `project list`. For example, a project at `/path/to/my-book` with artifact `jobs/abc123/presentation.pptx` produces `/path/to/my-book/jobs/abc123/presentation.pptx`. Open that file in your presentation editor. PPTX generation needs neither speech dependencies nor an installed office application.
+
+Repeating `draft render` with the same saved revision, model, speech settings, and voice samples returns the existing render job, just like the UI. Resume failed, cancelled, or interrupted jobs with `job resume JOB_ID`. To intentionally create another render job for the same inputs, supply a new `--request-key`; accepted audio segments may still be reused. An explicit key keeps the snapshot from its first accepted submission.
 
 Use the focus to request a comparison table or a sequence of events/steps where it helps explain the material. The draft supports bullet lists, native tables, and linear diagrams. They remain editable objects in the PPTX. Each slide's speaker notes contain its explanation and full source IDs, filenames, and original locations; the slide footer points to those notes.
 

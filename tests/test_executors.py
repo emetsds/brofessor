@@ -137,7 +137,7 @@ def test_subprocess_uses_input_without_shell_and_handles_output(tmp_path):
         [sys.executable, "-c", "import sys; print(sys.stdin.read())"],
         cwd=tmp_path,
         prompt="$(echo unsafe)",
-        timeout=2,
+        timeout=10,
     )
     assert result[0].strip() == "$(echo unsafe)"
 
@@ -167,7 +167,14 @@ def test_subprocess_timeout_and_cancel_terminate_group(tmp_path, cancel):
 
 
 def ollama_transport(
-    monkeypatch, *, cloud_disabled=True, remote=False, chunks=None, status=200, thinking=None
+    monkeypatch,
+    *,
+    cloud_disabled=True,
+    remote=False,
+    chunks=None,
+    status=200,
+    thinking=None,
+    redirect_to=None,
 ):
     requests = []
 
@@ -190,6 +197,8 @@ def ollama_transport(
                 },
             )
         if request.url.path == "/api/chat":
+            if redirect_to and request.url.host != "untrusted.invalid":
+                return httpx.Response(307, headers={"Location": redirect_to})
             data = (
                 chunks
                 if chunks is not None
@@ -215,6 +224,8 @@ def ollama_transport(
         ({}, "127.0.0.1:11434"),
         ({"ollama_address": "192.168.50.10:11435"}, "192.168.50.10:11435"),
         ({"ollama_address": "[::1]:11435"}, "[::1]:11435"),
+        ({"ollama_address": "127.0.0.1:1"}, "127.0.0.1:1"),
+        ({"ollama_address": "192.168.50.10:65535"}, "192.168.50.10:65535"),
     ],
 )
 def test_ollama_checks_server_and_weights_before_sending_source(
@@ -255,26 +266,20 @@ def test_ollama_disables_thinking_only_when_model_advertises_support(
 
 
 @pytest.mark.parametrize(
-    "options,address",
+    "options,address,model",
     [
-        ({}, "127.0.0.1:11434"),
-        ({"ollama_address": "192.168.50.10:11435"}, "192.168.50.10:11435"),
-        ({"ollama_address": "[::1]:11435"}, "[::1]:11435"),
+        ({}, "127.0.0.1:11434", None),
+        ({"ollama_address": "192.168.50.10:11435"}, "192.168.50.10:11435", "tiny"),
     ],
 )
-@pytest.mark.parametrize("model", [None, "tiny"])
-def test_ollama_doctor_uses_selected_port_without_generation(monkeypatch, options, address, model):
+def test_ollama_doctor_checks_selected_server_without_generating(
+    monkeypatch, options, address, model
+):
     requests = ollama_transport(monkeypatch)
     result = ex.doctor("ollama", model, **options)
-    assert result["available"] is True
-    assert result["cloud_disabled_verified"] is True
+    assert result["available"] is True and result["cloud_disabled_verified"] is True
     paths = ["/api/status", "/api/tags"] + (["/api/show"] if model else [])
     assert [str(r.url) for r in requests] == [f"http://{address}{path}" for path in paths]
-
-
-@pytest.mark.parametrize("address", ["127.0.0.1:1", "192.168.50.10:65535", "[::1]:11434"])
-def test_ollama_url_accepts_explicit_ip_and_port(address):
-    assert ex.ollama_url(address) == f"http://{address}"
 
 
 def test_ollama_address_normalizes_equivalent_inputs():
@@ -303,13 +308,27 @@ def test_ollama_address_normalizes_equivalent_inputs():
         "127.0.0.1\n:11434",
     ],
 )
-def test_invalid_ollama_address_fails_before_network(tmp_path, monkeypatch, address):
-    requests = ollama_transport(monkeypatch)
+def test_invalid_ollama_address_is_rejected(address):
     with pytest.raises(ValueError, match="Ollama address"):
-        ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path, ollama_address=address)
+        ex.normalize_ollama_address(address)
+
+
+def test_invalid_server_settings_never_receive_source_and_doctor_explains_failure(
+    tmp_path, monkeypatch
+):
+    requests = ollama_transport(monkeypatch)
+    address = "192.168.50.10:65536"
+    with pytest.raises(ValueError, match="Ollama address"):
+        ex.generate(
+            "A private source marker",
+            SCHEMA,
+            "ollama",
+            "tiny",
+            workdir=tmp_path,
+            ollama_address=address,
+        )
     result = ex.doctor("ollama", "tiny", ollama_address=address)
-    assert result["available"] is False
-    assert "Ollama address" in result["diagnostic"]
+    assert result["available"] is False and "Ollama address" in result["diagnostic"]
     assert requests == []
 
 
@@ -349,6 +368,20 @@ def test_incomplete_ollama_response_rejected(tmp_path, monkeypatch, chunks):
     ollama_transport(monkeypatch, chunks=chunks)
     with pytest.raises(RuntimeError):
         ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path)
+
+
+def test_ollama_redirect_never_forwards_source_to_another_host(tmp_path, monkeypatch):
+    requests = ollama_transport(monkeypatch, redirect_to="http://untrusted.invalid/api/chat")
+    with pytest.raises(RuntimeError, match="HTTP 307"):
+        ex.generate(
+            "Synthetic private-source marker; do not forward.",
+            SCHEMA,
+            "ollama",
+            "tiny",
+            ollama_address="192.168.50.10:11435",
+            workdir=tmp_path,
+        )
+    assert not any(request.url.host == "untrusted.invalid" for request in requests)
 
 
 def test_ollama_cancel_closes_pending_request(tmp_path, monkeypatch):

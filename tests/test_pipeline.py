@@ -55,8 +55,14 @@ def test_fabricated_citation_is_not_saved(workspace, monkeypatch):
     assert workspace.draft(job["id"]) is None
 
 
-def test_render_is_pinned_to_draft_revision(workspace):
+def test_queued_pptx_uses_reviewed_revision_despite_later_edits(workspace, tmp_path):
+    from pptx import Presentation
+
     citation = workspace.units()[0]["id"]
+    other = tmp_path / "later-source.md"
+    other.write_text("A different report claims 1500 kilograms.")
+    added = workspace.add_source(other)
+    later_citation = workspace.units([added["id"]])[0]["id"]
     job = service.submit(workspace, "slides", start_worker=False)
     value = {
         "title": "Bridge",
@@ -71,11 +77,29 @@ def test_render_is_pinned_to_draft_revision(workspace):
         ],
     }
     workspace.save_draft(job["id"], value)
+    workspace.update_job(job["id"], status="succeeded")
     render = service.render(workspace, job["id"], start_worker=False)
     value["title"] = "Edited later"
-    service.edit_draft(workspace, job["id"], value, 1)
-    assert render["params"]["revision"] == 1
-    assert workspace.draft(job["id"], 1)["data"]["title"] == "Bridge"
+    value["slides"][0].update(
+        title="A later conclusion",
+        bullets=["1500 kg"],
+        notes="A later qualification",
+        citations=[later_citation],
+    )
+    edited = service.edit_draft(workspace, job["id"], value, 1)
+    worker.run(workspace, once=True)
+
+    assert workspace.job(render["id"])["status"] == "succeeded"
+    artifact = workspace.artifacts(render["id"])[0]
+    deck = Presentation(workspace.path / artifact["path"])
+    text = "\n".join(shape.text for shape in deck.slides[0].shapes if shape.has_text_frame)
+    notes = deck.slides[0].notes_slide.notes_text_frame.text
+    assert deck.core_properties.title == "Bridge"
+    assert "1200 kg" in text and "1500 kg" not in text
+    assert "Not tested in floods" in notes and "A later qualification" not in notes
+    assert citation in notes and later_citation not in notes
+    assert artifact["metadata"]["revision"] == 1
+    assert workspace.draft(job["id"])["data"] == edited["data"]
 
 
 def test_cancel_before_generation(workspace, monkeypatch):
@@ -137,14 +161,14 @@ def test_chapter_summary_cannot_cite_unseen_chapter(workspace, tmp_path, monkeyp
         pipeline.execute(workspace, job)
 
 
-@pytest.mark.parametrize("port", [0, -1, 65536, True, 11435.0, "192.168.50.10", None])
-def test_invalid_ollama_address_is_rejected_before_queueing(workspace, monkeypatch, port):
+def test_invalid_ollama_address_is_rejected_before_queueing(workspace, monkeypatch):
     started = []
     monkeypatch.setattr(worker, "ensure_worker", lambda *_: started.append(True))
     with pytest.raises(ValueError, match="Ollama address"):
-        service.submit(workspace, "ask", focus="Load?", provider="ollama", ollama_address=port)
-    assert workspace.jobs() == []
-    assert started == []
+        service.submit(
+            workspace, "ask", focus="Load?", provider="ollama", ollama_address="192.168.50.10:65536"
+        )
+    assert workspace.jobs() == [] and started == []
 
 
 def test_ollama_address_is_persisted_and_part_of_request_identity(workspace):

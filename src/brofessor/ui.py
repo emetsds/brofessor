@@ -858,11 +858,6 @@ def results():
                                 workspace,
                                 job["id"],
                                 model=voice_model if job["kind"] == "podcast" else None,
-                                request_key=service.render_request_key(
-                                    workspace, job["id"], voice_model
-                                )
-                                if job["kind"] == "podcast"
-                                else f"render:{job['id']}:{draft['revision']}",
                             )
                             st.rerun()
                         except (OSError, ValueError) as error:

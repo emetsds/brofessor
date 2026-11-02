@@ -311,18 +311,23 @@ def test_ui_launch_passes_both_ports_to_streamlit(tmp_path, monkeypatch):
     assert app_args == ["--workspace", str(tmp_path), "--ollama-address", "192.168.50.10:11435"]
 
 
-@pytest.mark.parametrize("port", ["0", "65536"])
 @pytest.mark.parametrize(
-    "args", [["ui", "--port"], ["ui", "--ollama-address"], ["doctor", "--ollama-address"]]
+    "args,value,diagnostic",
+    [
+        (["ui", "--port"], "65536", "range"),
+        (["ui", "--ollama-address"], "192.168.50.10:65536", "IP:port"),
+        (["doctor", "--ollama-address"], "192.168.50.10", "IP:port"),
+    ],
 )
-def test_invalid_cli_ports_fail_before_launch(tmp_path, monkeypatch, args, port):
+def test_invalid_cli_server_settings_fail_before_launch(
+    tmp_path, monkeypatch, args, value, diagnostic
+):
     monkeypatch.setattr("brofessor.cli.subprocess.call", lambda *a: pytest.fail("Must not launch"))
     monkeypatch.setattr(
         "brofessor.executors.doctor", lambda *a, **k: pytest.fail("Must not connect")
     )
-    result = CliRunner().invoke(app, ["-w", str(tmp_path), *args, port])
-    assert result.exit_code == 2, result.output
-    assert ("range" if "--port" in args else "IP:port") in result.output
+    result = CliRunner().invoke(app, ["-w", str(tmp_path), *args, value])
+    assert result.exit_code == 2 and diagnostic in result.output
 
 
 def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
@@ -486,6 +491,47 @@ def test_language_switch_preserves_form_inputs_and_unsaved_draft(tmp_path, monke
     ui.button(key=f"save-{job['id']}").click().run()
     assert not ui.exception
     assert workspace.draft(job["id"])["data"]["title"] == "Unsaved user edit"
+
+
+def test_cli_and_ui_share_a_render_job_unless_a_new_request_is_explicit(tmp_path, monkeypatch):
+    workspace = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.txt"
+    source.write_text("A synthetic result was recorded.")
+    workspace.add_source(source)
+    citation = workspace.units()[0]["id"]
+    draft = service.submit(workspace, "slides", start_worker=False)
+    workspace.save_draft(
+        draft["id"],
+        {
+            "title": "Test",
+            "language": "en",
+            "slides": [
+                {
+                    "title": "A result",
+                    "bullets": ["It was recorded"],
+                    "notes": "An original observation",
+                    "citations": [citation],
+                }
+            ],
+        },
+    )
+    workspace.update_job(draft["id"], status="succeeded")
+    monkeypatch.setattr("brofessor.worker.ensure_worker", lambda *_: None)
+    command = ["-w", str(workspace.path), "draft", "render", draft["id"]]
+    first = CliRunner().invoke(app, command)
+    assert first.exit_code == 0, first.output
+    first_id = json.loads(first.output)["id"]
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
+    ).run()
+    ui.button(key=f"render-{draft['id']}").click().run()
+    assert not ui.exception
+    assert [j["id"] for j in workspace.jobs() if j["kind"] == "render_slides"] == [first_id]
+    repeated = CliRunner().invoke(app, command)
+    assert repeated.exit_code == 0 and json.loads(repeated.output)["id"] == first_id
+    fresh = CliRunner().invoke(app, [*command, "--request-key", "another-explicit-render"])
+    assert fresh.exit_code == 0 and json.loads(fresh.output)["id"] != first_id
 
 
 def test_language_save_error_is_visible_but_ui_still_switches(tmp_path, monkeypatch):

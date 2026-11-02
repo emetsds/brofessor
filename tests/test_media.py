@@ -1,8 +1,6 @@
 """Offline renderer contract tests; fake speech is never a model-quality check."""
 
 import wave
-import xml.etree.ElementTree as ET
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -159,6 +157,59 @@ def test_cancel_preserves_completed_segment(tmp_path, speech):
     assert [segment["reused"] for segment in result["segments"]] == [True, False]
 
 
+@pytest.mark.parametrize("failure", ["nonzero", "timeout", "cancel"])
+def test_failed_mp3_publication_preserves_existing_file_and_reuses_completed_audio(
+    tmp_path, speech, monkeypatch, failure
+):
+    import subprocess
+    from types import SimpleNamespace
+
+    output = tmp_path / "podcast.mp3"
+    output.write_bytes(b"previous complete MP3")
+    cancelled = False
+    temporary_files = []
+    monkeypatch.setattr(media, "_ffmpeg", lambda: "fake-ffmpeg")
+
+    def encode(args, **kwargs):
+        nonlocal cancelled
+        target = Path(args[-1])
+        temporary_files.append(target)
+        target.write_bytes(b"partial new MP3")
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+        if failure == "cancel":
+            cancelled = True
+        return SimpleNamespace(
+            returncode=1 if failure == "nonzero" else 0, stderr="encoding failed"
+        )
+
+    monkeypatch.setattr(media.subprocess, "run", encode)
+    error = {
+        "nonzero": media.MediaError,
+        "timeout": subprocess.TimeoutExpired,
+        "cancel": media.RenderCancelled,
+    }[failure]
+    with pytest.raises(error):
+        media.render_audio(
+            plan(), output, segment_dir=tmp_path / "segments", cancelled=lambda: cancelled
+        )
+    assert output.read_bytes() == b"previous complete MP3"
+    assert temporary_files and all(not path.exists() for path in temporary_files)
+    assert not output.with_suffix(".audio.json").exists()
+    completed_calls = list(speech)
+
+    def successful_encode(args, **kwargs):
+        Path(args[-1]).write_bytes(b"complete replacement MP3")
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(media.subprocess, "run", successful_encode)
+    result = media.render_audio(plan(), output, segment_dir=tmp_path / "segments")
+    assert output.read_bytes() == b"complete replacement MP3"
+    assert all(segment["reused"] for segment in result["segments"])
+    assert speech == completed_calls
+    assert Path(result["path"]) == output and output.with_suffix(".audio.json").is_file()
+
+
 def test_rejects_unpinned_model_and_bad_plans(tmp_path, speech):
     with pytest.raises(ValueError, match="repo@commit"):
         media.render_audio(plan(), tmp_path / "a.wav", segment_dir=tmp_path, model="some/model")
@@ -166,65 +217,6 @@ def test_rejects_unpinned_model_and_bad_plans(tmp_path, speech):
         media.render_audio(plan("unknown"), tmp_path / "a.wav", segment_dir=tmp_path)
     with pytest.raises(ValueError, match="at least"):
         media.render_audio({"turns": []}, tmp_path / "a.wav", segment_dir=tmp_path)
-
-
-def test_real_pptx_has_editable_text_table_notes_and_citations_without_external_tools(
-    tmp_path, monkeypatch
-):
-    from pptx import Presentation
-
-    monkeypatch.setenv("PATH", "")
-    monkeypatch.setattr(
-        media.subprocess, "run", lambda *a, **k: pytest.fail("PPTX must render in Python")
-    )
-    output = media.render_slides(
-        {
-            "title": "Editable evidence",
-            "language": "ru",
-            "slides": [
-                {
-                    "title": "Проверяемый вывод",
-                    "bullets": ["Сохранить источник"],
-                    "notes": "Проверить первоисточник перед выступлением",
-                    "citations": ["source:p2"],
-                    "table": {
-                        "headers": ["Факт", "Основание"],
-                        "rows": [["Контракт", "Исходный текст"]],
-                    },
-                },
-            ],
-        },
-        tmp_path / "deck.pptx",
-    )
-    with zipfile.ZipFile(output) as archive:
-        slide = archive.read("ppt/slides/slide1.xml").decode()
-        notes = archive.read("ppt/notesSlides/notesSlide1.xml").decode()
-        assert "Проверяемый вывод" in slide and "<a:tbl>" in slide
-        assert "source:p2" in notes and "Проверить первоисточник" in notes
-        assert "<p:pic>" not in slide  # text/table is not a screenshot
-        namespace = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
-        paragraph_properties = next(
-            p
-            for p in ET.fromstring(slide).iter(f"{namespace}pPr")
-            if p.find(f"{namespace}buChar") is not None
-        )
-        children = [element.tag for element in paragraph_properties]
-        assert children.index(f"{namespace}buChar") < children.index(f"{namespace}defRPr")
-    deck = Presentation(output)
-    assert len(deck.slides) == 1
-    assert deck.core_properties.title == "Editable evidence"
-    table = next(shape.table for shape in deck.slides[0].shapes if shape.has_table)
-    assert table.cell(1, 0).text == "Контракт"
-    table.cell(1, 0).text = "Правка таблицы"
-    deck.slides[0].notes_slide.notes_text_frame.text = "Правка заметки"
-    edited = tmp_path / "edited.pptx"
-    deck.save(edited)
-    reopened = Presentation(edited)
-    assert (
-        next(s.table for s in reopened.slides[0].shapes if s.has_table).cell(1, 0).text
-        == "Правка таблицы"
-    )
-    assert reopened.slides[0].notes_slide.notes_text_frame.text == "Правка заметки"
 
 
 def test_slide_order_unicode_and_original_notes_are_preserved(tmp_path):

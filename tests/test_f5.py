@@ -87,14 +87,13 @@ def test_cli_voice_configuration_and_immutable_render_snapshot(tmp_path):
         )
         assert result.exit_code == 0, result.output
     workspace, draft = setup_draft(tmp_path)
-    key = service.render_request_key(workspace, draft["id"], "f5-tts")
+    key = "explicit-render-retry"
     job = service.render(
         workspace, draft["id"], model="f5-tts", request_key=key, start_worker=False
     )
     original = job["params"]["model_spec"]["references"]["host"]
     speech_references.save("host", "en", wav(2), "Another sample.")
     assert (workspace.path / original["path"]).read_bytes() == wav()
-    assert service.render_request_key(workspace, draft["id"], "f5-tts") != key
     repeated = service.render(
         workspace, draft["id"], model="f5-tts", request_key=key, start_worker=False
     )
@@ -112,6 +111,107 @@ def test_missing_or_damaged_reference_rejects_job_before_enqueue(tmp_path):
     with pytest.raises(ValueError, match="damaged"):
         service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
     assert len(workspace.jobs()) == 1
+
+
+def test_render_identity_uses_the_same_frozen_voice_inputs_as_execution(tmp_path, monkeypatch):
+    for role in ("host", "guest"):
+        speech_references.save(role, "en", wav(), "Reference A.")
+    workspace, draft = setup_draft(tmp_path)
+    freeze = speech_references.freeze
+
+    def another_client_changes_voice(folder, refs):
+        snapshot = freeze(folder, refs)
+        speech_references.save("host", "en", wav(2), "Reference B.")
+        return snapshot
+
+    monkeypatch.setattr(speech_references, "freeze", another_client_changes_voice)
+    original = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    original_refs = original["params"]["model_spec"]["references"]
+    assert (workspace.path / original_refs["host"]["path"]).read_bytes() == wav()
+    monkeypatch.setattr(speech_references, "freeze", freeze)
+    changed = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    assert changed["id"] != original["id"]
+    assert changed["params"]["model_spec"]["references"]["host"]["text"] == "Reference B."
+    speech_references.save("host", "en", wav(), "Reference A.")
+    repeated = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    assert repeated["id"] == original["id"] and repeated["params"] == original["params"]
+    speech_references.save("host", "en", wav(), "Different exact transcript, same audio.")
+    transcript_changed = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    assert transcript_changed["id"] not in {original["id"], changed["id"]}
+
+
+def test_concurrent_explicit_render_retries_share_the_first_snapshot(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Event
+
+    for role in ("host", "guest"):
+        speech_references.save(role, "en", wav(), "Reference A.")
+    workspace, draft = setup_draft(tmp_path)
+    frozen_a, release_a, submit_together = Event(), Event(), Barrier(2)
+    freeze, submit = speech_references.freeze, workspace.submit
+
+    def freeze_during_another_client_edit(folder, refs):
+        snapshot = freeze(folder, refs)
+        if refs["host"]["text"] == "Reference A.":
+            frozen_a.set()
+            assert release_a.wait(5)
+        else:
+            release_a.set()
+        return snapshot
+
+    def enqueue_together(*args):
+        submit_together.wait(timeout=5)
+        return submit(*args)
+
+    monkeypatch.setattr(speech_references, "freeze", freeze_during_another_client_edit)
+    monkeypatch.setattr(workspace, "submit", enqueue_together)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(
+            service.render,
+            workspace,
+            draft["id"],
+            model="f5-tts",
+            request_key="same-click",
+            start_worker=False,
+        )
+        assert frozen_a.wait(5)
+        speech_references.save("host", "en", wav(2), "Reference B.")
+        second = pool.submit(
+            service.render,
+            workspace,
+            draft["id"],
+            model="f5-tts",
+            request_key="same-click",
+            start_worker=False,
+        )
+        one, two = first.result(timeout=8), second.result(timeout=8)
+    assert one["id"] == two["id"] and one["params"] == two["params"]
+    assert len([j for j in workspace.jobs() if j["kind"] == "render_podcast"]) == 1
+    # A retry is independent of mutable preferences and the original upload.
+    current = speech_references.selected("en")["host"]
+    Path(current["path"]).unlink()
+    monkeypatch.setattr(workspace, "submit", submit)
+    retry = service.render(
+        workspace, draft["id"], model="f5-tts", request_key="same-click", start_worker=False
+    )
+    assert retry["id"] == one["id"] and retry["params"] == one["params"]
+
+
+def test_render_reuses_same_audio_inputs_but_not_changed_speech_settings(tmp_path, monkeypatch):
+    for role in ("host", "guest"):
+        speech_references.save(role, "en", wav(), "Reference speech.")
+    workspace, draft = setup_draft(tmp_path)
+    original = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    catalog = copy.deepcopy(speech_models.CATALOG)
+    item = next(item for item in catalog if item["id"] == "f5-tts")
+    monkeypatch.setattr(speech_models, "CATALOG", catalog)
+    item["notes"] = "A different explanation of the same model."
+    repeated = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    assert repeated["id"] == original["id"] and repeated["params"] == original["params"]
+    item["settings"]["speed"] = 0.8
+    changed = service.render(workspace, draft["id"], model="f5-tts", start_worker=False)
+    assert changed["id"] != original["id"]
+    assert changed["params"]["model_spec"]["settings"]["speed"] == 0.8
 
 
 def test_reference_samples_survive_closed_project_move(tmp_path):
@@ -207,3 +307,105 @@ def test_voice_changes_invalidate_only_affected_segments(tmp_path, monkeypatch):
         plan, tmp_path / "two.wav", segment_dir=tmp_path / "segments", model_spec=spec
     )
     assert [s["reused"] for s in result["segments"]] == [False, True]
+
+
+def test_f5_adapter_uses_frozen_local_references_without_asr(tmp_path, monkeypatch):
+    import socket
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    import numpy as np
+
+    from brofessor.speech import _F5
+
+    for role, value in (("host", 8192), ("guest", -8192)):
+        speech_references.save(role, "en", wav(value), f"Exact {role} transcript.")
+    project = tmp_path / "project"
+    frozen = speech_references.freeze(project, speech_references.selected("en"))
+    spec = speech_models.get("f5-tts")
+    spec["settings"].update(nfe_step=12, speed=0.85)
+    spec["model_config"]["dim"] = 512
+    spec["references"] = speech_references.resolve(project, frozen)
+    speech_references.save("host", "en", wav(16384), "Later preference, not this job.")
+    location, vocos = tmp_path / "pinned-model", tmp_path / "pinned-vocos"
+    loads, reads, inference = {}, [], []
+    model, vocoder, dit = object(), object(), object()
+
+    def local_vocoder(component):
+        assert component == spec["dependencies"][0]
+        return vocos
+
+    def load_model(architecture, config, checkpoint, **options):
+        loads["model"] = (architecture, config, checkpoint, options)
+        return model
+
+    def load_vocoder(**options):
+        loads["vocoder"] = options
+        return vocoder
+
+    def read_audio(path, **options):
+        reads.append(path)
+        assert options == {"dtype": "float32", "always_2d": True}
+        with wave.open(path, "rb") as stream:
+            samples = np.frombuffer(stream.readframes(stream.getnframes()), dtype="<i2")
+            return samples.astype(np.float32).reshape(
+                -1, stream.getnchannels()
+            ) / 32768, stream.getframerate()
+
+    def infer(reference, transcript, batches, loaded_model, loaded_vocoder, **options):
+        assert loaded_model is model and loaded_vocoder is vocoder
+        inference.append((reference, transcript, batches, options))
+        yield np.full(4, float(reference[0].mean()), dtype=np.float32), 24000
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Frozen references and transcripts must not invoke ASR or network")
+
+    upstream = ModuleType("f5_tts.infer.utils_infer")
+    upstream.load_model, upstream.load_vocoder = load_model, load_vocoder
+    upstream.infer_batch_process = infer
+    upstream.preprocess_ref_audio_text = forbidden
+    upstream.load_asr_model = forbidden
+    modules = {
+        "f5_tts": ModuleType("f5_tts"),
+        "f5_tts.infer": ModuleType("f5_tts.infer"),
+        "f5_tts.infer.utils_infer": upstream,
+        "f5_tts.model": SimpleNamespace(DiT=dit),
+        "torch": SimpleNamespace(
+            backends=SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True)),
+            from_numpy=lambda audio: SimpleNamespace(
+                unsqueeze=lambda axis: np.expand_dims(audio, axis)
+            ),
+            manual_seed=lambda seed: None,
+        ),
+        "soundfile": SimpleNamespace(read=read_audio),
+    }
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(speech_models, "installed_path", local_vocoder)
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    engine = _F5(spec, location)
+    requests = [
+        ("host", "First explanation."),
+        ("guest", "A qualified answer."),
+        ("host", "A follow-up."),
+    ]
+    for role, text in requests:
+        audio, rate = engine.synthesize(text, role, "en", None)
+        assert rate == 24000
+        np.testing.assert_allclose(audio, 0.25 if role == "host" else -0.25)
+    assert loads["model"] == (
+        dit,
+        spec["model_config"],
+        str(location / spec["checkpoint"]),
+        {"vocab_file": str(location / spec["vocab"]), "device": "mps"},
+    )
+    assert loads["vocoder"] == {"is_local": True, "local_path": str(vocos), "device": "mps"}
+    assert set(reads) == {spec["references"][role]["path"] for role in ("host", "guest")}
+    for (reference, transcript, batches, options), (role, text) in zip(
+        inference, requests, strict=True
+    ):
+        assert transcript == f"Exact {role} transcript."
+        assert reference[1] == 24000 and " ".join(batches) == text
+        assert options["device"] == "mps" and options["streaming"] is True
+        assert options["nfe_step"] == spec["settings"]["nfe_step"]
+        assert options["speed"] == spec["settings"]["speed"]

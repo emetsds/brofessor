@@ -117,7 +117,7 @@ def use(model: str) -> dict:
     return item
 
 
-def reference(model: str | None = None) -> str:
+def reference(model: str | dict | None = None) -> str:
     return _reference(get(model or selected()))
 
 
