@@ -131,7 +131,10 @@ def test_reference_samples_survive_closed_project_move(tmp_path):
 
 
 def test_vocoder_download_is_pinned_shared_and_reported(tmp_path, monkeypatch):
-    models = [copy.deepcopy(speech_models.get(name)) for name in ("f5-tts", "espeech-rl-v2")]
+    models = [
+        copy.deepcopy(speech_models.get(name))
+        for name in ("f5-tts", "f5-tts-russian", "espeech-rl-v2")
+    ]
     components = {}
     for item in models:
         for component in [*item["dependencies"], item]:
@@ -158,6 +161,22 @@ def test_vocoder_download_is_pinned_shared_and_reported(tmp_path, monkeypatch):
     assert progress[-1]["completed"] == progress[-1]["total"] == 14
     (speech_models.snapshot(models[0]["dependencies"][0]) / "weights.bin").unlink()
     assert speech_models.installed_path(models[0]) is None
+
+
+def test_russian_f5_uses_russian_references_and_rejects_english_draft(tmp_path):
+    w, draft = setup_draft(tmp_path)
+    with pytest.raises(ValueError, match="does not support en"):
+        service.render(w, draft["id"], model="f5-tts-russian", start_worker=False)
+    data = w.draft(draft["id"])["data"]
+    data["language"] = "ru"
+    service.edit_draft(w, draft["id"], data, 1)
+    for role in ("host", "guest"):
+        speech_references.save(role, "ru", wav(), "Образец русской речи.")
+    job = service.render(w, draft["id"], model="f5-tts-russian", start_worker=False)
+    spec = job["params"]["model_spec"]
+    assert spec["engine"] == "f5" and spec["languages"] == ["ru"]
+    assert set(spec["references"]) == {"host", "guest"}
+    assert all((w.path / ref["path"]).is_file() for ref in spec["references"].values())
 
 
 def test_voice_changes_invalidate_only_affected_segments(tmp_path, monkeypatch):

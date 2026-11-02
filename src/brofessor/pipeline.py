@@ -47,15 +47,25 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
 
     def generate(prompt, schema, citation_scope=None, validate=None):
         check()
-        ollama_port = params.get("ollama_port", executors.DEFAULT_OLLAMA_PORT)
+        ollama_address = (
+            executors.ollama_address_for_job(params)
+            if params["provider"] == "ollama"
+            else executors.DEFAULT_OLLAMA_ADDRESS
+        )
         identity = {
             "prompt": prompt,
             "schema": schema.model_json_schema(),
             "provider": params["provider"],
             "model": params["model"],
         }
-        if params["provider"] == "ollama" and ollama_port != executors.DEFAULT_OLLAMA_PORT:
-            identity["ollama_port"] = ollama_port
+        if params["provider"] == "ollama":
+            if "ollama_address" in params:
+                identity["ollama_address"] = ollama_address
+            elif (
+                params.get("ollama_port", executors.DEFAULT_OLLAMA_PORT)
+                != executors.DEFAULT_OLLAMA_PORT
+            ):
+                identity["ollama_port"] = params["ollama_port"]
         fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         checkpoint = folder / "checkpoints" / f"{fingerprint}.json"
         if checkpoint.exists():
@@ -66,7 +76,7 @@ def execute(workspace: Workspace, job: dict, cancelled=lambda: False):
                 schema.model_json_schema(),
                 params["provider"],
                 params["model"],
-                ollama_port=ollama_port,
+                ollama_address=ollama_address,
                 workdir=folder,
                 cancelled=cancelled,
             )

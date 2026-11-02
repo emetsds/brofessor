@@ -209,16 +209,23 @@ def ollama_transport(
     return requests
 
 
-@pytest.mark.parametrize("options,port", [({}, 11434), ({"ollama_port": 11435}, 11435)])
+@pytest.mark.parametrize(
+    "options,address",
+    [
+        ({}, "127.0.0.1:11434"),
+        ({"ollama_address": "192.168.50.10:11435"}, "192.168.50.10:11435"),
+        ({"ollama_address": "[::1]:11435"}, "[::1]:11435"),
+    ],
+)
 def test_ollama_checks_server_and_weights_before_sending_source(
-    tmp_path, monkeypatch, options, port
+    tmp_path, monkeypatch, options, address
 ):
     requests = ollama_transport(monkeypatch)
     assert ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path, **options) == {
         "answer": "local"
     }
     assert [r.url.path for r in requests] == ["/api/status", "/api/tags", "/api/show", "/api/chat"]
-    assert all(str(r.url) == f"http://127.0.0.1:{port}{r.url.path}" for r in requests)
+    assert all(str(r.url) == f"http://{address}{r.url.path}" for r in requests)
     body = json.loads(requests[-1].content)
     assert body["format"] == SCHEMA
     assert body["stream"] is True
@@ -247,41 +254,75 @@ def test_ollama_disables_thinking_only_when_model_advertises_support(
         assert "think" not in body
 
 
-@pytest.mark.parametrize("options,port", [({}, 11434), ({"ollama_port": 11435}, 11435)])
+@pytest.mark.parametrize(
+    "options,address",
+    [
+        ({}, "127.0.0.1:11434"),
+        ({"ollama_address": "192.168.50.10:11435"}, "192.168.50.10:11435"),
+        ({"ollama_address": "[::1]:11435"}, "[::1]:11435"),
+    ],
+)
 @pytest.mark.parametrize("model", [None, "tiny"])
-def test_ollama_doctor_uses_selected_port_without_generation(monkeypatch, options, port, model):
+def test_ollama_doctor_uses_selected_port_without_generation(monkeypatch, options, address, model):
     requests = ollama_transport(monkeypatch)
     result = ex.doctor("ollama", model, **options)
     assert result["available"] is True
-    assert result["local_only_verified"] is True
+    assert result["cloud_disabled_verified"] is True
     paths = ["/api/status", "/api/tags"] + (["/api/show"] if model else [])
-    assert [str(r.url) for r in requests] == [f"http://127.0.0.1:{port}{path}" for path in paths]
+    assert [str(r.url) for r in requests] == [f"http://{address}{path}" for path in paths]
 
 
-@pytest.mark.parametrize("port", [1, 11434, 65535])
-def test_ollama_url_accepts_tcp_ports_on_fixed_loopback(port):
-    assert ex.ollama_url(port) == f"http://127.0.0.1:{port}"
+@pytest.mark.parametrize("address", ["127.0.0.1:1", "192.168.50.10:65535", "[::1]:11434"])
+def test_ollama_url_accepts_explicit_ip_and_port(address):
+    assert ex.ollama_url(address) == f"http://{address}"
 
 
-@pytest.mark.parametrize("port", [0, -1, 65536, True, False, 11435.0, "11435", None])
-def test_invalid_ollama_port_fails_before_network(tmp_path, monkeypatch, port):
+def test_ollama_address_normalizes_equivalent_inputs():
+    assert ex.normalize_ollama_address(" 192.168.50.10:011435 ") == "192.168.50.10:11435"
+    assert ex.normalize_ollama_address("[0:0:0:0:0:0:0:1]:11434") == "[::1]:11434"
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        None,
+        True,
+        11434,
+        "127.0.0.1",
+        "localhost:11434",
+        "127.0.0.1:0",
+        "127.0.0.1:65536",
+        "http://127.0.0.1:11434",
+        "user:pass@127.0.0.1:11434",
+        "127.0.0.1:11434/path",
+        "127.0.0.1:11434?x=1",
+        "127.0.0.1:11434#x",
+        "@127.0.0.1:11434",
+        "127.0.0.1:11434?",
+        "127.0.0.1:11434#",
+        "127.0.0.1\n:11434",
+    ],
+)
+def test_invalid_ollama_address_fails_before_network(tmp_path, monkeypatch, address):
     requests = ollama_transport(monkeypatch)
-    with pytest.raises(ValueError, match="Ollama port"):
-        ex.ollama_url(port)
-    with pytest.raises(ValueError, match="Ollama port"):
-        ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path, ollama_port=port)
-    result = ex.doctor("ollama", "tiny", ollama_port=port)
+    with pytest.raises(ValueError, match="Ollama address"):
+        ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path, ollama_address=address)
+    result = ex.doctor("ollama", "tiny", ollama_address=address)
     assert result["available"] is False
-    assert "Ollama port" in result["diagnostic"]
+    assert "Ollama address" in result["diagnostic"]
     assert requests == []
 
 
-@pytest.mark.parametrize("port", [11434, 11435])
+@pytest.mark.parametrize("address", ["127.0.0.1:11434", "192.168.50.10:11435", "[::1]:11434"])
 @pytest.mark.parametrize("options", [{"cloud_disabled": False}, {"remote": True}, {"status": 404}])
-def test_ollama_localhost_is_not_proof_of_local_inference(tmp_path, monkeypatch, options, port):
+def test_ollama_address_is_not_proof_of_server_local_inference(
+    tmp_path, monkeypatch, options, address
+):
     requests = ollama_transport(monkeypatch, **options)
     with pytest.raises(RuntimeError, match="cloud|remote|local-only"):
-        ex.generate("private source", SCHEMA, "ollama", "tiny", workdir=tmp_path, ollama_port=port)
+        ex.generate(
+            "private source", SCHEMA, "ollama", "tiny", workdir=tmp_path, ollama_address=address
+        )
     assert "/api/chat" not in [r.url.path for r in requests]
     assert all(b"private source" not in r.content for r in requests)
 
@@ -375,7 +416,7 @@ def test_ollama_network_failure_is_clear_runtime_error(tmp_path, monkeypatch):
         raise httpx.ConnectError("do not copy raw server diagnostics")
 
     monkeypatch.setattr(ex, "_ollama_request", failed)
-    with pytest.raises(RuntimeError, match="Cannot reach local Ollama"):
+    with pytest.raises(RuntimeError, match="Cannot reach the selected Ollama server"):
         ex.generate("hello", SCHEMA, "ollama", "tiny", workdir=tmp_path)
 
 

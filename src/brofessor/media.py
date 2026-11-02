@@ -92,7 +92,7 @@ def _load_speech_model(spec: dict):
                     f"Download this voice model first: brofessor tts download {spec['id']} --wait"
                 )
         else:
-            # Older jobs and the explicit repo@revision/local-directory API remain usable.
+            # Compatibility for saved jobs without a catalog snapshot.
             location = Path(spec["path"]) if "path" in spec else snapshot(spec)
             if not (location / "config.json").is_file():
                 from huggingface_hub import snapshot_download

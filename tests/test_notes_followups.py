@@ -25,7 +25,7 @@ def study(tmp_path):
         language="en",
         provider="ollama",
         model="local-test",
-        ollama_port=11435,
+        ollama_address="192.168.50.10:11435",
         start_worker=False,
     )
     w.save_draft(
@@ -166,7 +166,7 @@ def test_follow_up_inherits_scope_and_provider_and_pins_context_before_edit(
     )
     assert child["params"]["provider"] == "ollama"
     assert child["params"]["model"] == "local-test"
-    assert child["params"]["ollama_port"] == 11435
+    assert child["params"]["ollama_address"] == "192.168.50.10:11435"
     assert child["params"]["conversation"] == [{"job_id": parent["id"], "revision": 1}]
     more = tmp_path / "other.md"
     more.write_text("A completely unrelated source.")
@@ -178,7 +178,11 @@ def test_follow_up_inherits_scope_and_provider_and_pins_context_before_edit(
 
     def generate(prompt, schema, provider, model, **kw):
         calls.append(prompt)
-        assert provider == "ollama" and model == "local-test" and kw["ollama_port"] == 11435
+        assert (
+            provider == "ollama"
+            and model == "local-test"
+            and kw["ollama_address"] == "192.168.50.10:11435"
+        )
         assert "It carried 1200 kilograms." in prompt and "EDITED AFTER" not in prompt
         assert "not factual evidence" in prompt
         return {

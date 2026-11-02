@@ -12,12 +12,12 @@ import streamlit as st
 
 from brofessor import projects, service, speech_models
 from brofessor import ui_language
-from brofessor.executors import DEFAULT_OLLAMA_PORT
+from brofessor.executors import DEFAULT_OLLAMA_ADDRESS
 from brofessor.workspace import Workspace
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--workspace", default=None)
-parser.add_argument("--ollama-port", type=int, default=DEFAULT_OLLAMA_PORT)
+parser.add_argument("--ollama-address", default=DEFAULT_OLLAMA_ADDRESS)
 args, _ = parser.parse_known_args()
 st.set_page_config(page_title="brofessor", page_icon="🎙", layout="wide")
 st.title("brofessor")
@@ -77,9 +77,13 @@ def open_project():
 
 # Keep unsaved draft buffers when their project's widgets are temporarily hidden.
 for state_key in list(st.session_state):
-    if state_key.startswith("editor:") or (
-        state_key.startswith("note:")
-        and state_key.rsplit(":", 1)[-1] in ("title", "text", "citations", "revision")
+    if (
+        state_key in ("minutes", "slide_count", "series_minutes", "episode_count")
+        or state_key.startswith("editor:")
+        or (
+            state_key.startswith("note:")
+            and state_key.rsplit(":", 1)[-1] in ("title", "text", "citations", "revision")
+        )
     ):
         st.session_state[state_key] = st.session_state[state_key]
 
@@ -130,27 +134,32 @@ with st.sidebar:
         st.stop()
     provider = st.selectbox(t("Provider"), ["codex", "claude", "ollama"], key="provider")
     model = st.text_input(t("Model (leave empty for the provider default)"), key="model") or None
-    ollama_port = st.session_state.get("selected_ollama_port", args.ollama_port)
-    if provider == "ollama":
-        ollama_port = st.number_input(
-            t("Ollama port"),
-            min_value=1,
-            max_value=65535,
-            value=ollama_port,
-            step=1,
-            key="ollama_port",
-            help=t("Port of the running Ollama server on 127.0.0.1."),
+    if (
+        "selected_ollama_address" not in st.session_state
+        and "selected_ollama_port" in st.session_state
+    ):
+        st.session_state["selected_ollama_address"] = (
+            f"127.0.0.1:{st.session_state.pop('selected_ollama_port')}"
         )
-        # Hidden widgets lose their state; preserve the port when switching providers.
-        st.session_state["selected_ollama_port"] = ollama_port
+    ollama_address = st.session_state.get("selected_ollama_address", args.ollama_address)
+    if provider == "ollama":
+        ollama_address = st.text_input(
+            t("Ollama address (IP:port)"),
+            st.session_state.get("selected_ollama_address", args.ollama_address),
+            key="ollama_address",
+            help=t("Address of the running Ollama server, e.g. 192.168.1.20:11434."),
+        )
+        st.session_state["selected_ollama_address"] = ollama_address
     st.caption(
-        t("Codex and Claude send selected text to their providers. Ollama and speech run locally.")
+        t(
+            "Codex and Claude send selected text to their providers. Ollama uses the selected server; speech runs on this computer."
+        )
     )
     if st.button(t("Check connection"), key="check_connection"):
         from brofessor.executors import doctor
 
         try:
-            diagnosis = doctor(provider, model, ollama_port=ollama_port)
+            diagnosis = doctor(provider, model, ollama_address=ollama_address)
             if diagnosis["available"]:
                 st.success(t("Connection ready"))
             else:
@@ -395,25 +404,22 @@ with create_tab:
             format_func=ui_language.LANGUAGE_NAMES.__getitem__,
             key="output_language",
         )
-        episode_count = 3
+        minutes, slide_count, episode_count = 20, 8, 3
         if kind == "podcast_series":
             episode_count = st.number_input(t("Number of episodes"), 2, 12, 3, key="episode_count")
             minutes = st.select_slider(
                 t("Episode duration, minutes"), [20, 30, 45, 60], value=20, key="series_minutes"
             )
             st.caption(t("Review the series plan, then prepare its episodes individually."))
-        else:
+        elif kind == "podcast":
             minutes = st.select_slider(
                 t("Podcast duration, minutes"), [3, 20, 30, 45, 60], value=20, key="minutes"
             )
             st.caption(
                 t("3 minutes is a short script and voice preview. Full episodes: 20–60 minutes.")
             )
-        slide_count = (
-            8
-            if kind == "podcast_series"
-            else st.number_input(t("Number of slides"), 1, 40, 8, key="slide_count")
-        )
+        elif kind == "slides":
+            slide_count = st.number_input(t("Number of slides"), 1, 40, 8, key="slide_count")
         submitted = st.button(t("Prepare"), disabled=not selected, key="prepare")
     if submitted:
         try:
@@ -427,9 +433,9 @@ with create_tab:
                         language,
                         provider,
                         model,
-                        ollama_port if provider == "ollama" else None,
-                        minutes,
-                        slide_count,
+                        ollama_address if provider == "ollama" else None,
+                        minutes if kind in ("podcast", "podcast_series") else None,
+                        slide_count if kind == "slides" else None,
                         episode_count if kind == "podcast_series" else None,
                     ],
                     ensure_ascii=False,
@@ -446,7 +452,7 @@ with create_tab:
                 language=language,
                 provider=provider,
                 model=model,
-                ollama_port=ollama_port,
+                ollama_address=ollama_address,
                 minutes=minutes,
                 slide_count=slide_count,
                 episode_count=episode_count,

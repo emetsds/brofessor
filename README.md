@@ -29,7 +29,7 @@ brofessor needs a text model to read your sources and write answers, slide outli
 |---|---|---|---|
 | Codex | Official Codex CLI, signed in with ChatGPT via `codex login` | `--provider codex` | OpenAI |
 | Claude Code | Official Claude Code CLI, signed in with its own subscription via `claude auth login` | `--provider claude` | Anthropic |
-| Ollama | Local server and a downloaded text model | `--provider ollama --model INSTALLED_MODEL` | Your computer |
+| Ollama | Server at your chosen IP:port and a downloaded text model | `--provider ollama --model INSTALLED_MODEL` | The selected Ollama server |
 
 In the terminal, `--provider` selects the tool. For example, `--provider claude` asks brofessor to use Claude Code to write the text. Codex is the default, so you can omit `--provider codex`.
 
@@ -39,7 +39,7 @@ In the web UI, make this choice in the sidebar: **Исполнитель** (Prov
 
 This choice controls text generation. Audio synthesis and PPTX rendering run locally afterward. brofessor uses the official CLI login for Codex/Claude and does not require an API key or switch to paid API billing.
 
-For Ollama, start the **server** with `OLLAMA_NO_CLOUD=1`. It must listen on `127.0.0.1` (port `11434` by default), report cloud disabled through `/api/status`, and have the named model installed. Setting the variable only in the brofessor terminal is insufficient. Both the UI and Ollama ports can be [changed](#choose-ports).
+For Ollama, start the **server** with `OLLAMA_NO_CLOUD=1`. It must report cloud disabled through `/api/status` and have the named model installed. The default address is `127.0.0.1:11434`; you can also select another computer by IP:port. Setting the variable only in the brofessor terminal is insufficient. The [UI port and Ollama address](#ui-port-and-ollama-address) can be changed.
 
 Check the chosen provider before generating anything:
 
@@ -72,32 +72,34 @@ To create a result (button labels below are shown in both languages):
 
 The UI and CLI see the same data when they use the same workspace. Jobs run in the background, so closing the browser does not cancel them.
 
-### Choose ports
+### UI port and Ollama address
 
-The web UI uses port **8501** by default. To open it on **8502** and set its Ollama port to **11435**:
+The UI listens on `127.0.0.1:8501` by default. To use UI port **8502** and a different local Ollama port:
 
 ```sh
-uv run --no-sync brofessor ui --port 8502 --ollama-port 11435
+uv run --no-sync brofessor ui --port 8502 --ollama-address 127.0.0.1:11435
 ```
 
-Open [localhost:8502](http://localhost:8502), select **ollama** in the sidebar, and enter your installed model name. You can change **Порт Ollama** (Ollama port) there too. Changing that field affects new jobs, not the web UI's address or existing jobs.
+Open [localhost:8502](http://localhost:8502), select **ollama**, enter the installed model name, and change **Адрес Ollama (IP:порт)** (Ollama address) if needed. This field sets the text server for new jobs; it does not change the UI address.
 
-`--ollama-port` tells brofessor where to connect; it does not start or reconfigure Ollama. Run the Ollama server on the matching port in another terminal:
+For Ollama on another computer, use that computer's IP and port:
+
+```sh
+uv run --no-sync brofessor doctor --provider ollama --model INSTALLED_MODEL --ollama-address 192.168.1.20:11434
+uv run --no-sync brofessor ask "What was measured?" --provider ollama --model INSTALLED_MODEL --ollama-address 192.168.1.20:11434 --language en --wait
+```
+
+Selected source text is sent to that server. Speech synthesis and PPTX rendering still run on the computer running brofessor. The server must be reachable and have cloud features disabled. Address syntax is IPv4 `IP:port` or IPv6 `[IP]:port`, for example `[::1]:11434`, with a port from 1 to 65535. Enter an address, not a URL, hostname, credentials, or path.
+
+`--ollama-address` works on `doctor`, `ask`, `slides`, `podcast`, `series plan`, and `ui`. It replaces `--ollama-port`. Existing jobs with a saved port retain their original `127.0.0.1` server and checkpoints when resumed. New jobs keep their selected address through follow-ups, episodes, worker restarts, and resume.
+
+The option connects to an existing server; it does not start or reconfigure Ollama. A local example in another terminal is:
 
 ```sh
 OLLAMA_HOST=127.0.0.1:11435 OLLAMA_NO_CLOUD=1 ollama serve
 ```
 
-If you run Ollama as a desktop app or service, configure and restart that server instead; see [Ollama server settings](https://docs.ollama.com/faq#how-do-i-configure-ollama-server).
-
-For CLI use, pass the port when checking the connection and creating a job:
-
-```sh
-uv run --no-sync brofessor doctor --provider ollama --model INSTALLED_MODEL --ollama-port 11435
-uv run --no-sync brofessor ask "What was measured?" --provider ollama --model INSTALLED_MODEL --ollama-port 11435 --language en --wait
-```
-
-The same `--ollama-port` option is available on `slides` and `podcast`. Each job keeps its selected port when resumed. Both ports accept values from 1 to 65535; both connections stay on this computer (`127.0.0.1`).
+For a server on another machine or managed by a desktop app/service, configure it there; see [Ollama server settings](https://docs.ollama.com/faq#how-do-i-configure-ollama-server).
 
 ## Use the CLI
 
@@ -169,7 +171,7 @@ Get IDs with `source list`. In the UI, use **Search source text** and **Search i
 
 ### Ask a follow-up
 
-Open a completed answer in **Jobs and results**, expand **Ask a follow-up**, and enter your question. Save or load any draft edits first. The new question uses that saved answer revision, its source selection, text provider, model setting, and Ollama port. The current sidebar provider and newly uploaded sources do not change this context. **Follow-up language** can change the answer language.
+Open a completed answer in **Jobs and results**, expand **Ask a follow-up**, and enter your question. Save or load any draft edits first. The new question uses that saved answer revision, its source selection, text provider, model setting, and Ollama address. The current sidebar provider and newly uploaded sources do not change this context. **Follow-up language** can change the answer language.
 
 From the CLI:
 
@@ -178,7 +180,7 @@ uv run --no-sync brofessor ask "And what was the wind speed then?" --reply-to AS
 uv run --no-sync brofessor ask "А это максимальная нагрузка?" --reply-to ASK_ID --revision 1 --language ru --wait
 ```
 
-Omit `--provider`, `--model`, `--source`, and `--ollama-port` on follow-ups: those settings are inherited. Without `--revision`, the current saved parent revision is pinned at submission. Later edits leave the submitted question's context intact. Use an explicit revision together with `--request-key` when retrying a submission that may overlap with edits.
+Omit `--provider`, `--model`, `--source`, and `--ollama-address` on follow-ups: those settings are inherited. Without `--revision`, the current saved parent revision is pinned at submission. Later edits leave the submitted question's context intact. Use an explicit revision together with `--request-key` when retrying a submission that may overlap with edits.
 
 Each answer can be continued again. **Conversation context** in the UI and `conversation` in `draft show` show the previous question/answer pairs actually included. Context keeps up to six recent pairs within 12,000 serialized characters; omitted older turns remain in job history and are reported. A single parent answer that exceeds the budget must be shortened or followed by a new standalone question. Previous answers help interpret phrases such as “what about it?”; facts and quotes are checked against original sources again. This is bounded follow-up context, rather than unlimited chat memory.
 
@@ -254,7 +256,15 @@ Omit `--extra speech` if you only use Silero. The current preset voices are `ru_
 
 New download and audio jobs save the selected model specification, including its pinned revision and preset voices. Updating the catalog or choosing another default keeps that job's selection. Completed snapshots remain shared across projects. Silero downloads are verified against a pinned SHA-256; interrupted HTTP downloads resume when the server supports ranges.
 
-F5-TTS v1 (English) and ESpeech RL-V2 (Russian) use the same local F5 runtime on Apple Silicon. Add `--extra f5` to your install command, then download `f5-tts` or `espeech-rl-v2`. The shared Vocos vocoder is downloaded once. F5 weights are CC-BY-NC-4.0 (personal/noncommercial use); ESpeech declares Apache-2.0.
+Three profiles use the same local F5 runtime on Apple Silicon. Add `--extra f5` to your install command, then download the chosen model; Vocos is shared.
+
+| Model ID | Language | Weights license |
+|---|---|---|
+| `f5-tts` | English | CC-BY-NC-4.0 |
+| `f5-tts-russian` | Russian, Misha24-10 v2 | CC-BY-NC-4.0 |
+| `espeech-rl-v2` | Russian | Apache-2.0, declared upstream |
+
+The F5 profiles are for personal/noncommercial use. New renders use catalog models shown by `tts list`; arbitrary repositories and local folders are not accepted for new jobs. Previously saved jobs remain resumable.
 
 These models need a WAV voice sample and its **exact transcript for each speaker**. In the UI, select the model, expand its **Voice sample: host/guest** controls, and save both samples. Use PCM16 WAV, 2–20 seconds, with clean speech. Voice profiles stay in your local user data directory and can be reused across projects. Each audio job also saves copies of its selected samples inside the project, together with the transcripts.
 
@@ -268,7 +278,7 @@ uv run --no-sync brofessor tts voice set guest --language ru --audio guest.wav -
 uv run --no-sync brofessor draft render PODCAST_DRAFT_ID --tts-model espeech-rl-v2 --wait
 ```
 
-For F5 English, use `f5-tts` and `--language en` when saving samples. brofessor does not download an ASR model to guess transcripts. ESpeech can use manually marked stress (`+`); automatic RUAccent processing is not included. Use samples you have permission to use. [Upstream F5](https://github.com/SWivid/F5-TTS), [ESpeech RL-V2](https://huggingface.co/ESpeech/ESpeech-TTS-1_RL-V2).
+For F5 Russian, replace `espeech-rl-v2` in the commands with `f5-tts-russian`. It downloads about 1.35 GB of model/vocabulary files and reuses Vocos. For F5 English, use `f5-tts` and `--language en` when saving samples. brofessor does not download an ASR model to guess transcripts. F5 Russian and ESpeech can use manually marked stress (`+` before a stressed vowel); automatic RUAccent processing is not included. Use samples you have permission to use. [Upstream F5](https://github.com/SWivid/F5-TTS), [F5 Russian](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN), [ESpeech RL-V2](https://huggingface.co/ESpeech/ESpeech-TTS-1_RL-V2). [Russian profile test and limits](docs/experiments/f5-russian-and-ollama-address.md).
 
 Start with a three-minute preview. For episodes of 20–60 minutes, brofessor first saves an episode outline, then writes distinct sections with checked word budgets. The outline is available as `outline.json` in the job's artifacts; short previews keep the simpler writing flow. Generated long scripts are split into short speech turns without dropping words.
 
@@ -293,7 +303,7 @@ uv run --no-sync brofessor draft show EPISODE_ID
 uv run --no-sync brofessor draft render EPISODE_ID --tts-model silero-cis-base --wait
 ```
 
-`SERIES_ID` is the plan job ID; `EPISODE_ID` is returned by `series episode`. Provider, text model, source selection, language and duration come from the saved series plan. Set `--provider`, `--model`, `--ollama-port` and repeated `--source` flags on `series plan` as needed.
+`SERIES_ID` is the plan job ID; `EPISODE_ID` is returned by `series episode`. Provider, text model, source selection, language and duration come from the saved series plan. Set `--provider`, `--model`, `--ollama-address` and repeated `--source` flags on `series plan` as needed.
 
 The plan has a topic map and assigns each topic ID to exactly one episode. This catches missing or repeated **assignments**; review the content to catch missing themes or topics repeated under different wording. All episodes receive the same glossary and their assigned scope. The accepted reading notes are shared inside the series, so the book is read once for the plan. Keep the whole project folder when moving it.
 

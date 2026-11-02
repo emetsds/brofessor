@@ -38,7 +38,7 @@ def make_answer(tmp_path):
         source_ids=[source["id"]],
         provider="ollama",
         model="local-test",
-        ollama_port=11435,
+        ollama_address="192.168.50.10:11435",
         language="en",
         start_worker=False,
     )
@@ -131,7 +131,10 @@ def test_ui_answer_note_and_cli_follow_up_share_pinned_inputs(tmp_path, monkeypa
     ui.button(key=f"follow-submit-{parent['id']}").click().run()
     assert not ui.exception and len(w.jobs()) == 2
     child = w.jobs()[0]
-    assert child["params"]["provider"] == "ollama" and child["params"]["ollama_port"] == 11435
+    assert (
+        child["params"]["provider"] == "ollama"
+        and child["params"]["ollama_address"] == "192.168.50.10:11435"
+    )
     assert child["params"]["conversation"] == [{"job_id": parent["id"], "revision": 1}]
     ui.button(key=f"follow-submit-{parent['id']}").click().run()
     assert len(w.jobs()) == 2
@@ -153,7 +156,8 @@ def test_ui_answer_note_and_cli_follow_up_share_pinned_inputs(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize(
-    "flags", [["--provider", "codex"], ["--model", "other"], ["--ollama-port", "11436"]]
+    "flags",
+    [["--provider", "codex"], ["--model", "other"], ["--ollama-address", "192.168.50.11:11436"]],
 )
 def test_follow_up_cli_rejects_silent_provider_overrides(tmp_path, monkeypatch, flags):
     w, parent = make_answer(tmp_path)

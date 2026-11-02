@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from .executors import DEFAULT_OLLAMA_PORT, ollama_url
+from .executors import DEFAULT_OLLAMA_ADDRESS, normalize_ollama_address
 from .models import Answer, Podcast, Slides, validate_citations
 from .workspace import Workspace, atomic_json
 
@@ -17,7 +17,7 @@ def submit(
     language="ru",
     provider="codex",
     model=None,
-    ollama_port=DEFAULT_OLLAMA_PORT,
+    ollama_address=DEFAULT_OLLAMA_ADDRESS,
     minutes=20,
     slide_count=8,
     episode_count=3,
@@ -28,7 +28,8 @@ def submit(
         raise ValueError("Choose ask, podcast, slides or podcast_series")
     if provider not in ("codex", "claude", "ollama"):
         raise ValueError("Choose codex, claude or ollama")
-    ollama_url(ollama_port)
+    if provider == "ollama":
+        ollama_address = normalize_ollama_address(ollama_address)
     if language not in ("ru", "en"):
         raise ValueError("Choose ru or en")
     if not 1 <= minutes <= 60 or not 1 <= slide_count <= 40:
@@ -52,9 +53,9 @@ def submit(
         "minutes": minutes,
         "slide_count": slide_count,
     }
-    # Omit the default to preserve request keys for jobs created before port selection.
-    if provider == "ollama" and ollama_port != DEFAULT_OLLAMA_PORT:
-        params["ollama_port"] = ollama_port
+    # Omit the default to preserve pre-address loopback request identities.
+    if provider == "ollama" and ollama_address != DEFAULT_OLLAMA_ADDRESS:
+        params["ollama_address"] = ollama_address
     if kind == "podcast_series":
         params["episode_count"] = episode_count
     result = workspace.submit(kind, params, request_key)
@@ -259,22 +260,18 @@ def render(
         # The first submit owns its snapshot, including legacy jobs without one.
         params = previous["params"]
     elif original["kind"] == "podcast":
-        try:
-            spec = get(model)
-        except ValueError:
-            spec = None  # The existing explicit repo@revision/local-directory API.
-        if spec and draft["data"]["language"] not in spec["languages"]:
+        spec = get(model)
+        if draft["data"]["language"] not in spec["languages"]:
             raise ValueError(f"Selected speech model does not support {draft['data']['language']}")
-        if spec:
-            from .speech import validate_text
+        from .speech import validate_text
 
-            for turn in draft["data"]["turns"]:
-                validate_text(spec, turn["text"])
-            if spec.get("requires_reference"):
-                from .speech_references import freeze, selected
+        for turn in draft["data"]["turns"]:
+            validate_text(spec, turn["text"])
+        if spec.get("requires_reference"):
+            from .speech_references import freeze, selected
 
-                spec["references"] = freeze(workspace.path, selected(draft["data"]["language"]))
-            params["model_spec"] = spec
+            spec["references"] = freeze(workspace.path, selected(draft["data"]["language"]))
+        params["model_spec"] = spec
     result = workspace.submit(kind, params, request_key)
     if start_worker:
         from .worker import ensure_worker
@@ -292,10 +289,7 @@ def render_request_key(workspace: Workspace, draft_job_id: str, model: str) -> s
     resolved = reference(model)
     from .speech_models import get
 
-    try:
-        spec = get(model)
-    except ValueError:
-        spec = {}
+    spec = get(model)
     if spec.get("requires_reference"):
         import hashlib
         import json

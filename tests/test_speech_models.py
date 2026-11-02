@@ -187,6 +187,43 @@ def test_retired_qwen_reference_uses_shared_installed_snapshot(models, monkeypat
     assert calls == [speech_models.snapshot(old)]
 
 
+@pytest.mark.parametrize("choice", ["unknown/repository@" + "a" * 40, "local-folder"])
+def test_new_render_rejects_models_outside_catalog_before_queueing(
+    models, tmp_path, monkeypatch, choice
+):
+    workspace = Workspace(tmp_path / "workspace")
+    path = tmp_path / "source.txt"
+    path.write_text("Synthetic evidence")
+    workspace.add_source(path)
+    citation = workspace.units()[0]["id"]
+    job = service.submit(workspace, "podcast", start_worker=False)
+    workspace.save_draft(
+        job["id"],
+        {
+            "title": "Test",
+            "language": "ru",
+            "turns": [
+                {"speaker": "host", "text": "Вопрос?", "citations": [citation]},
+                {"speaker": "guest", "text": "Ответ.", "citations": [citation]},
+            ],
+        },
+    )
+    folder = tmp_path / "local-folder"
+    folder.mkdir()
+    (folder / "config.json").write_text("{}")
+    model = str(folder) if choice == "local-folder" else choice
+    monkeypatch.setattr(
+        "brofessor.worker.ensure_worker", lambda *_: pytest.fail("Worker must not start")
+    )
+    with pytest.raises(ValueError, match="Unknown TTS model"):
+        service.render(workspace, job["id"], model=model)
+    result = CliRunner().invoke(
+        app, ["-w", str(workspace.path), "draft", "render", job["id"], "--tts-model", model]
+    )
+    assert result.exit_code == 2 and "Unknown TTS model" in result.output
+    assert len(workspace.jobs()) == 1
+
+
 @pytest.mark.parametrize("legacy", [True, False])
 def test_render_request_key_survives_snapshot_addition_and_distinguishes_revisions(
     models, tmp_path, legacy

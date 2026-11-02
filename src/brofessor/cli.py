@@ -11,11 +11,22 @@ import typer
 from click import ClickException
 
 from . import projects, service
-from .executors import DEFAULT_OLLAMA_PORT
+from .executors import DEFAULT_OLLAMA_ADDRESS, normalize_ollama_address
 from .workspace import Workspace
 
-OllamaPort = Annotated[
-    int, typer.Option(min=1, max=65535, help="Port of the local Ollama server (127.0.0.1).")
+
+def validate_ollama_address(value: str) -> str:
+    try:
+        return normalize_ollama_address(value)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+
+
+OllamaAddress = Annotated[
+    str,
+    typer.Option(
+        callback=validate_ollama_address, help="Ollama server IP:port, e.g. 127.0.0.1:11434."
+    ),
 ]
 
 app = typer.Typer(no_args_is_help=True, help="brofessor: sources, podcasts and presentations")
@@ -221,7 +232,7 @@ def submit_and_show(
     slide_count,
     wait,
     request_key,
-    ollama_port=DEFAULT_OLLAMA_PORT,
+    ollama_address=DEFAULT_OLLAMA_ADDRESS,
     episode_count=3,
 ):
     job = service.submit(
@@ -232,7 +243,7 @@ def submit_and_show(
         language=language,
         provider=provider,
         model=model,
-        ollama_port=ollama_port,
+        ollama_address=ollama_address,
         minutes=minutes,
         slide_count=slide_count,
         episode_count=episode_count,
@@ -251,7 +262,7 @@ def ask(
     question: str,
     provider: str = "codex",
     model: str | None = None,
-    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    ollama_address: OllamaAddress = DEFAULT_OLLAMA_ADDRESS,
     language: str | None = None,
     source: list[str] = typer.Option(None),
     wait: bool = False,
@@ -265,10 +276,10 @@ def ask(
     if reply_to is not None:
         if any(
             getattr(ctx.get_parameter_source(name), "name", None) == "COMMANDLINE"
-            for name in ("source", "provider", "model", "ollama_port")
+            for name in ("source", "provider", "model", "ollama_address")
         ):
             raise typer.BadParameter(
-                "Follow-ups inherit sources, provider, model and Ollama port; omit those flags."
+                "Follow-ups inherit sources, provider, model and Ollama address; omit those flags."
             )
         try:
             job = service.follow_up(
@@ -301,7 +312,7 @@ def ask(
         8,
         wait,
         request_key,
-        ollama_port=ollama_port,
+        ollama_address=ollama_address,
     )
 
 
@@ -361,7 +372,7 @@ def podcast(
     language: str = "ru",
     provider: str = "codex",
     model: str | None = None,
-    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    ollama_address: OllamaAddress = DEFAULT_OLLAMA_ADDRESS,
     source: list[str] = typer.Option(None),
     wait: bool = False,
     request_key: str | None = None,
@@ -379,7 +390,7 @@ def podcast(
         8,
         wait,
         request_key,
-        ollama_port=ollama_port,
+        ollama_address=ollama_address,
     )
 
 
@@ -391,7 +402,7 @@ def slides(
     language: str = "ru",
     provider: str = "codex",
     model: str | None = None,
-    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    ollama_address: OllamaAddress = DEFAULT_OLLAMA_ADDRESS,
     source: list[str] = typer.Option(None),
     wait: bool = False,
     request_key: str | None = None,
@@ -409,7 +420,7 @@ def slides(
         count,
         wait,
         request_key,
-        ollama_port=ollama_port,
+        ollama_address=ollama_address,
     )
 
 
@@ -422,7 +433,7 @@ def plan_series(
     language: str = "ru",
     provider: str = "codex",
     model: str | None = None,
-    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    ollama_address: OllamaAddress = DEFAULT_OLLAMA_ADDRESS,
     source: list[str] = typer.Option(None),
     wait: bool = False,
     request_key: str | None = None,
@@ -440,7 +451,7 @@ def plan_series(
         8,
         wait,
         request_key,
-        ollama_port=ollama_port,
+        ollama_address=ollama_address,
         episode_count=episodes,
     )
 
@@ -516,12 +527,15 @@ def render_draft(
         None,
         "--tts-model",
         "--model",
-        help="Speech model ID from tts list, repo@revision, or local folder.",
+        help="Supported speech model ID from tts list.",
     ),
     request_key: str | None = None,
     wait: bool = False,
 ):
-    job = service.render(ctx.obj, job_id, model=model, request_key=request_key)
+    try:
+        job = service.render(ctx.obj, job_id, model=model, request_key=request_key)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
     if wait:
         job = wait_for_job(ctx.obj, job["id"])
     show({**job, "artifacts": ctx.obj.artifacts(job["id"])})
@@ -533,12 +547,12 @@ def render_draft(
 def doctor(
     provider: str = "codex",
     model: str | None = None,
-    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    ollama_address: OllamaAddress = DEFAULT_OLLAMA_ADDRESS,
 ):
     """Report local executor capabilities without performing inference."""
     from .executors import doctor as diagnose
 
-    show(diagnose(provider, model, ollama_port=ollama_port))
+    show(diagnose(provider, model, ollama_address=ollama_address))
 
 
 @app.command()
@@ -555,7 +569,7 @@ def worker(ctx: typer.Context, once: bool = False):
 def ui(
     ctx: typer.Context,
     port: int = typer.Option(8501, min=1, max=65535, help="Port for the local web UI."),
-    ollama_port: OllamaPort = DEFAULT_OLLAMA_PORT,
+    ollama_address: OllamaAddress = DEFAULT_OLLAMA_ADDRESS,
 ):
     """Open the local Streamlit interface for this workspace."""
     module = Path(__file__).with_name("ui.py")
@@ -576,8 +590,8 @@ def ui(
                 "--browser.gatherUsageStats=false",
                 "--",
                 *workspace_args,
-                "--ollama-port",
-                str(ollama_port),
+                "--ollama-address",
+                str(ollama_address),
             ]
         )
     )

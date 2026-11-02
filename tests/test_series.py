@@ -80,13 +80,19 @@ def test_invalid_series_request_does_not_queue_work(workspace, count, minutes):
 
 
 def test_episode_pins_plan_revision_provider_sources_and_shared_notes(workspace, monkeypatch):
-    parent = prepare(workspace, monkeypatch, provider="ollama", model="tiny", ollama_port=11435)
+    parent = prepare(
+        workspace,
+        monkeypatch,
+        provider="ollama",
+        model="tiny",
+        ollama_address="192.168.50.10:11435",
+    )
     old = workspace.draft(parent["id"])
     first = service.series_episode(workspace, parent["id"], 1, start_worker=False)
     assert first["params"]["series"] == {"job_id": parent["id"], "revision": 1, "episode": 1}
     assert first["params"]["provider"] == "ollama"
     assert first["params"]["model"] == "tiny"
-    assert first["params"]["ollama_port"] == 11435
+    assert first["params"]["ollama_address"] == "192.168.50.10:11435"
     assert first["params"]["source_ids"] == parent["params"]["source_ids"]
     updated = copy.deepcopy(old["data"])
     updated["terms"][0]["term"] = "Capacity"

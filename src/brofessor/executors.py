@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import copy
+import ipaddress
 import json
 import math
 import os
@@ -26,6 +27,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -48,10 +50,11 @@ _BOUNDARY = (
     "Do not execute commands, read files, browse, invoke tools, or delegate.\n\n"
 )
 DEFAULT_OLLAMA_PORT = 11434
+DEFAULT_OLLAMA_ADDRESS = "127.0.0.1:11434"
 _OLLAMA_SETUP = (
     "Start or restart the Ollama server with OLLAMA_NO_CLOUD=1. "
     "The server must expose /api/status with cloud.disabled=true. "
-    "A localhost address or a client environment variable alone does not verify local-only mode."
+    "The configured address or a client environment variable alone does not verify disabled server cloud features."
 )
 
 
@@ -59,11 +62,39 @@ class CancelledError(RuntimeError):
     """The caller cancelled the job; no partial result may be published."""
 
 
-def ollama_url(port: int) -> str:
-    """Validate a TCP port and keep Ollama restricted to this machine."""
-    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-        raise ValueError("Ollama port must be an integer from 1 to 65535")
-    return f"http://127.0.0.1:{port}"
+def normalize_ollama_address(address: str) -> str:
+    """Accept an explicit IPv4:port or [IPv6]:port, without URL extras."""
+    message = "Ollama address must be IP:port (for example 127.0.0.1:11434 or [::1]:11434)"
+    try:
+        if not isinstance(address, str) or "://" in address:
+            raise ValueError
+        if any(char.isspace() for char in address.strip()):
+            raise ValueError
+        parsed = urlsplit("http://" + address.strip())
+        if parsed.netloc != address.strip() or parsed.username is not None:
+            raise ValueError
+        ip = ipaddress.ip_address(parsed.hostname)
+        port = parsed.port
+        if port is None or not 1 <= port <= 65535 or "%" in str(ip):
+            raise ValueError
+    except (ValueError, TypeError):
+        raise ValueError(message) from None
+    host = f"[{ip.compressed}]" if ip.version == 6 else ip.compressed
+    return f"{host}:{port}"
+
+
+def ollama_url(address: str) -> str:
+    return "http://" + normalize_ollama_address(address)
+
+
+def ollama_address_for_job(params: dict) -> str:
+    """Keep saved port-only jobs on their original loopback server."""
+    if "ollama_address" in params:
+        return normalize_ollama_address(params["ollama_address"])
+    port = params.get("ollama_port", DEFAULT_OLLAMA_PORT)
+    if type(port) is not int:
+        raise ValueError("Saved Ollama port must be an integer")
+    return normalize_ollama_address(f"127.0.0.1:{port}")
 
 
 def _check_cancel(cancelled: Callable[[], bool] | None) -> None:
@@ -324,15 +355,15 @@ def generate(
     provider: str,
     model: str | None = None,
     *,
-    ollama_port: int = DEFAULT_OLLAMA_PORT,
+    ollama_address: str = DEFAULT_OLLAMA_ADDRESS,
     workdir: Path,
     timeout: float = 600,
     cancelled: Callable[[], bool] | None = None,
 ) -> dict:
     """Return one terminal JSON object, or fail without publishing partial output.
 
-    Ollama is fixed to loopback; redirects, HTTP proxies and cloud aliases are
-    forbidden. Its server must report disabled cloud features before receiving
+    Ollama uses the selected IP:port; redirects, HTTP proxies and cloud aliases
+    are forbidden. Its server must report disabled cloud features before receiving
     source data. No provider is auto-installed, downloaded, or authenticated.
     """
     if not math.isfinite(timeout) or timeout <= 0:
@@ -345,7 +376,7 @@ def generate(
         raise RuntimeError(f"Unsupported executor: {provider}")
     _check_cancel(cancelled)
     if provider == "ollama":
-        url = ollama_url(ollama_port)
+        url = ollama_url(ollama_address)
         _local_model_name(model)
         return asyncio.run(_bounded_ollama(prompt, schema, model, timeout, cancelled, url))
     _check_billing(provider)
@@ -443,7 +474,7 @@ async def _ollama_preflight(client: httpx.AsyncClient, model: str | None) -> dic
         raise RuntimeError("Ollama returned invalid local model metadata")
     if model is None:
         return {
-            "local_only_verified": True,
+            "cloud_disabled_verified": True,
             "models": [
                 item.get("name") for item in models if isinstance(item, dict) and not _remote(item)
             ],
@@ -464,7 +495,7 @@ async def _ollama_preflight(client: httpx.AsyncClient, model: str | None) -> dic
     details = await _get_object(client, "POST", "/api/show", json={"model": model})
     if _remote(details):
         raise RuntimeError("Ollama selected model points to a remote model")
-    result = {"local_only_verified": True, "model": name, "digest": entry.get("digest")}
+    result = {"cloud_disabled_verified": True, "model": name, "digest": entry.get("digest")}
     thinking = details.get("thinking")
     values = thinking.get("values") if isinstance(thinking, dict) else None
     if isinstance(values, list) and any(value is False for value in values):
@@ -546,7 +577,9 @@ async def _bounded_ollama(prompt, schema, model, timeout, cancelled, url) -> dic
                 _check_cancel(cancelled)
                 return task.result()
     except httpx.HTTPError:
-        raise RuntimeError("Cannot reach local Ollama or its response was interrupted") from None
+        raise RuntimeError(
+            "Cannot reach the selected Ollama server or its response was interrupted"
+        ) from None
     finally:
         if not task.done():
             task.cancel()
@@ -555,7 +588,7 @@ async def _bounded_ollama(prompt, schema, model, timeout, cancelled, url) -> dic
 
 
 def doctor(
-    provider: str, model: str | None = None, *, ollama_port: int = DEFAULT_OLLAMA_PORT
+    provider: str, model: str | None = None, *, ollama_address: str = DEFAULT_OLLAMA_ADDRESS
 ) -> dict:
     """Read-only, nonsecret diagnostics. Does not generate tokens or log in."""
     result = {
@@ -566,7 +599,8 @@ def doctor(
     }
     try:
         if provider == "ollama":
-            url = ollama_url(ollama_port)
+            url = ollama_url(ollama_address)
+            result["address"] = normalize_ollama_address(ollama_address)
             if model:
                 _local_model_name(model)
 
@@ -577,7 +611,7 @@ def doctor(
                     return await _ollama_preflight(client, model)
 
             result.update(asyncio.run(inspect()))
-            result.update(available=True, auth_mode="local_no_auth")
+            result.update(available=True, auth_mode="server_no_auth")
         elif provider in {"codex", "claude"}:
             _check_billing(provider)
             binary = _binary(provider)
@@ -596,6 +630,6 @@ def doctor(
         result["diagnostic"] = (
             str(error)
             if isinstance(error, (ValueError, RuntimeError))
-            else ("Cannot reach the local Ollama server. " + _OLLAMA_SETUP)
+            else ("Cannot reach the selected Ollama server. " + _OLLAMA_SETUP)
         )
     return result

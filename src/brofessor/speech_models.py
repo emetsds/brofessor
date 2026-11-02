@@ -118,14 +118,7 @@ def use(model: str) -> dict:
 
 
 def reference(model: str | None = None) -> str:
-    choice = model or selected()
-    try:
-        item = get(choice)
-    except ValueError:
-        if model is None:
-            raise
-        return choice  # Preserve the existing repo@revision/local-directory API.
-    return _reference(item)
+    return _reference(get(model or selected()))
 
 
 def _reference(item: dict) -> str:

@@ -246,7 +246,7 @@ def test_external_edit_preserves_unsaved_ui_buffer(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("command", ["ask", "slides", "podcast"])
-def test_cli_saves_custom_ollama_port_with_job(tmp_path, monkeypatch, command):
+def test_cli_saves_custom_ollama_address_with_job(tmp_path, monkeypatch, command):
     workspace = Workspace(tmp_path / "workspace")
     source = tmp_path / "chapter.md"
     source.write_text("A bridge carries 1200 kilograms.")
@@ -256,45 +256,64 @@ def test_cli_saves_custom_ollama_port_with_job(tmp_path, monkeypatch, command):
     if command == "ask":
         args.append("What was measured?")
     result = CliRunner().invoke(
-        app, [*args, "--provider", "ollama", "--model", "tiny", "--ollama-port", "11435"]
+        app,
+        [
+            *args,
+            "--provider",
+            "ollama",
+            "--model",
+            "tiny",
+            "--ollama-address",
+            "192.168.50.10:11435",
+        ],
     )
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output)["params"]["ollama_port"] == 11435
-    assert Workspace(workspace.path).jobs()[0]["params"]["ollama_port"] == 11435
+    assert json.loads(result.output)["params"]["ollama_address"] == "192.168.50.10:11435"
+    assert Workspace(workspace.path).jobs()[0]["params"]["ollama_address"] == "192.168.50.10:11435"
 
 
-def test_cli_doctor_uses_selected_ollama_port(tmp_path, monkeypatch):
+def test_cli_doctor_uses_selected_ollama_address(tmp_path, monkeypatch):
     calls = []
 
-    def diagnose(provider, model, *, ollama_port):
-        calls.append((provider, model, ollama_port))
+    def diagnose(provider, model, *, ollama_address):
+        calls.append((provider, model, ollama_address))
         return {"available": True}
 
     monkeypatch.setattr("brofessor.executors.doctor", diagnose)
     result = CliRunner().invoke(
-        app, ["-w", str(tmp_path), "doctor", "--provider", "ollama", "--ollama-port", "11435"]
+        app,
+        [
+            "-w",
+            str(tmp_path),
+            "doctor",
+            "--provider",
+            "ollama",
+            "--ollama-address",
+            "192.168.50.10:11435",
+        ],
     )
     assert result.exit_code == 0, result.output
-    assert calls == [("ollama", None, 11435)]
+    assert calls == [("ollama", None, "192.168.50.10:11435")]
 
 
 def test_ui_launch_passes_both_ports_to_streamlit(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr("brofessor.cli.subprocess.call", lambda args: calls.append(args) or 0)
     result = CliRunner().invoke(
-        app, ["-w", str(tmp_path), "ui", "--port", "8502", "--ollama-port", "11435"]
+        app,
+        ["-w", str(tmp_path), "ui", "--port", "8502", "--ollama-address", "192.168.50.10:11435"],
     )
     assert result.exit_code == 0, result.output
     assert len(calls) == 1
     assert "--server.address=127.0.0.1" in calls[0]
     assert "--server.port=8502" in calls[0]
     app_args = calls[0][calls[0].index("--") + 1 :]
-    assert app_args == ["--workspace", str(tmp_path), "--ollama-port", "11435"]
+    assert app_args == ["--workspace", str(tmp_path), "--ollama-address", "192.168.50.10:11435"]
 
 
 @pytest.mark.parametrize("port", ["0", "65536"])
 @pytest.mark.parametrize(
-    "args", [["ui", "--port"], ["ui", "--ollama-port"], ["doctor", "--ollama-port"]]
+    "args", [["ui", "--port"], ["ui", "--ollama-address"], ["doctor", "--ollama-address"]]
 )
 def test_invalid_cli_ports_fail_before_launch(tmp_path, monkeypatch, args, port):
     monkeypatch.setattr("brofessor.cli.subprocess.call", lambda *a: pytest.fail("Must not launch"))
@@ -303,7 +322,7 @@ def test_invalid_cli_ports_fail_before_launch(tmp_path, monkeypatch, args, port)
     )
     result = CliRunner().invoke(app, ["-w", str(tmp_path), *args, port])
     assert result.exit_code == 2, result.output
-    assert "range" in result.output
+    assert ("range" if "--port" in args else "IP:port") in result.output
 
 
 def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
@@ -314,13 +333,14 @@ def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
     monkeypatch.setattr("brofessor.worker.ensure_worker", lambda workspace: None)
     calls = []
 
-    def diagnose(provider, model, *, ollama_port):
-        calls.append((provider, model, ollama_port))
+    def diagnose(provider, model, *, ollama_address):
+        calls.append((provider, model, ollama_address))
         return {"available": True}
 
     monkeypatch.setattr("brofessor.executors.doctor", diagnose)
     monkeypatch.setattr(
-        "sys.argv", ["ui.py", "--workspace", str(workspace.path), "--ollama-port", "11435"]
+        "sys.argv",
+        ["ui.py", "--workspace", str(workspace.path), "--ollama-address", "192.168.50.10:11435"],
     )
     ui = AppTest.from_file(
         str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
@@ -330,29 +350,64 @@ def test_ui_uses_selected_port_for_check_and_jobs(tmp_path, monkeypatch):
         "tiny"
     ).run()
     assert not ui.exception
-    assert ui.number_input(key="ollama_port").value == 11435
-    ui.number_input(key="ollama_port").set_value(11436).run()
+    assert ui.text_input(key="ollama_address").value == "192.168.50.10:11435"
+    ui.text_input(key="ollama_address").set_value("192.168.50.11:11436").run()
     next(field for field in ui.selectbox if field.label == "Исполнитель").select("codex").run()
     next(field for field in ui.selectbox if field.label == "Исполнитель").select("ollama").run()
-    assert ui.number_input(key="ollama_port").value == 11436
+    assert ui.text_input(key="ollama_address").value == "192.168.50.11:11436"
     for button in ui.button:
         if button.label == "Проверить подключение":
             button.click().run()
             break
-    assert calls == [("ollama", "tiny", 11436)]
+    assert calls == [("ollama", "tiny", "192.168.50.11:11436")]
     for button in ui.button:
         if button.label == "Подготовить":
             button.click().run()
             break
     assert not ui.exception
-    assert workspace.jobs()[0]["params"]["ollama_port"] == 11436
-    ui.number_input(key="ollama_port").set_value(11437).run()
+    assert workspace.jobs()[0]["params"]["ollama_address"] == "192.168.50.11:11436"
+    ui.text_input(key="ollama_address").set_value("192.168.50.12:11437").run()
     for button in ui.button:
         if button.label == "Подготовить":
             button.click().run()
             break
     assert not ui.exception
-    assert {job["params"]["ollama_port"] for job in workspace.jobs()} == {11436, 11437}
+    assert {job["params"]["ollama_address"] for job in workspace.jobs()} == {
+        "192.168.50.11:11436",
+        "192.168.50.12:11437",
+    }
+
+
+def test_create_form_uses_only_relevant_options_and_keeps_question_identity(tmp_path, monkeypatch):
+    w = Workspace(tmp_path / "workspace")
+    source = tmp_path / "source.txt"
+    source.write_text("A load test was performed.")
+    w.add_source(source)
+    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(w.path)])
+    monkeypatch.setattr("brofessor.worker.ensure_worker", lambda *_: None)
+    ui = AppTest.from_file(
+        str(Path(__file__).parents[1] / "src/brofessor/ui.py"), default_timeout=30
+    ).run()
+    ui.selectbox(key="kind").select("ask").run()
+    ui.text_area(key="focus").set_value("What was tested?")
+    ui.button(key="prepare").click().run()
+    assert not ui.exception and len(w.jobs()) == 1
+    original = w.jobs()[0]["id"]
+    assert not any(e.key == "minutes" for e in ui.select_slider)
+    assert not any(e.key == "slide_count" for e in ui.number_input)
+    ui.selectbox(key="kind").select("podcast").run()
+    ui.select_slider(key="minutes").set_value(60).run()
+    assert not any(e.key == "slide_count" for e in ui.number_input)
+    ui.selectbox(key="kind").select("slides").run()
+    ui.number_input(key="slide_count").set_value(4).run()
+    assert not any(e.key == "minutes" for e in ui.select_slider)
+    ui.selectbox(key="kind").select("ask").run()
+    ui.button(key="prepare").click().run()
+    assert not ui.exception and [j["id"] for j in w.jobs()] == [original]
+    ui.selectbox(key="kind").select("podcast").run()
+    assert ui.select_slider(key="minutes").value == 60
+    ui.selectbox(key="kind").select("slides").run()
+    assert ui.number_input(key="slide_count").value == 4
 
 
 def test_ui_language_is_remembered_across_sessions_and_workspaces(tmp_path, monkeypatch):
@@ -408,9 +463,9 @@ def test_language_switch_preserves_form_inputs_and_unsaved_draft(tmp_path, monke
     ui.text_area(key=buffer_key).set_value(unsaved).run()
     ui.selectbox(key="provider").select("ollama").run()
     ui.text_input(key="model").set_value("tiny").run()
-    ui.number_input(key="ollama_port").set_value(11435).run()
+    ui.text_input(key="ollama_address").set_value("192.168.50.10:11435").run()
     ui.multiselect(key="source_ids").set_value([added["id"]])
-    ui.selectbox(key="kind").select("slides")
+    ui.selectbox(key="kind").select("slides").run()
     ui.selectbox(key="output_language").select("en")
     ui.text_area(key="focus").set_value("Keep my focus")
     ui.number_input(key="slide_count").set_value(4)
@@ -419,7 +474,7 @@ def test_language_switch_preserves_form_inputs_and_unsaved_draft(tmp_path, monke
     assert ui.selectbox(key="project_selector").value == str(workspace.path)
     assert ui.selectbox(key="provider").value == "ollama"
     assert ui.text_input(key="model").value == "tiny"
-    assert ui.number_input(key="ollama_port").value == 11435
+    assert ui.text_input(key="ollama_address").value == "192.168.50.10:11435"
     assert ui.multiselect(key="source_ids").value == [added["id"]]
     assert ui.selectbox(key="kind").value == "slides"
     assert ui.selectbox(key="output_language").value == "en"
@@ -508,7 +563,9 @@ def test_switching_projects_keeps_unsaved_draft_buffer(tmp_path, monkeypatch):
     assert workspace.draft(job["id"])["data"]["answer"] == "Original answer"
 
 
-@pytest.mark.parametrize("choice", ["qwen3-1.7b", "silero-cis-base", "f5-tts", "espeech-rl-v2"])
+@pytest.mark.parametrize(
+    "choice", ["qwen3-1.7b", "silero-cis-base", "f5-tts", "f5-tts-russian", "espeech-rl-v2"]
+)
 def test_ui_download_uses_chosen_model_and_shared_job_queue(tmp_path, monkeypatch, choice):
     from brofessor import speech_models
 

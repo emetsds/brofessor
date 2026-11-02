@@ -137,29 +137,48 @@ def test_chapter_summary_cannot_cite_unseen_chapter(workspace, tmp_path, monkeyp
         pipeline.execute(workspace, job)
 
 
-@pytest.mark.parametrize("port", [0, -1, 65536, True, 11435.0, "11435", None])
-def test_invalid_ollama_port_is_rejected_before_queueing(workspace, monkeypatch, port):
+@pytest.mark.parametrize("port", [0, -1, 65536, True, 11435.0, "192.168.50.10", None])
+def test_invalid_ollama_address_is_rejected_before_queueing(workspace, monkeypatch, port):
     started = []
     monkeypatch.setattr(worker, "ensure_worker", lambda *_: started.append(True))
-    with pytest.raises(ValueError, match="Ollama port"):
-        service.submit(workspace, "ask", focus="Load?", provider="ollama", ollama_port=port)
+    with pytest.raises(ValueError, match="Ollama address"):
+        service.submit(workspace, "ask", focus="Load?", provider="ollama", ollama_address=port)
     assert workspace.jobs() == []
     assert started == []
 
 
-def test_ollama_port_is_persisted_and_part_of_request_identity(workspace):
+def test_ollama_address_is_persisted_and_part_of_request_identity(workspace):
     options = dict(focus="Load?", provider="ollama", model="tiny", start_worker=False)
-    job = service.submit(workspace, "ask", ollama_port=11435, request_key="same", **options)
+    job = service.submit(
+        workspace, "ask", ollama_address="192.168.50.10:11435", request_key="same", **options
+    )
     reopened = Workspace(workspace.path)
-    assert reopened.job(job["id"])["params"]["ollama_port"] == 11435
-    repeated = service.submit(reopened, "ask", ollama_port=11435, request_key="same", **options)
+    assert reopened.job(job["id"])["params"]["ollama_address"] == "192.168.50.10:11435"
+    repeated = service.submit(
+        reopened, "ask", ollama_address="192.168.50.10:11435", request_key="same", **options
+    )
     assert repeated["id"] == job["id"]
     with pytest.raises(ValueError, match="different operation"):
-        service.submit(reopened, "ask", ollama_port=11436, request_key="same", **options)
+        service.submit(
+            reopened, "ask", ollama_address="192.168.50.11:11436", request_key="same", **options
+        )
+
+
+def test_unused_ollama_address_does_not_block_another_provider(workspace):
+    job = service.submit(
+        workspace,
+        "ask",
+        focus="Load?",
+        provider="codex",
+        ollama_address="unfinished input",
+        start_worker=False,
+    )
+    assert job["params"]["provider"] == "codex"
+    assert "ollama_address" not in job["params"]
 
 
 @pytest.mark.parametrize("provider", ["codex", "ollama"])
-def test_default_ollama_port_preserves_legacy_request_identity(workspace, provider):
+def test_default_ollama_address_preserves_legacy_request_identity(workspace, provider):
     params = {
         "source_ids": [source["id"] for source in workspace.sources()],
         "focus": "Load?",
@@ -175,20 +194,20 @@ def test_default_ollama_port_preserves_legacy_request_identity(workspace, provid
         "ask",
         focus="Load?",
         provider=provider,
-        ollama_port=11434,
+        ollama_address="127.0.0.1:11434",
         request_key="legacy",
         start_worker=False,
     )
     assert repeated["id"] == legacy["id"]
-    assert "ollama_port" not in repeated["params"]
+    assert "ollama_address" not in repeated["params"]
 
 
-def test_custom_ollama_port_survives_worker_restart_and_resume(workspace, monkeypatch):
+def test_custom_ollama_address_survives_worker_restart_and_resume(workspace, monkeypatch):
     citation = workspace.units()[0]["id"]
     calls = []
 
     def generate(prompt, schema, provider, model, **kwargs):
-        calls.append((prompt, provider, model, kwargs["ollama_port"]))
+        calls.append((prompt, provider, model, kwargs["ollama_address"]))
         if len(calls) == 2:
             raise RuntimeError("Synthetic interruption after the first checkpoint")
         return {
@@ -206,7 +225,7 @@ def test_custom_ollama_port_survives_worker_restart_and_resume(workspace, monkey
         "podcast",
         provider="ollama",
         model="tiny",
-        ollama_port=11435,
+        ollama_address="192.168.50.10:11435",
         minutes=10,
         start_worker=False,
     )
@@ -218,7 +237,7 @@ def test_custom_ollama_port_survives_worker_restart_and_resume(workspace, monkey
     assert reopened.job(job["id"])["status"] == "succeeded"
     assert len(calls) == 3
     assert calls[1] == calls[2]
-    assert all(call[1:] == ("ollama", "tiny", 11435) for call in calls)
+    assert all(call[1:] == ("ollama", "tiny", "192.168.50.10:11435") for call in calls)
     assert len(reopened.draft(job["id"])["data"]["turns"]) == 4
 
 
@@ -228,7 +247,7 @@ def test_legacy_job_reuses_original_checkpoint_identity(workspace, monkeypatch, 
     calls = []
 
     def generate(prompt, schema, provider, model, **kwargs):
-        calls.append((prompt, schema, kwargs["ollama_port"]))
+        calls.append((prompt, schema, kwargs["ollama_address"]))
         return {
             "answer": "1200 kg",
             "citations": [citation],
@@ -237,9 +256,9 @@ def test_legacy_job_reuses_original_checkpoint_identity(workspace, monkeypatch, 
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
     job = service.submit(workspace, "ask", focus="Load?", provider=provider, start_worker=False)
-    assert "ollama_port" not in job["params"]
+    assert "ollama_address" not in job["params"]
     pipeline.execute(workspace, job)
-    assert calls[0][2] == 11434
+    assert calls[0][2] == "127.0.0.1:11434"
     legacy_fingerprint = hashlib.sha256(
         json.dumps(
             {"prompt": calls[0][0], "schema": calls[0][1], "provider": provider, "model": None},
@@ -255,14 +274,14 @@ def test_legacy_job_reuses_original_checkpoint_identity(workspace, monkeypatch, 
 
 
 @pytest.mark.parametrize("provider,expected_calls", [("ollama", 2), ("codex", 1)])
-def test_checkpoint_identity_changes_with_ollama_port_only(
+def test_checkpoint_identity_changes_with_ollama_address_only(
     workspace, monkeypatch, provider, expected_calls
 ):
     citation = workspace.units()[0]["id"]
     calls = []
 
     def generate(*args, **kwargs):
-        calls.append(kwargs["ollama_port"])
+        calls.append(kwargs["ollama_address"])
         return {
             "answer": "1200 kg",
             "citations": [citation],
@@ -271,17 +290,62 @@ def test_checkpoint_identity_changes_with_ollama_port_only(
 
     monkeypatch.setattr("brofessor.executors.generate", generate)
     job = service.submit(
-        workspace, "ask", focus="Load?", provider=provider, ollama_port=11435, start_worker=False
+        workspace,
+        "ask",
+        focus="Load?",
+        provider=provider,
+        ollama_address="192.168.50.10:11435",
+        start_worker=False,
     )
-    assert ("ollama_port" in job["params"]) is (provider == "ollama")
+    assert ("ollama_address" in job["params"]) is (provider == "ollama")
     pipeline.execute(workspace, job)
-    job["params"]["ollama_port"] = 11436
+    job["params"]["ollama_address"] = "192.168.50.11:11436"
     pipeline.execute(workspace, job)
-    job["params"]["ollama_port"] = 11435
+    job["params"]["ollama_address"] = "192.168.50.10:11435"
     pipeline.execute(workspace, job)
     assert len(calls) == expected_calls
     if provider == "ollama":
-        assert calls == [11435, 11436]
+        assert calls == ["192.168.50.10:11435", "192.168.50.11:11436"]
+
+
+def test_saved_port_only_job_keeps_loopback_and_checkpoint_key(workspace, monkeypatch):
+    citation = workspace.units()[0]["id"]
+    calls = []
+
+    def generate(prompt, schema, provider, model, **kwargs):
+        calls.append((prompt, schema, kwargs["ollama_address"]))
+        return {
+            "answer": "1200 kg",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        }
+
+    monkeypatch.setattr("brofessor.executors.generate", generate)
+    params = {
+        "source_ids": [s["id"] for s in workspace.sources()],
+        "focus": "Load?",
+        "language": "ru",
+        "provider": "ollama",
+        "model": "tiny",
+        "minutes": 20,
+        "slide_count": 8,
+        "ollama_port": 11435,
+    }
+    job = workspace.submit("ask", params)
+    pipeline.execute(workspace, job)
+    prompt, schema, address = calls[0]
+    assert address == "127.0.0.1:11435"
+    identity = {
+        "prompt": prompt,
+        "schema": schema,
+        "provider": "ollama",
+        "model": "tiny",
+        "ollama_port": 11435,
+    }
+    fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    assert (workspace.path / "jobs" / job["id"] / "checkpoints" / f"{fingerprint}.json").is_file()
+    pipeline.execute(Workspace(workspace.path), job)
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize("kind", ["flashcards", "render_flashcards"])
