@@ -8,7 +8,7 @@ from brofessor.contracts.jobs import JobKind
 from brofessor.features.books import translation as book_translation
 from brofessor.interfaces.web.components import content as ui_content
 from brofessor.interfaces.web.components import layout as ui_layout
-from brofessor.interfaces.web.state_keys import UI_PREFIX, EditorSuffix, widget_options
+from brofessor.interfaces.web.state_keys import UI_PREFIX, EditorSuffix
 
 
 def glossary_input(key, t):
@@ -83,7 +83,7 @@ def controls(workspace, job, draft, saved, t, open_result):
         terms = {term["id"]: term for term in data["terms"]}
         selected = st.selectbox(
             t("Term meaning"),
-            widget_options(list(terms)),
+            list(terms),
             format_func=lambda key: f"{terms[key]['term']} · {terms[key]['sense']}",
             key=UI_PREFIX + prefix + ":meaning",
         )

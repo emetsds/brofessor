@@ -7,7 +7,7 @@ from functools import partial
 import streamlit as st
 
 from brofessor.application import service, tasks
-from brofessor.contracts.content import ArtifactKind, EvidenceStatus
+from brofessor.contracts.content import ArtifactKind, EvidenceStatus, UnitStatus
 from brofessor.contracts.jobs import (
     ACTIVE_JOB_STATUSES,
     ALL_TASK_KINDS_FILTER,
@@ -18,7 +18,7 @@ from brofessor.contracts.jobs import (
     JobStatus,
 )
 from brofessor.features.podcasts.writer import WritingMethod
-from brofessor.features.sources.reading import ReadingStatus
+from brofessor.features.sources.reading import ReadingMode, ReadingStatus
 from brofessor.infrastructure.speech import catalogue as speech_models
 from brofessor.interfaces.web.components import content as ui_content
 from brofessor.interfaces.web.components import language as ui_language
@@ -35,6 +35,7 @@ from brofessor.interfaces.web.state_keys import (
     NAVIGATE_KEY,
     NAVIGATION_KEY,
     EditorSuffix,
+    Page,
     ProjectKey,
     project_key,
     widget_options,
@@ -240,7 +241,7 @@ def results(context):
 
             st.selectbox(
                 t("Related tasks"),
-                widget_options(options),
+                options,
                 index=None,
                 format_func=related_label,
                 key=related_key,
@@ -262,7 +263,7 @@ def results(context):
         ]
         rendered = None
         output_area = None
-        own_files = [a for a in workspace.artifacts(selected) if a["kind"] != "json"]
+        own_files = [a for a in workspace.artifacts(selected) if a["kind"] != ArtifactKind.JSON]
         if renders or own_files:
             output_kind = (
                 JOB_LABELS[renders[0]["kind"]]
@@ -294,7 +295,7 @@ def results(context):
             with output_area:
                 rendered = st.selectbox(
                     t("Output version"),
-                    widget_options(choices),
+                    choices,
                     format_func=lambda value: (
                         t(
                             "Original export · Revision {revision}",
@@ -577,7 +578,7 @@ def results(context):
                                 st.session_state[
                                     project_key(workspace.path, ProjectKey.SELECTED_NOTE)
                                 ] = note["id"]
-                                st.session_state[NAVIGATE_KEY] = "notes"
+                                st.session_state[NAVIGATE_KEY] = str(Page.NOTES)
                                 st.rerun()
                         elif st.button(
                             t("Save answer as note"),
@@ -603,7 +604,9 @@ def results(context):
                             context.connection_notice(
                                 model_choices["provider"], model_choices.get("ollama_address")
                             )
-                            follow_key = f"editor:{workspace.path}:{job['id']}:follow-up"
+                            follow_key = (
+                                ui_content.editor_key(workspace, job["id"]) + EditorSuffix.FOLLOW_UP
+                            )
                             follow_text = st.text_area(t("Follow-up question"), key=follow_key)
                             follow_language = st.selectbox(
                                 t("Follow-up language"),
@@ -678,12 +681,14 @@ def results(context):
                         job["kind"] == JobKind.RENDER_AUDIOBOOK
                         and job["status"] == JobStatus.SUCCEEDED
                     ):
-                        book_audio = next((a for a in published if a["kind"] == "audio"), None)
+                        book_audio = next(
+                            (a for a in published if a["kind"] == ArtifactKind.AUDIO), None
+                        )
                         if book_audio:
                             chapters = book_audio["metadata"]["chapters"]
                             index = st.selectbox(
                                 t("Play chapter"),
-                                widget_options(range(len(chapters))),
+                                range(len(chapters)),
                                 format_func=lambda i: chapters[i]["title"],
                                 key="audiobook-chapter:" + job["id"],
                             )
@@ -695,13 +700,16 @@ def results(context):
                     for artifact in [
                         a
                         for a in published
-                        if a["kind"] != "json" and (job["id"] == rendered or not renders)
+                        if a["kind"] != ArtifactKind.JSON and (job["id"] == rendered or not renders)
                     ]:
                         path = service.artifact_path(workspace, artifact["path"])
                         if not path.exists():
                             st.error(t("File is missing: {name}", name=path.name))
                             continue
-                        if artifact["kind"] == "audio" and job["kind"] != JobKind.RENDER_AUDIOBOOK:
+                        if (
+                            artifact["kind"] == ArtifactKind.AUDIO
+                            and job["kind"] != JobKind.RENDER_AUDIOBOOK
+                        ):
                             st.audio(str(path))
                         metadata = artifact["metadata"]
                         if artifact["kind"] in (ArtifactKind.EPUB, ArtifactKind.PDF):
@@ -798,7 +806,7 @@ def results(context):
                                     st.json(navigation["steps"])
                             coverage = details.get("coverage")
                             if coverage and coverage.get("units"):
-                                if coverage.get("mode") == "retrieved":
+                                if coverage.get("mode") == ReadingMode.RETRIEVED:
                                     st.info(
                                         t(
                                             "This answer uses search-selected original fragments. Other fragments were not read; missing matches do not prove absence."
@@ -841,7 +849,7 @@ def results(context):
                                                 t("Fragment"): unit["locator"],
                                                 "ID": unit["id"],
                                                 t("Exclusion reason"): t("No text extracted")
-                                                if unit["reason"] == "empty"
+                                                if unit["reason"] == UnitStatus.EMPTY
                                                 else t("Not selected by search")
                                                 if unit["reason"] == "not_selected_by_search"
                                                 else unit["reason"],
@@ -856,10 +864,10 @@ def results(context):
                             t("Saved versions" if draft else "Output details"),
                             job["id"] + EditorSuffix.HISTORY,
                         )
-                        if draft or any(a["kind"] == "json" for a in published)
+                        if draft or any(a["kind"] == ArtifactKind.JSON for a in published)
                         else st.container()
                     ):
-                        for artifact in [a for a in published if a["kind"] == "json"]:
+                        for artifact in [a for a in published if a["kind"] == ArtifactKind.JSON]:
                             path = service.artifact_path(workspace, artifact["path"])
                             if path.is_file():
                                 st.download_button(
@@ -873,7 +881,7 @@ def results(context):
                             history_key = ui_content.editor_key(workspace, job["id"])
                             revision = st.selectbox(
                                 t("Saved revision"),
-                                widget_options(range(1, draft["revision"] + 1)),
+                                range(1, draft["revision"] + 1),
                                 index=draft["revision"] - 1
                                 if history_key + EditorSuffix.HISTORY not in st.session_state
                                 else None,
@@ -915,7 +923,7 @@ def results(context):
                 ]
                 operation_id = st.selectbox(
                     t("Operation"),
-                    widget_options([job["id"] for job in operations]),
+                    [job["id"] for job in operations],
                     key=project_key(workspace.path, ProjectKey.OPERATION, selected_root),
                     format_func=lambda value: (
                         t(JOB_LABELS[by_id[value]["kind"]])

@@ -13,12 +13,13 @@ from pydantic import Field, model_validator
 
 from brofessor import prompts
 from brofessor.contracts.content import ArtifactKind, UnitStatus
-from brofessor.contracts.jobs import JobKind, JobStatus
+from brofessor.contracts.jobs import JobKind
 from brofessor.features.sources import collections, reading
 from brofessor.infrastructure.storage.workspace import JOBS_DIRECTORY, atomic_json
 from brofessor.models import Output
 
 NAVIGATION_FILENAME: Final = "navigation.json"
+NAVIGATION_ARTIFACT_ROLE: Final = "source_navigation"
 
 MAX_STEPS = 24
 MAX_CONTEXT = 48000
@@ -31,6 +32,11 @@ class NavigationOperation(StrEnum):
     READ = "read"
     LINKS = "links"
     FINISH = "finish"
+
+
+class NavigationStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETE = "complete"
 
 
 NavigationOperationValue = Literal[
@@ -125,7 +131,7 @@ class NavigationSession:
             json.loads(self.state_path.read_text())
             if self.state_path.exists()
             else {
-                "status": JobStatus.RUNNING,
+                "status": NavigationStatus.RUNNING,
                 "documents": {},
                 "units": {},
                 "source_ids": [],
@@ -133,7 +139,7 @@ class NavigationSession:
                 "issues": [],
             }
         )
-        if self.state["status"] == "complete":
+        if self.state["status"] == NavigationStatus.COMPLETE:
             return
         self.catalog = collections.Catalog(
             workspace, job["params"]["collections"], self.folder, check=check
@@ -376,10 +382,13 @@ class NavigationSession:
                     "image-only content is not covered. Membership was captured at task start, "
                     "each document's bytes at first inspection.",
                 }
-            self.state.update(status="complete", issues=self.catalog.issues)
-            result = save({"status": "complete"})
+            self.state.update(status=NavigationStatus.COMPLETE, issues=self.catalog.issues)
+            result = save({"status": NavigationStatus.COMPLETE})
             self.workspace.add_artifact(
-                self.job["id"], self.state_path, ArtifactKind.JSON, {"role": "source_navigation"}
+                self.job["id"],
+                self.state_path,
+                ArtifactKind.JSON,
+                {"role": NAVIGATION_ARTIFACT_ROLE},
             )
             return result
         observations = []
@@ -424,9 +433,12 @@ def prepare(workspace, job, generate, check, progress, *, conversation=None):
     from brofessor.infrastructure.agents.navigation import run
 
     session = NavigationSession(workspace, job, check, progress, conversation=conversation)
-    if session.state["status"] == "complete":
+    if session.state["status"] == NavigationStatus.COMPLETE:
         workspace.add_artifact(
-            job["id"], session.state_path, ArtifactKind.JSON, {"role": "source_navigation"}
+            job["id"],
+            session.state_path,
+            ArtifactKind.JSON,
+            {"role": NAVIGATION_ARTIFACT_ROLE},
         )
         return session.state
     return run(session, generate)

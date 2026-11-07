@@ -7,7 +7,6 @@ from brofessor.contracts.jobs import JobKind, JobStatus
 from brofessor.features import studies
 from brofessor.features.studies import FeedbackAssessment
 from brofessor.interfaces.web.components import layout as ui_layout
-from brofessor.interfaces.web.state_keys import widget_options
 
 
 def show(workspace, job, draft, saved, t, status_view, *, status_area):
@@ -46,7 +45,7 @@ def show_feedback(workspace, job, reviews, t, status_view, status_area):
     }
     selected = st.selectbox(
         t("Answer reviews"),
-        widget_options(list(reviews)),
+        list(reviews),
         format_func=lambda key: (
             f"r{reviews[key]['params']['revision']} · {t(labels[reviews[key]['status']])}"
         ),

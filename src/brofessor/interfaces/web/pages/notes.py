@@ -12,7 +12,6 @@ from brofessor.interfaces.web.state_keys import (
     ProjectKey,
     note_key,
     project_key,
-    widget_options,
 )
 
 
@@ -63,7 +62,7 @@ def notes(context):
         st.text_area(t("Note text"), key=new_key + EditorSuffix.TEXT, on_change=changed)
         st.multiselect(
             t("Source references"),
-            widget_options(list(note_names)),
+            list(note_names),
             format_func=note_names.__getitem__,
             key=new_key + EditorSuffix.CITATIONS,
             on_change=changed,
@@ -84,7 +83,7 @@ def notes(context):
         st.divider()
         selected_note = st.selectbox(
             t("Notes"),
-            widget_options([note["id"] for note in all_notes]),
+            [note["id"] for note in all_notes],
             format_func=lambda value: next(
                 note["data"]["title"] for note in all_notes if note["id"] == value
             ),
@@ -150,7 +149,7 @@ def notes(context):
                     )
                     citations = st.multiselect(
                         t("Source references"),
-                        widget_options(list(note_names)),
+                        list(note_names),
                         format_func=note_names.__getitem__,
                         key=prefix + EditorSuffix.CITATIONS,
                         on_change=changed,
@@ -173,7 +172,7 @@ def notes(context):
             with ui_layout.section(t("Revision history"), prefix + EditorSuffix.HISTORY):
                 number = st.selectbox(
                     t("Saved revision"),
-                    widget_options(range(1, note["revision"] + 1)),
+                    range(1, note["revision"] + 1),
                     index=note["revision"] - 1,
                     key=prefix + EditorSuffix.HISTORY,
                 )

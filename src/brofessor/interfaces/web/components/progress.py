@@ -55,9 +55,9 @@ def show(value, t, *, scope=""):
         elif value["status"] in RESUMABLE_JOB_STATUSES:
             status = t(
                 {
-                    StageState.CANCELLED: "Cancelled",
-                    StageState.FAILED: "Failed",
-                    StageState.INTERRUPTED: "Interrupted",
+                    JobStatus.CANCELLED: "Cancelled",
+                    JobStatus.FAILED: "Failed",
+                    JobStatus.INTERRUPTED: "Interrupted",
                 }[value["status"]]
             )
             st.warning(
@@ -68,7 +68,7 @@ def show(value, t, *, scope=""):
                 )
             )
         icons = {
-            "completed": "✓",
+            StageState.COMPLETED: "✓",
             StageState.SKIPPED: "↷",
             StageState.RUNNING: "●",
             StageState.PENDING: "○",
@@ -79,7 +79,7 @@ def show(value, t, *, scope=""):
             StageState.UNMEASURED: "—",
         }
         labels = {
-            "completed": "Completed",
+            StageState.COMPLETED: "Completed",
             StageState.SKIPPED: "Not needed for this run",
             StageState.RUNNING: "Running",
             StageState.PENDING: "Pending",
@@ -104,10 +104,10 @@ def show(value, t, *, scope=""):
             if state == StageState.RUNNING:
                 if data.get("waiting_for_model"):
                     st.caption(t("Waiting for the text model's response"))
-                if data.get("stage") == "waiting_for_speech":
-                    st.caption(t(progress.stage_label("waiting_for_speech")))
+                if data.get("stage") == StageId.WAITING_FOR_SPEECH:
+                    st.caption(t(progress.stage_label(StageId.WAITING_FOR_SPEECH)))
                 if data.get("total") and step["stage"] != StageId.SOURCE_NAVIGATION:
-                    completed, total = data.get(StageState.COMPLETED, 0), data["total"]
+                    completed, total = data.get("completed", 0), data["total"]
                     if step["stage"] == StageId.DOWNLOADING_MODEL:
                         text = t(
                             "Downloaded {completed} of {total} MB",

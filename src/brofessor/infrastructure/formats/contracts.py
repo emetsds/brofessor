@@ -27,7 +27,6 @@ SOURCE_EXTENSIONS: Final = frozenset(DocumentExtension)
 TEXT_SOURCE_EXTENSIONS: Final = frozenset({DocumentExtension.MARKDOWN, DocumentExtension.TEXT})
 
 EPUB_MIMETYPE_FILENAME: Final = "mimetype"
-EPUB_MIME: Final = "application/epub+zip"
 XHTML_MIME: Final = "application/xhtml+xml"
 NCX_MIME: Final = "application/x-dtbncx+xml"
 HTML_MIME: Final = "text/html"

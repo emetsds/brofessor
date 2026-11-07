@@ -4,7 +4,6 @@ import streamlit as st
 
 from brofessor.application import service
 from brofessor.contracts.jobs import JobStatus
-from brofessor.interfaces.web.state_keys import widget_options
 
 
 def series_actions(context, job, plan, saved, group):
@@ -14,7 +13,7 @@ def series_actions(context, job, plan, saved, group):
     episodes = plan["data"]["episodes"]
     number = st.selectbox(
         t("Episode from saved plan · revision {revision}", revision=revision),
-        widget_options(range(1, len(episodes) + 1)),
+        range(1, len(episodes) + 1),
         format_func=lambda n: f"{n}. {episodes[n - 1]['title']}",
         key=f"series-episode-{job['id']}",
     )

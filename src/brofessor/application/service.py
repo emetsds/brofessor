@@ -21,7 +21,6 @@ from brofessor.contracts.text import DEFAULT_OLLAMA_ADDRESS, TEXT_PROVIDERS, Tex
 from brofessor.features.podcasts.writer import WritingMethod
 from brofessor.features.reports import ReportTemplate
 from brofessor.features.sources.reading import COVERAGE_FILENAME, ReadingStatus
-from brofessor.infrastructure.formats.contracts import DocumentFormat
 from brofessor.infrastructure.storage.workspace import JOBS_DIRECTORY, Workspace, atomic_json
 from brofessor.infrastructure.text.runners import normalize_ollama_address, validate_ollama_model
 from brofessor.models import Answer, Output, Podcast, Slides, validate_citations
@@ -327,7 +326,11 @@ def submit(
     if kind in RETRIEVAL_JOB_KINDS and not focus.strip():
         raise ValueError("A question or report goal is required")
     params = {
-        "source_ids": [identifier for identifier in ids if not identifier.startswith("dir-")],
+        "source_ids": [
+            identifier
+            for identifier in ids
+            if not identifier.startswith(collections.COLLECTION_ID_PREFIX)
+        ],
         "focus": focus,
         "language": language,
         "provider": provider,
@@ -535,9 +538,9 @@ def follow_up(
     params["conversation"] = references
     if omitted:
         params["conversation_omitted"] = omitted
-    from brofessor.application.tasks import models
+    from brofessor.application.tasks import ModelOrigin, models
 
-    choices = {**models(workspace, job_id)["data"], "origin": "parent"}
+    choices = {**models(workspace, job_id)["data"], "origin": ModelOrigin.PARENT}
     # A retry keeps the first model snapshot even after the task's preferences change.
     previous = workspace.job_by_request_key(request_key) if request_key else None
     ignore = {"provider", "model", "ollama_address", "ollama_port"}
@@ -664,9 +667,9 @@ def series_episode(workspace, series_job_id, number, *, revision=None, start_wor
     if previous:
         result = _remember_task(workspace, previous)
     else:
-        from brofessor.application.tasks import models
+        from brofessor.application.tasks import ModelOrigin, models
 
-        choices = {**models(workspace, series_job_id)["data"], "origin": "parent"}
+        choices = {**models(workspace, series_job_id)["data"], "origin": ModelOrigin.PARENT}
         if params.get("auto_audio", True):
             from brofessor.infrastructure.speech.catalogue import get
 
@@ -879,13 +882,13 @@ def rendered_file(workspace, job):
         artifact = rendered_artifact(workspace, job, saved["revision"]) if saved else None
         return artifact_path(workspace, artifact["path"]) if artifact else None
     kind = (
-        JobKind.AUDIOBOOK
+        ArtifactKind.AUDIOBOOK
         if job["kind"] == JobKind.RENDER_AUDIOBOOK
-        else DocumentFormat.PDF
+        else ArtifactKind.PDF
         if job["kind"] == JobKind.RENDER_PDF
-        else DocumentFormat.EPUB
+        else ArtifactKind.EPUB
         if job["kind"] in (JobKind.TRANSLATE_EPUB, JobKind.RENDER_EPUB)
-        else ("pptx" if job["kind"] == JobKind.RENDER_SLIDES else "audio")
+        else (ArtifactKind.PPTX if job["kind"] == JobKind.RENDER_SLIDES else ArtifactKind.AUDIO)
     )
     for artifact in workspace.artifacts(job["id"]):
         if artifact["kind"] == kind:
@@ -1031,6 +1034,7 @@ def coverage(workspace: Workspace, job_id: str) -> dict | None:
 
 
 def task_details(workspace, job_id):
+    from brofessor.features.sources import collections
     from brofessor.features.sources import navigation as source_navigation
 
     job = workspace.job(job_id)
@@ -1040,7 +1044,7 @@ def task_details(workspace, job_id):
         for i in job["params"].get("source_ids", [])
     ]
     selected += [
-        {"id": r["id"], "name": r["root"], "kind": "directory"}
+        {"id": r["id"], "name": r["root"], "kind": collections.DIRECTORY_SOURCE_KIND}
         for r in job["params"].get("collections", [])
     ]
     value = {

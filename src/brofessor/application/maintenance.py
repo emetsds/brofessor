@@ -34,7 +34,11 @@ from brofessor.infrastructure.storage.locks import (
     audio_cache_lock,
     models_lock,
 )
-from brofessor.infrastructure.storage.workspace import DATABASE_FILENAME, Workspace
+from brofessor.infrastructure.storage.workspace import (
+    AUDIO_SEGMENTS_DIRECTORY,
+    DATABASE_FILENAME,
+    Workspace,
+)
 from brofessor.infrastructure.text import runners as executors
 
 
@@ -413,7 +417,7 @@ def clear_partial(model):
 
 def _audio_path(project):
     root = Path(getattr(project, "path", project)).expanduser().resolve()
-    return _owned(root / "audio-segments", root)
+    return _owned(root / AUDIO_SEGMENTS_DIRECTORY, root)
 
 
 def audio_cache_info(project):

@@ -45,9 +45,6 @@ class Page(StrEnum):
     CATALOGUE = "catalogue"
 
 
-MAIN_PAGES: Final = (Page.RESULTS, Page.SOURCES, Page.NOTES, Page.PROJECTS, Page.SEARCH)
-
-
 class SettingsSection(StrEnum):
     GENERAL = "general"
     MODELS = "models"
@@ -75,6 +72,8 @@ class ProjectKey(StrEnum):
     NEW = "new"
     SOURCE_BROWSER = "source-browser"
     SOURCE_FRAGMENT = "source-fragment"
+    TASK_MODELS = "task-models"
+    REGENERATE = "regenerate"
 
 
 class EditorSuffix(StrEnum):
@@ -123,12 +122,6 @@ def widget_value(value):
     """Keep persisted widget values independent of Python enum classes across reruns."""
     if isinstance(value, StrEnum):
         return str(value)
-    if isinstance(value, list):
-        return [widget_value(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(widget_value(item) for item in value)
-    if isinstance(value, dict):
-        return {widget_value(key): widget_value(item) for key, item in value.items()}
     return value
 
 

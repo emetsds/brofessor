@@ -8,7 +8,7 @@ from brofessor.application import service
 from brofessor.contracts.content import UnitStatus
 from brofessor.interfaces.web.components import content as ui_content
 from brofessor.interfaces.web.components import layout as ui_layout
-from brofessor.interfaces.web.state_keys import ProjectKey, project_key, widget_options
+from brofessor.interfaces.web.state_keys import ProjectKey, project_key
 
 
 def sources(context):
@@ -43,7 +43,7 @@ def sources(context):
         scope = (
             st.multiselect(
                 t("Search in sources"),
-                widget_options(list(names)),
+                list(names),
                 default=None if "search_source_ids" in st.session_state else list(names),
                 format_func=names.__getitem__,
                 key="search_source_ids",
@@ -69,7 +69,7 @@ def sources(context):
         source_map = {source["id"]: source for source in sources}
         selected_source = st.selectbox(
             t("Source"),
-            widget_options(list(source_map)),
+            list(source_map),
             format_func=lambda value: source_map[value]["name"],
             key=project_key(workspace.path, ProjectKey.SOURCE_BROWSER),
         )
@@ -88,7 +88,7 @@ def sources(context):
             if unit_map:
                 selected_unit = st.selectbox(
                     t("Fragment"),
-                    widget_options(list(unit_map)),
+                    list(unit_map),
                     format_func=lambda value: unit_map[value]["locator"],
                     key=project_key(workspace.path, ProjectKey.SOURCE_FRAGMENT, selected_source),
                 )

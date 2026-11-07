@@ -16,6 +16,7 @@ from brofessor.contracts.jobs import (
 from brofessor.contracts.text import TextProvider
 from brofessor.features.podcasts.writer import WritingMethod
 from brofessor.features.reports import ReportTemplate
+from brofessor.features.sources.collections import COLLECTION_ID_PREFIX, DIRECTORY_SOURCE_KIND
 from brofessor.infrastructure.formats.contracts import DocumentExtension
 from brofessor.interfaces.web.components import content as ui_content
 from brofessor.interfaces.web.components import language as ui_language
@@ -24,6 +25,7 @@ from brofessor.interfaces.web.dialogs import settings as ui_settings
 from brofessor.interfaces.web.state_keys import (
     COMPOSER_MIGRATED_KEY,
     NAVIGATE_KEY,
+    Page,
     ProjectKey,
     project_key,
     widget_options,
@@ -63,7 +65,7 @@ def create_result(context):
     if not all_sources:
         st.info(t("Add a book or document to begin."))
         if st.button(t("Add materials"), key="go_to_sources"):
-            st.session_state[NAVIGATE_KEY] = "sources"
+            st.session_state[NAVIGATE_KEY] = str(Page.SOURCES)
             st.rerun()
         return
     names = {s["id"]: s["name"] for s in all_sources}
@@ -74,7 +76,7 @@ def create_result(context):
             if identifier in names
         ]
     ui_layout.heading(t("Sources"))
-    if any(s.get("kind") == "directory" for s in all_sources):
+    if any(s.get("kind") == DIRECTORY_SOURCE_KIND for s in all_sources):
         st.caption(
             t(
                 "Documents in connected directories are selected automatically from your task prompt."
@@ -88,7 +90,7 @@ def create_result(context):
     else:
         selected = st.multiselect(
             t("Sources"),
-            widget_options(list(names)),
+            list(names),
             default=None if prefix + "source_ids" in st.session_state else list(names),
             format_func=names.__getitem__,
             key=prefix + "source_ids",
@@ -173,7 +175,7 @@ def create_result(context):
                         available_translations[previous["id"]] = version
             translated = st.selectbox(
                 t("Saved translation (optional)"),
-                widget_options([None, *available_translations]),
+                [None, *available_translations],
                 format_func=lambda value: (
                     t("None")
                     if value is None
@@ -202,7 +204,7 @@ def create_result(context):
                             accepted[previous["id"]] = version
                 terminology_id = st.selectbox(
                     t("Accepted translation terminology (optional)"),
-                    widget_options([None, *accepted]),
+                    [None, *accepted],
                     format_func=lambda value: (
                         t("None")
                         if value is None
@@ -240,7 +242,7 @@ def create_result(context):
             )
             options["minutes"] = st.select_slider(
                 t("Episode duration, minutes"),
-                widget_options([20, 30, 45, 60]),
+                [20, 30, 45, 60],
                 value=st.session_state.get(prefix + "series_minutes", 20)
                 if prefix + "series_minutes" not in st.session_state
                 else None,
@@ -250,7 +252,7 @@ def create_result(context):
         elif kind == JobKind.PODCAST:
             options["minutes"] = st.select_slider(
                 t("Podcast duration, minutes"),
-                widget_options([3, 20, 30, 45, 60]),
+                [3, 20, 30, 45, 60],
                 value=20 if prefix + "minutes" not in st.session_state else None,
                 key=prefix + "minutes",
             )
@@ -314,7 +316,8 @@ def create_result(context):
             t("Create task"),
             disabled=not selected
             or (
-                kind == JobKind.AUDIOBOOK and (len(selected) != 1 or selected[0].startswith("dir-"))
+                kind == JobKind.AUDIOBOOK
+                and (len(selected) != 1 or selected[0].startswith(COLLECTION_ID_PREFIX))
             )
             or (
                 kind == JobKind.TRANSLATE_EPUB

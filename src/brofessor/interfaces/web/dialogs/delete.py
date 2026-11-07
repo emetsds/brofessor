@@ -5,7 +5,14 @@ import streamlit as st
 from brofessor.application import projects, tasks
 from brofessor.infrastructure.storage.workspace import Workspace
 from brofessor.interfaces.web.components import layout as ui_layout
-from brofessor.interfaces.web.state_keys import DELETE_KEY, NAVIGATE_KEY, PROJECT_PATH_KEY
+from brofessor.interfaces.web.state_keys import (
+    DELETE_KEY,
+    NAVIGATE_KEY,
+    PROJECT_PATH_KEY,
+    Page,
+    ProjectKey,
+    project_key,
+)
 
 
 def delete_dialog(context):
@@ -36,13 +43,12 @@ def _delete_dialog(context):
                 projects.delete(pending["path"])
                 if st.session_state.get(PROJECT_PATH_KEY) == pending["path"]:
                     st.session_state[PROJECT_PATH_KEY] = None
-                st.session_state[NAVIGATE_KEY] = "projects"
+                st.session_state[NAVIGATE_KEY] = str(Page.PROJECTS)
             else:
                 tasks.delete(Workspace(pending["path"]), pending["job_id"])
-                prefix = f"ui:{pending['path']}:"
-                st.session_state[prefix + "selected-job"] = None
-                st.session_state[prefix + "catalogue"] = True
-                st.session_state[prefix + "creating"] = False
+                st.session_state[project_key(pending["path"], ProjectKey.SELECTED_JOB)] = None
+                st.session_state[project_key(pending["path"], ProjectKey.CATALOGUE)] = True
+                st.session_state[project_key(pending["path"], ProjectKey.CREATING)] = False
             st.session_state.pop(DELETE_KEY, None)
             st.rerun()
         except (OSError, ValueError) as error:

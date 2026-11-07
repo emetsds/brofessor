@@ -13,7 +13,11 @@ from brofessor.features.sources import reading
 from brofessor.infrastructure.formats import audio as media
 from brofessor.infrastructure.formats.contracts import DocumentExtension
 from brofessor.infrastructure.speech import catalogue as speech_models
-from brofessor.infrastructure.storage.workspace import JOBS_DIRECTORY, atomic_json
+from brofessor.infrastructure.storage.workspace import (
+    AUDIO_SEGMENTS_DIRECTORY,
+    JOBS_DIRECTORY,
+    atomic_json,
+)
 from brofessor.models import Output
 
 CHAPTERS_FILENAME: Final = "chapters.json"
@@ -171,14 +175,16 @@ def prepare(workspace, job, check, progress):
     atomic_json(output, saved["data"])
     workspace.add_artifact(job["id"], output, ArtifactKind.JSON, {"revision": saved["revision"]})
     coverage = {
-        "mode": "narration",
+        "mode": reading.ReadingMode.NARRATION,
         "excluded": [u["id"] for u in units if u["status"] != UnitStatus.READY],
         "units": [
             {
                 "id": u["id"],
                 "source_id": u["source_id"],
                 "locator": u["locator"],
-                "status": "read" if u["status"] == UnitStatus.READY else "excluded",
+                "status": reading.ReadingStatus.READ
+                if u["status"] == UnitStatus.READY
+                else reading.ReadingStatus.EXCLUDED,
                 "reason": "" if u["status"] == UnitStatus.READY else u["status"],
             }
             for u in units
@@ -211,7 +217,7 @@ def render(workspace, job, cancelled, progress, check):
     audio = media.render_audio(
         {"language": value["language"], "turns": turns(value)},
         folder / "audiobook.mp3",
-        segment_dir=workspace.path / "audio-segments",
+        segment_dir=workspace.path / AUDIO_SEGMENTS_DIRECTORY,
         model_spec=spec,
         cancelled=cancelled,
         progress=progress,

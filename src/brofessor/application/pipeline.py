@@ -22,7 +22,12 @@ from brofessor.features.podcasts.series import EVIDENCE_FILENAME
 from brofessor.features.sources import reading
 from brofessor.features.sources.reading import ReadingStatus
 from brofessor.infrastructure.formats.audio import AUDIO_METADATA_SUFFIX
-from brofessor.infrastructure.storage.workspace import JOBS_DIRECTORY, Workspace, atomic_json
+from brofessor.infrastructure.storage.workspace import (
+    AUDIO_SEGMENTS_DIRECTORY,
+    JOBS_DIRECTORY,
+    Workspace,
+    atomic_json,
+)
 from brofessor.models import Podcast, Slides, validate_citations
 from brofessor.prompts import ids as prompt_ids
 
@@ -223,7 +228,7 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
                 job["id"], Path(output), ArtifactKind.PPTX, {"revision": draft["revision"]}
             )
         else:
-            segments = workspace.path / "audio-segments"
+            segments = workspace.path / AUDIO_SEGMENTS_DIRECTORY
             model_options = {}
             if "model_spec" in params:
                 from brofessor.infrastructure.speech.catalogue import get
@@ -474,7 +479,11 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
     if job["kind"] == JobKind.PODCAST:
         value = Podcast.model_validate(value).model_dump()
     check()
-    if coverage["mode"] in ("direct", "retrieved", "navigated"):
+    if coverage["mode"] in (
+        reading.ReadingMode.DIRECT,
+        reading.ReadingMode.RETRIEVED,
+        reading.ReadingMode.NAVIGATED,
+    ):
         for unit in coverage["units"]:
             if unit["status"] == ReadingStatus.PENDING:
                 unit["status"] = ReadingStatus.READ

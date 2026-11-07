@@ -16,6 +16,14 @@ from brofessor.prompts import ids as prompt_ids
 COVERAGE_FILENAME: Final = "coverage.json"
 
 
+class ReadingMode(StrEnum):
+    DIRECT = "direct"
+    SUMMARIZED = "summarized"
+    RETRIEVED = "retrieved"
+    NAVIGATED = "navigated"
+    NARRATION = "narration"
+
+
 class ReadingStatus(StrEnum):
     PENDING = "pending"
     READ = "read"
@@ -104,7 +112,9 @@ def prepare(units, focus, generate, check, progress, folder, *, version=1, names
 
     ready = [unit for unit in units if unit["status"] == UnitStatus.READY]
     report = {
-        "mode": "direct" if len(encoded(ready)) <= READING_BUDGET else "summarized",
+        "mode": ReadingMode.DIRECT
+        if len(encoded(ready)) <= READING_BUDGET
+        else ReadingMode.SUMMARIZED,
         "read": [],
         "count": 0,
         "excluded": [unit["id"] for unit in units if unit["status"] != UnitStatus.READY],
@@ -125,7 +135,7 @@ def prepare(units, focus, generate, check, progress, folder, *, version=1, names
     evidence = [
         {"id": unit["id"], "locator": unit["locator"], "text": unit["text"]} for unit in ready
     ]
-    if report["mode"] == "direct":
+    if report["mode"] == ReadingMode.DIRECT:
         # These fragments count as read only after the final model result is accepted.
         return provenance(evidence), report
 

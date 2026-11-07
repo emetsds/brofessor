@@ -9,11 +9,11 @@ import streamlit as st
 
 from brofessor.interfaces.web.state_keys import (
     NAVIGATE_KEY,
+    Page,
     NOTICE_KEY,
     SOURCE_DIALOG_KEY,
     ProjectKey,
     project_key,
-    widget_options,
 )
 
 upload_labels = st.components.v2.component(
@@ -34,7 +34,7 @@ def _source_dialog(context):
     prefix = project_key(workspace.path, ProjectKey.SOURCE_IMPORT, "")
     mode = st.radio(
         t("Source type"),
-        widget_options(["files", "folder"]),
+        ["files", "folder"],
         horizontal=True,
         format_func=lambda v: t("Files" if v == "files" else "Folder"),
         key=prefix + "mode",
@@ -50,7 +50,7 @@ def _source_dialog(context):
             try:
                 collections.connect(workspace, directory)
                 st.session_state[SOURCE_DIALOG_KEY] = False
-                st.session_state[NAVIGATE_KEY] = "sources"
+                st.session_state[NAVIGATE_KEY] = str(Page.SOURCES)
                 st.session_state[NOTICE_KEY] = t("Folder connected.")
                 st.rerun(scope="app")
             except (ValueError, OSError) as error:
@@ -103,7 +103,7 @@ def _source_dialog(context):
         duplicates = sum(outcomes[entry]["duplicate"] for _, _, entry in incoming)
         outcomes.clear()
         st.session_state[SOURCE_DIALOG_KEY] = False
-        st.session_state[NAVIGATE_KEY] = "sources"
+        st.session_state[NAVIGATE_KEY] = str(Page.SOURCES)
         st.session_state[NOTICE_KEY] = t(
             "Files added: {count} · Already present: {duplicates}",
             count=len(incoming) - duplicates,

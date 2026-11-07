@@ -13,6 +13,7 @@ class SpeechEngine(StrEnum):
 
 
 MODEL_CATALOGUE_FILENAME: Final = "speech_models.json"
+QWEN_ENGINE_PREFIX: Final = "qwen3"
 DOWNLOAD_LOCK_FILENAME: Final = ".download.lock"
 QWEN_SPEECH_LOCK_FILENAME: Final = "qwen-speech.lock"
 

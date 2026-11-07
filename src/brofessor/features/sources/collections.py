@@ -7,7 +7,9 @@ import re
 import stat
 import tempfile
 import time
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
+from typing import Final
 from urllib.parse import unquote, urlsplit
 
 import yaml
@@ -21,6 +23,21 @@ EXCLUDED = {".git", ".obsidian", ".trash", "__pycache__", ".venv", "node_modules
 MAX_FILES = 100000
 MAX_TOOL_CHARS = 22000
 MAX_SEARCH_CHARS = 32 * 1024 * 1024
+COLLECTION_ID_PREFIX: Final = "dir-"
+DIRECTORY_SOURCE_KIND: Final = "directory"
+
+
+class LinkSyntax(StrEnum):
+    WIKI = "wiki"
+    MARKDOWN = "markdown"
+
+
+class LinkStatus(StrEnum):
+    EXTERNAL = "external"
+    OUTSIDE_COLLECTION = "outside_collection"
+    RESOLVED = "resolved"
+    AMBIGUOUS = "ambiguous"
+    MISSING_OR_UNSUPPORTED = "missing_or_unsupported"
 
 
 def connect(workspace, path):
@@ -29,7 +46,7 @@ def connect(workspace, path):
         raise ValueError("Choose a readable document directory")
     if root == workspace.path:
         raise ValueError("A document collection must be separate from its brofessor workspace")
-    identifier = "dir-" + hashlib.sha256(str(root).encode()).hexdigest()[:16]
+    identifier = COLLECTION_ID_PREFIX + hashlib.sha256(str(root).encode()).hexdigest()[:16]
     with workspace.connect() as db:
         db.execute(
             "INSERT OR IGNORE INTO collections VALUES (?,?,?)", (identifier, str(root), time.time())
@@ -50,7 +67,7 @@ def disconnect(workspace, identifier):
 
 def choices(workspace):
     return [s for s in workspace.sources() if not s.get("hidden")] + [
-        {**r, "name": Path(r["root"]).name + "/", "kind": "directory"}
+        {**r, "name": Path(r["root"]).name + "/", "kind": DIRECTORY_SOURCE_KIND}
         for r in registered(workspace)
     ]
 
@@ -119,10 +136,15 @@ def markdown(text):
         clean = re.sub(r"`+[^`]*`+", "", line)
         visible.append(clean)
         for target in re.findall(r"!?\[\[([^\]\n]+)\]\]", clean):
-            links.append({"target": target.split("|", 1)[0].replace("\\", ""), "syntax": "wiki"})
+            links.append(
+                {"target": target.split("|", 1)[0].replace("\\", ""), "syntax": LinkSyntax.WIKI}
+            )
         for target in re.findall(r"!?\[[^\]\n]*\]\(([^)\n]+)\)", clean):
             links.append(
-                {"target": target.strip().strip("<>").split(' "', 1)[0], "syntax": "markdown"}
+                {
+                    "target": target.strip().strip("<>").split(' "', 1)[0],
+                    "syntax": LinkSyntax.MARKDOWN,
+                }
             )
     tags.extend(re.findall(r"(?<!\w)#([\w/-]+)", "\n".join(visible)))
     return {
@@ -324,22 +346,24 @@ class Catalog:
         }
 
     def targets(self, document, target):
-        syntax = target.get("syntax", "wiki") if isinstance(target, dict) else "wiki"
+        syntax = (
+            target.get("syntax", LinkSyntax.WIKI) if isinstance(target, dict) else LinkSyntax.WIKI
+        )
         target = target["target"] if isinstance(target, dict) else target
         uri = urlsplit(target)
         if uri.scheme or uri.netloc or uri.query:
-            return {"target": target, "status": "external"}
+            return {"target": target, "status": LinkStatus.EXTERNAL}
         path, _, anchor = unquote(target).partition("#")
         try:
             rel = (
                 relative(str(PurePosixPath(document["path"]).parent / path))
-                if syntax == "markdown" and path
+                if syntax == LinkSyntax.MARKDOWN and path
                 else relative(path)
                 if path
                 else document["path"]
             )
         except ValueError:
-            return {"target": target, "status": "outside_collection"}
+            return {"target": target, "status": LinkStatus.OUTSIDE_COLLECTION}
         possibilities = {rel}
         possibilities |= {
             p + DocumentExtension.MARKDOWN for p in possibilities if not PurePosixPath(p).suffix
@@ -349,7 +373,7 @@ class Catalog:
             for key, item in self.documents.items()
             if item["collection_id"] == document["collection_id"] and item["path"] in possibilities
         ]
-        if syntax == "wiki" and "/" not in rel:
+        if syntax == LinkSyntax.WIKI and "/" not in rel:
             matches = []
             for key, item in self.documents.items():
                 if item["collection_id"] != document["collection_id"]:
@@ -370,11 +394,11 @@ class Catalog:
         return {
             "target": target,
             "anchor": anchor,
-            "status": "resolved"
+            "status": LinkStatus.RESOLVED
             if len(matches) == 1
-            else "ambiguous"
+            else LinkStatus.AMBIGUOUS
             if matches
-            else "missing_or_unsupported",
+            else LinkStatus.MISSING_OR_UNSUPPORTED,
             "paths": [self.documents[k]["path"] for k in matches],
         }
 
@@ -393,7 +417,10 @@ class Catalog:
                 except (OSError, ValueError):
                     continue
                 targets = [self.targets(other, t) for t in other["links"]]
-                if any(t["status"] == "resolved" and path in t.get("paths", []) for t in targets):
+                if any(
+                    t["status"] == LinkStatus.RESOLVED and path in t.get("paths", [])
+                    for t in targets
+                ):
                     backward.append(item["path"])
         return {
             "outgoing": outgoing[:100],

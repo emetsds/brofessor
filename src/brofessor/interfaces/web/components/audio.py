@@ -5,6 +5,7 @@ import streamlit as st
 from brofessor.application import service, tasks
 from brofessor.contracts.jobs import InitialAudioState, JobKind, JobStatus, StageState
 from brofessor.infrastructure.speech import catalogue as speech_models
+from brofessor.infrastructure.speech.contracts import QWEN_ENGINE_PREFIX
 from brofessor.infrastructure.speech.contracts import SpeechEngine
 from brofessor.interfaces.web.state_keys import ProjectKey, project_key
 
@@ -31,7 +32,7 @@ def prepare_voice(context, voice):
         return False
     runtime_ready = True
     if (
-        spec.get("engine", SpeechEngine.QWEN_CUSTOM).startswith("qwen3")
+        spec.get("engine", SpeechEngine.QWEN_CUSTOM).startswith(QWEN_ENGINE_PREFIX)
         and not speech_models.qwen_runtime_available()
     ):
         st.info(t("Install local speech support in the project environment, then restart the UI."))

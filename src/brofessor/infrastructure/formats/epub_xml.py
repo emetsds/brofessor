@@ -18,7 +18,6 @@ OPF: Final = "http://www.idpf.org/2007/opf"
 DC: Final = "http://purl.org/dc/elements/1.1/"
 OPS: Final = "http://www.idpf.org/2007/ops"
 NCX: Final = "http://www.daisy.org/z3986/2005/ncx/"
-CONTAINER: Final = "urn:oasis:names:tc:opendocument:xmlns:container"
 XML_LANG: Final = f"{{{XML}}}lang"
 _DTDS = {
     ("html", "", ""),
@@ -116,9 +115,9 @@ def serialize_publication(original, updated):
             raise ValueError("EPUB XML elements cannot be removed")
         for child in list(element)[len(children) :]:
             # The renderer may append dc:source; no model can add XML elements.
-            if child.tag != "{http://purl.org/dc/elements/1.1/}source":
+            if child.tag != f"{{{DC}}}source":
                 raise ValueError("Unexpected new EPUB element")
-            new = document.createElementNS("http://purl.org/dc/elements/1.1/", "dc:source")
+            new = document.createElementNS(DC, "dc:source")
             new.setAttributeNS(XMLNS, "xmlns:dc", DC)
             node.appendChild(new)
             children.append(new)

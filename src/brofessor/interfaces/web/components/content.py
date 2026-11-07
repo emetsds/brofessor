@@ -14,11 +14,13 @@ from brofessor.contracts.jobs import (
     TRANSLATION_JOB_KINDS,
     JobKind,
     JobStatus,
+    StageId,
 )
 from brofessor.features.reports import SectionOrigin
+from brofessor.features.studies import QuestionKind
 from brofessor.infrastructure.formats.contracts import AudioExtension
 from brofessor.infrastructure.speech import catalogue as speech_models
-from brofessor.infrastructure.speech.contracts import SpeechEngine
+from brofessor.infrastructure.speech.contracts import QWEN_ENGINE_PREFIX, SpeechEngine
 from brofessor.interfaces.web.components import language as ui_language
 from brofessor.interfaces.web.components import layout as ui_layout
 from brofessor.interfaces.web.components import recovery as ui_recovery
@@ -164,10 +166,10 @@ def fields(data, kind, key, t, source_names, text_inputs):
                     v,
                     t(
                         {
-                            "sources": "From sources",
-                            "brofessor": "brofessor adaptation",
-                            "application": "Scenario question",
-                            "explanation": "Explanation question",
+                            SectionOrigin.SOURCES: "From sources",
+                            SectionOrigin.BROFESSOR: "brofessor adaptation",
+                            QuestionKind.APPLICATION: "Scenario question",
+                            QuestionKind.EXPLANATION: "Explanation question",
                         }.get(v, v)
                     ),
                 ),
@@ -187,7 +189,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[widget_key] = value
         st.multiselect(
             t("Source references"),
-            widget_options(list(source_names)),
+            list(source_names),
             format_func=lambda v: source_names[v],
             key=widget_key,
             on_change=_write_field,
@@ -238,7 +240,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
         items = data["blocks"]
         index = st.selectbox(
             t("Passage"),
-            widget_options(list(range(len(items)))),
+            list(range(len(items))),
             format_func=lambda i: f"{i + 1}. {terminology.MARKER.sub('', items[i]['text'])[:90]}",
             key=key + EditorSuffix.ITEM_SELECTED,
         )
@@ -262,7 +264,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[selected] = 0
         index = st.selectbox(
             t("Question"),
-            widget_options(range(len(data["questions"]))),
+            range(len(data["questions"])),
             format_func=lambda i: (
                 f"{data['questions'][i]['id']}. {data['questions'][i]['prompt'][:70]}"
             ),
@@ -276,13 +278,13 @@ def fields(data, kind, key, t, source_names, text_inputs):
             field(
                 "Question kind",
                 ("questions", index, "kind"),
-                options=["application", "explanation"],
+                options=[QuestionKind.APPLICATION, QuestionKind.EXPLANATION],
             )
         else:
             st.caption(
                 t(
                     "Scenario question"
-                    if question["kind"] == "application"
+                    if question["kind"] == QuestionKind.APPLICATION
                     else "Explanation question"
                 )
             )
@@ -301,7 +303,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[key + EditorSuffix.ITEM_SELECTED] = len(data["sections"]) - 1
         index = st.selectbox(
             t("Section"),
-            widget_options(range(len(data["sections"]))),
+            range(len(data["sections"])),
             format_func=lambda i: f"{i + 1}. {data['sections'][i]['heading']}",
             key=key + EditorSuffix.ITEM_SELECTED,
         )
@@ -331,7 +333,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[chapter_key] = 0
         index = st.selectbox(
             t("Chapter"),
-            widget_options(range(len(data["chapters"]))),
+            range(len(data["chapters"])),
             format_func=lambda i: data["chapters"][i]["title"],
             key=chapter_key,
         )
@@ -341,7 +343,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[passage_key] = 0
         passage = st.selectbox(
             t("Passage"),
-            widget_options(range(len(data["chapters"][index]["passages"]))),
+            range(len(data["chapters"][index]["passages"])),
             format_func=lambda i: data["chapters"][index]["passages"][i]["text"][:70],
             key=passage_key,
         )
@@ -355,7 +357,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[select_key] = len(items) - 1
         index = st.selectbox(
             t("Turn" if kind == JobKind.PODCAST else "Slide"),
-            widget_options(range(len(items))),
+            range(len(items)),
             format_func=lambda i: (
                 f"{i + 1}. "
                 + (items[i].get("title") or items[i].get("text", "")[:70] or t("New slide"))
@@ -451,7 +453,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
     elif kind == JobKind.PODCAST_SERIES:
         index = st.selectbox(
             t("Episode"),
-            widget_options(range(len(data["episodes"]))),
+            range(len(data["episodes"])),
             format_func=lambda i: f"{i + 1}. {data['episodes'][i]['title']}",
             key=f"{key}:episode:{epoch}",
         )
@@ -463,7 +465,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             st.session_state[widget_key] = data["episodes"][index]["topic_ids"]
         st.multiselect(
             t("Topics"),
-            widget_options(list(topic_names)),
+            list(topic_names),
             format_func=topic_names.__getitem__,
             key=widget_key,
             on_change=_write_field,
@@ -472,7 +474,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
         with st.expander(t("Edit topics and terminology")):
             topic = st.selectbox(
                 t("Topic"),
-                widget_options(range(len(data["topics"]))),
+                range(len(data["topics"])),
                 format_func=lambda i: data["topics"][i]["title"],
                 key=f"{key}:topic:{epoch}",
             )
@@ -482,7 +484,7 @@ def fields(data, kind, key, t, source_names, text_inputs):
             if data["terms"]:
                 term = st.selectbox(
                     t("Term"),
-                    widget_options(range(len(data["terms"]))),
+                    range(len(data["terms"])),
                     format_func=lambda i: data["terms"][i]["term"],
                     key=f"{key}:term:{epoch}",
                 )
@@ -517,7 +519,7 @@ def turn_page(key, pages, t):
         )
         st.selectbox(
             t("Page"),
-            widget_options(range(1, pages + 1)),
+            range(1, pages + 1),
             format_func=lambda value: f"{value} / {pages}",
             key=select_key,
             on_change=select,
@@ -563,7 +565,7 @@ def preview(data, kind, key, t, workspace, *, job_id, include_terms=True):
         items = data["blocks"]
         index = st.selectbox(
             t("Passage"),
-            widget_options(list(range(len(items)))),
+            list(range(len(items))),
             format_func=lambda i: f"{i + 1}. {terminology.MARKER.sub('', items[i]['text'])[:90]}",
             key=key + EditorSuffix.ITEM_SELECTED,
         )
@@ -602,7 +604,7 @@ def preview(data, kind, key, t, workspace, *, job_id, include_terms=True):
     elif kind == JobKind.AUDIOBOOK:
         index = st.selectbox(
             t("Chapter"),
-            widget_options(range(len(data["chapters"]))),
+            range(len(data["chapters"])),
             format_func=lambda i: data["chapters"][i]["title"],
             key=key + EditorSuffix.ITEM_SELECTED,
         )
@@ -706,7 +708,7 @@ def turn_preview(workspace, job_id, revision, turn, language, saved, t, model=No
             return
         if status in ACTIVE_JOB_STATUSES:
             label = "Queued" if status == JobStatus.QUEUED else "Generating speech"
-            if existing["progress"].get("stage") == "waiting_for_speech":
+            if existing["progress"].get("stage") == StageId.WAITING_FOR_SPEECH:
                 label = "Waiting for another local speech job to finish"
             st.caption(t(label))
             return
@@ -726,7 +728,7 @@ def turn_preview(workspace, job_id, revision, turn, language, saved, t, model=No
             "compatible": known["compatible"],
         }
     if not item["compatible"] or (
-        item.get("engine", SpeechEngine.QWEN_CUSTOM).startswith("qwen3")
+        item.get("engine", SpeechEngine.QWEN_CUSTOM).startswith(QWEN_ENGINE_PREFIX)
         and not speech_models.qwen_runtime_available()
     ):
         return

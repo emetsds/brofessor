@@ -74,7 +74,7 @@ class NavigationModel(Model):
         identity = hashlib.sha256(prompt.encode()).hexdigest()[:24]
         tool = (
             parameters.output_tools[0].name
-            if step["actions"][0]["operation"] == "finish"
+            if step["actions"][0]["operation"] == source_navigation.NavigationOperation.FINISH
             else "retrieve"
         )
         return ModelResponse(
@@ -132,7 +132,7 @@ def run(session, generate, *, timeout=600):
     @agent.output_validator
     def finish(ctx: RunContext, step: source_navigation.NavigationStep):
         result = session.apply(step.model_dump(), operation_id=ctx.tool_call_id)
-        if state["status"] != "complete":
+        if state["status"] != source_navigation.NavigationStatus.COMPLETE:
             raise ModelRetry(reading.encoded(result))
         return step
 

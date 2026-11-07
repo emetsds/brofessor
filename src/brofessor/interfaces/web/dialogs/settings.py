@@ -68,7 +68,7 @@ def _initialize(prefix, values):
     st.session_state[prefix + "initialized"] = True
     st.session_state[prefix + "provider"] = values.get("provider")
     st.session_state[prefix + "model"] = values.get("model") or ""
-    st.session_state[prefix + "address"] = widget_value(
+    st.session_state[prefix + "address"] = (
         values.get("ollama_address")
         or preferences.text_connection(TextProvider.OLLAMA, for_edit=True)["ollama_address"]
     )
@@ -150,7 +150,7 @@ def speech_field(prefix, t, language=None):
     if len(catalog) > 1 or current not in known:
         st.selectbox(
             t("Speech model"),
-            widget_options([item["id"] for item in options]),
+            [item["id"] for item in options],
             index=None,
             key=prefix + "speech",
             format_func=lambda value: speech_models.get(value)["name"],
@@ -282,7 +282,7 @@ def task_models(workspace, job, t):
     data = record["data"]
     with ui_layout.section(t("Task models"), job["id"] + ":models"):
         st.caption(t("For future runs. Saving models does not start generation."))
-        prefix = f"ui:{workspace.path}:task-models:{job['id']}:"
+        prefix = project_key(workspace.path, ProjectKey.TASK_MODELS, job["id"], "")
         _initialize(prefix, data)
         if prefix + "revision" not in st.session_state:
             st.session_state[prefix + "revision"] = record["revision"]
@@ -294,10 +294,10 @@ def task_models(workspace, job, t):
                 prefix, t, draft["data"]["language"] if draft else job["params"]["language"]
             )
         origin = {
-            "application": "Copied from application defaults",
-            "custom": "Chosen for this task",
-            "parent": "Copied from the parent task",
-            "legacy": "Kept from the saved operation",
+            tasks.ModelOrigin.APPLICATION: "Copied from application defaults",
+            tasks.ModelOrigin.CUSTOM: "Chosen for this task",
+            tasks.ModelOrigin.PARENT: "Copied from the parent task",
+            tasks.ModelOrigin.LEGACY: "Kept from the saved operation",
         }.get(data.get("origin"), "Kept from the saved operation")
         st.caption(t(origin))
         save, defaults = st.columns(2)
@@ -338,7 +338,9 @@ def regenerate_controls(workspace, job, draft, saved, t, on_created):
         return
     try:
         model_revision = tasks.models(workspace, job["id"])["revision"]
-        key = f"ui:{workspace.path}:regenerate:{job['id']}:{draft['revision']}:{model_revision}"
+        key = project_key(
+            workspace.path, ProjectKey.REGENERATE, job["id"], draft["revision"], model_revision
+        )
         request_key = st.session_state.setdefault(key, uuid.uuid4().hex)
         result = tasks.regenerate(
             workspace,
@@ -715,7 +717,7 @@ def storage(t, *, models_only=False, selected=None):
     names = {item["path"]: item["name"] for item in available}
     path = st.selectbox(
         t("Project"),
-        widget_options(list(names)),
+        list(names),
         format_func=names.__getitem__,
         key="settings:cache-project",
     )

@@ -3,14 +3,14 @@
 import streamlit as st
 
 from brofessor.application import projects
-from brofessor.interfaces.web.state_keys import PROJECT_DIALOG_KEY, widget_options
+from brofessor.interfaces.web.state_keys import PROJECT_DIALOG_KEY
 
 
 def project_actions(context):
     t = context.t
     action = st.radio(
         t("Project"),
-        widget_options(["create", "open"]),
+        ["create", "open"],
         horizontal=True,
         key="project_action",
         format_func=lambda v: t("Create project" if v == "create" else "Open project"),

@@ -9,7 +9,7 @@ from brofessor import prompts
 from brofessor.contracts.content import ContentLanguage, EvidenceStatus, UnitStatus
 from brofessor.contracts.jobs import JobKind, JobStatus, StageId
 from brofessor.features.sources import reading
-from brofessor.features.sources.reading import ReadingStatus
+from brofessor.features.sources.reading import ReadingMode, ReadingStatus
 from brofessor.infrastructure.formats.ingestion import search_units
 from brofessor.models import Output
 from brofessor.prompts import ids as prompt_ids
@@ -108,14 +108,14 @@ def prepare(
     evidence = _evidence(ready)
     queries = []
     matched = []
-    mode = "direct"
+    mode = ReadingMode.DIRECT
     required_ids = set(required_ids or [])
     if required_ids and {u["id"] for u in ready} <= required_ids:
         if len(reading.encoded(evidence)) > EVIDENCE_BUDGET:
             raise ValueError("Selected original text exceeds the answer context budget")
-        mode = "navigated"
+        mode = ReadingMode.NAVIGATED
     elif len(reading.encoded(evidence)) > min(DIRECT_BUDGET, EVIDENCE_BUDGET):
-        mode = "retrieved"
+        mode = ReadingMode.RETRIEVED
         progress({"stage": StageId.SEARCHING})
         result = generate(
             prompts.render(

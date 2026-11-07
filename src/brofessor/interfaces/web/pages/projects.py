@@ -4,7 +4,7 @@ import streamlit as st
 
 from brofessor.application import projects
 from brofessor.interfaces.web.components import layout as ui_layout
-from brofessor.interfaces.web.state_keys import CHOOSE_TASK_PROJECT_KEY, PROJECT_DIALOG_KEY
+from brofessor.interfaces.web.state_keys import CHOOSE_TASK_PROJECT_KEY, PROJECT_DIALOG_KEY, Page
 
 
 def all_projects(context):
@@ -38,7 +38,10 @@ def all_projects(context):
         st.info(t("Create a project or open an existing folder to begin."))
     create, existing = st.columns(2)
     create.button(
-        t("Create project"), key="projects-create", on_click=context.navigate, args=("new-project",)
+        t("Create project"),
+        key="projects-create",
+        on_click=context.navigate,
+        args=(Page.NEW_PROJECT,),
     )
     if existing.button(t("Open existing project"), key="projects-open"):
         st.session_state["project_action"] = "open"

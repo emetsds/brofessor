@@ -669,6 +669,7 @@ Model IDs, source text, catalogs, external field/flag names, and obvious local
 literals remain data or local code as appropriate.
 
 UI keys belong to `interfaces/web/state_keys.py`. Use `widget_options` and
-`widget_value` at Streamlit boundaries so reruns do not mix enums with stored
-strings. Python supplies shared browser storage keys and trigger names to the JS
+`widget_value` for enum options and initial values at Streamlit boundaries so
+reruns do not mix enums with stored strings. Ordinary numeric ranges and IDs need
+no conversion. Python supplies shared browser storage keys and trigger names to the JS
 components. Changes to these values require checking unsaved-edit recovery.

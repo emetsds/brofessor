@@ -9,7 +9,6 @@ from brofessor.contracts.jobs import JobKind, JobStatus
 from brofessor.features.podcasts import checks as script_checks
 from brofessor.features.podcasts.checks import CheckStatus
 from brofessor.interfaces.web.components import layout as ui_layout
-from brofessor.interfaces.web.state_keys import widget_options
 
 
 def show(workspace, job, revision, saved, t, status_view, *, status_area):
@@ -48,7 +47,7 @@ def show(workspace, job, revision, saved, t, status_view, *, status_area):
         }
         selected = st.selectbox(
             t("Script checks"),
-            widget_options(list(by_id)),
+            list(by_id),
             format_func=lambda key: t(
                 "Revision {revision} · {status}",
                 revision=by_id[key]["params"]["revision"],

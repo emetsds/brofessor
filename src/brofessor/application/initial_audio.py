@@ -12,6 +12,7 @@ from brofessor.contracts.jobs import (
     JobStatus,
 )
 from brofessor.infrastructure.speech import catalogue as speech_models
+from brofessor.infrastructure.speech.contracts import QWEN_ENGINE_PREFIX
 from brofessor.infrastructure.storage.workspace import Workspace
 
 
@@ -43,7 +44,10 @@ def pin(workspace, job_id):
 def unavailable(spec):
     if speech_models.installed_path(spec) is None:
         return "Speech model files are missing. Open Settings → Models."
-    if spec.get("engine", "").startswith("qwen3") and not speech_models.qwen_runtime_available():
+    if (
+        spec.get("engine", "").startswith(QWEN_ENGINE_PREFIX)
+        and not speech_models.qwen_runtime_available()
+    ):
         return "Install local speech support in the project environment, then restart the UI."
     return None
 

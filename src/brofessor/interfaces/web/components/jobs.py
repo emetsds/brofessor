@@ -11,11 +11,12 @@ from brofessor.contracts.jobs import (
     InitialAudioState,
     JobKind,
     JobStatus,
+    StageId,
 )
 from brofessor.interfaces.web.components import content as ui_content
 from brofessor.interfaces.web.components import language as ui_language
 from brofessor.interfaces.web.labels import STATUS_LABELS
-from brofessor.interfaces.web.state_keys import NAVIGATION_KEY, ProjectKey, project_key
+from brofessor.interfaces.web.state_keys import NAVIGATION_KEY, Page, ProjectKey, project_key
 
 
 @st.fragment(run_every=2)
@@ -33,7 +34,7 @@ def active_work(context):
     for job in sorted(active, key=lambda j: j["status"] != JobStatus.RUNNING)[:3]:
         target = job["params"].get("draft_job_id") or job["id"]
         showing = (
-            st.session_state.get(NAVIGATION_KEY) == "results"
+            st.session_state.get(NAVIGATION_KEY) == Page.RESULTS
             and not st.session_state.get(project_key(workspace.path, ProjectKey.CREATING))
             and not st.session_state.get(project_key(workspace.path, ProjectKey.CATALOGUE))
             and st.session_state.get(project_key(workspace.path, ProjectKey.SELECTED_JOB)) == target
@@ -44,7 +45,7 @@ def active_work(context):
         label.caption(t("Processing: {title}", title=context.result_title(job)))
         from brofessor.application.progress import stage_label
 
-        label.caption(t(stage_label(job["progress"].get("stage", JobStatus.QUEUED))))
+        label.caption(t(stage_label(job["progress"].get("stage", StageId.QUEUED))))
         if job["kind"] != JobKind.DOWNLOAD_MODEL and action.button(
             t("Open task"), key=f"active-open-{job['id']}"
         ):

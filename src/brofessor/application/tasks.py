@@ -4,6 +4,7 @@ import re
 import sqlite3
 import time
 from collections.abc import Mapping
+from enum import StrEnum
 from pathlib import Path
 
 from brofessor.contracts.jobs import (
@@ -25,6 +26,13 @@ from brofessor.infrastructure.storage.workspace import DATABASE_FILENAME, Worksp
 from brofessor.infrastructure.text.runners import normalize_ollama_address, validate_ollama_model
 
 RECENT_LIMIT = 30
+
+
+class ModelOrigin(StrEnum):
+    APPLICATION = "application"
+    PARENT = "parent"
+    CUSTOM = "custom"
+    LEGACY = "legacy"
 
 
 def root_job(job: JobRecord, by_id: Mapping[str, JobRecord]) -> str:
@@ -367,8 +375,13 @@ def validate_models(kind, data):
             raise ValueError("An audiobook uses only a local speech model")
         speech = data.get("speech_model", selected())
         get(speech)
-        origin = data.get("origin", "custom")
-        if origin not in ("application", "parent", "custom", "legacy"):
+        origin = data.get("origin", ModelOrigin.CUSTOM)
+        if origin not in (
+            ModelOrigin.APPLICATION,
+            ModelOrigin.PARENT,
+            ModelOrigin.CUSTOM,
+            ModelOrigin.LEGACY,
+        ):
             raise ValueError("Invalid task model origin")
         return {"speech_model": speech, "origin": origin}
     allowed = {"provider", "model", "ollama_address", "origin"}
@@ -383,8 +396,17 @@ def validate_models(kind, data):
     if model is not None and not isinstance(model, str):
         raise ValueError("Model must be a name or empty")
     model = model.strip() or None if model is not None else None
-    result = {"provider": provider, "model": model, "origin": data.get("origin", "custom")}
-    if result["origin"] not in ("application", "parent", "custom", "legacy"):
+    result = {
+        "provider": provider,
+        "model": model,
+        "origin": data.get("origin", ModelOrigin.CUSTOM),
+    }
+    if result["origin"] not in (
+        ModelOrigin.APPLICATION,
+        ModelOrigin.PARENT,
+        ModelOrigin.CUSTOM,
+        ModelOrigin.LEGACY,
+    ):
         raise ValueError("Invalid task model origin")
     if provider == TextProvider.OLLAMA:
         try:
@@ -420,9 +442,9 @@ def initial_models(kind, params, *, speech_model=None, origin=None):
     result = validate_models(kind, data)
     defaults = preferences.settings(for_edit=True)
     result["origin"] = origin or (
-        "application"
+        ModelOrigin.APPLICATION
         if all(result.get(k) == defaults.get(k) for k in result if k != "origin")
-        else "custom"
+        else ModelOrigin.CUSTOM
     )
     return result
 
@@ -439,7 +461,7 @@ def models(workspace, job_id):
     data = {
         "provider": task["params"].get("provider", TextProvider.CODEX),
         "model": task["params"].get("model"),
-        "origin": "legacy",
+        "origin": ModelOrigin.LEGACY,
     }
     if data["provider"] == TextProvider.OLLAMA:
         data["ollama_address"] = ollama_address_for_job(task["params"])
@@ -459,7 +481,7 @@ def models(workspace, job_id):
 
 def save_models(workspace, job_id, data, expected_revision):
     task = _task(workspace, job_id)
-    value = validate_models(task["kind"], {**data, "origin": "custom"})
+    value = validate_models(task["kind"], {**data, "origin": ModelOrigin.CUSTOM})
     return workspace.save_task_models(task["id"], value, expected_revision)
 
 
@@ -469,7 +491,7 @@ def apply_defaults(workspace, job_id, expected_revision):
     if task["kind"] == JobKind.AUDIOBOOK:
         return workspace.save_task_models(
             task["id"],
-            {"speech_model": defaults["speech_model"], "origin": "application"},
+            {"speech_model": defaults["speech_model"], "origin": ModelOrigin.APPLICATION},
             expected_revision,
         )
     data = {
@@ -477,7 +499,7 @@ def apply_defaults(workspace, job_id, expected_revision):
         for key, value in defaults.items()
         if key != "language" and (key != "speech_model" or task["kind"] in PODCAST_JOB_KINDS)
     }
-    data["origin"] = "application"
+    data["origin"] = ModelOrigin.APPLICATION
     value = validate_models(task["kind"], data)
     return workspace.save_task_models(task["id"], value, expected_revision)
 

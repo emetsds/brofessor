@@ -26,6 +26,7 @@ from brofessor.contracts.jobs import (
 DATABASE_FILENAME: Final = "workspace.sqlite3"
 ORIGINALS_DIRECTORY: Final = "originals"
 JOBS_DIRECTORY: Final = "jobs"
+AUDIO_SEGMENTS_DIRECTORY: Final = "audio-segments"
 WORKSPACE_SCHEMA_VERSION: Final = 6
 
 
