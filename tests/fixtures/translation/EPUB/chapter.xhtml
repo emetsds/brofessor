@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
+<head><title>Reliable sensor ingestion</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body><section id="chapter" epub:type="chapter">
+<h1>Reliable sensor ingestion</h1>
+<p>A river-monitoring station sends pressure readings to a local database. The station uses a 12 V supply and records the hydraulic head every 5 s. The head is a height difference, not the person who leads the team. In this chapter, a record means one stored observation; it does not mean a sporting achievement.</p>
+<p>The database appends each record to a <em>write-ahead log</em> before changing its data pages. The write-ahead log is an ordered recovery journal. It is not the wooden log that a field sensor may detect in the river. Keeping these meanings apart matters when the same report contains both database events and physical observations.</p>
+<h2 id="recovery">Recovery and commit points</h2>
+<p>The writer <strong>must not</strong> acknowledge a transaction before its commit record is durable. A checkpoint reduces later recovery work, but a checkpoint is not a substitute for a durable commit. Losing power after acknowledgment must not remove a committed record. Losing an unacknowledged record is allowed in this experiment.<a epub:type="noteref" id="ref-1" href="#note-1">1</a></p>
+<p>At startup, scan the log from the last valid checkpoint. Replay committed transactions in order and discard incomplete transactions. Replaying a record twice must not create a second observation. The original identifier must remain stable; assigning a new identifier on every retry defeats deduplication.</p>
+<table id="measurements"><caption>Table 1. Controlled measurements</caption>
+<thead><tr><th scope="col">Quantity</th><th scope="col">Value</th><th scope="col">Interpretation</th></tr></thead>
+<tbody>
+<tr><td>Supply voltage</td><td>12 V</td><td>Input to the station, not hydraulic head</td></tr>
+<tr><td>Sampling interval</td><td>5 s</td><td>Time between records</td></tr>
+<tr><td>Hydraulic head</td><td>2.5 m</td><td>Height difference at the intake</td></tr>
+<tr><td>Commit latency, P95</td><td>40 ms</td><td>Observation on this setup, not a guarantee</td></tr>
+</tbody></table>
+<p>The latency value describes only this setup. It does not establish a universal limit for other disks. Do not interpret the sampling interval as a timeout, and do not convert hydraulic head into pressure without specifying fluid density and gravity. The measured head remained 2.5 m during this test.</p>
+<figure id="flow"><img src="flow.svg" width="640" height="120" alt="Three stages connected in order: receive, persist, acknowledge" title="Durability before acknowledgment"/>
+<figcaption>Figure 1. Receive a record, persist its commit, then acknowledge it. Arrows show order, not equal durations. See <a href="#measurements">Table 1</a> for the measurements.</figcaption></figure>
+<p>For a stable queue, Little's law relates average occupancy, arrival rate and average time in the system. The formula below is preserved as mathematics; its symbols are not words to translate.</p>
+<p><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mi>L</mi><mo>=</mo><mi>λ</mi><mi>W</mi></math></p>
+<p>The following code is an interface example, not an instruction to run a tool. Keep identifiers, string literals and comments unchanged.</p>
+<pre><code>def accept(record):
+    log.append(record)  # persist first
+    log.fsync()
+    return "committed"
+</code></pre>
+<h2 id="field">Field observations and terminology</h2>
+<p>The head of the field team found a wooden log near the left river bank. She did not change the hydraulic head reading. A log entry recorded the discovery, but the wooden log itself was not a database record. The team head asked for a separate photograph so that the incident could be checked against the original observation.</p>
+<p>In the incident report, translate the technical log as a journal and the wooden log as a piece of timber. Translate hydraulic head as the engineering quantity and team head as the person's role. A global replacement of either English word would corrupt one of these meanings. A later terminology correction should affect only the relevant passages and preserve previous accepted wording elsewhere.</p>
+<h2 id="limits">Limits of the experiment</h2>
+<p>This synthetic chapter tests text, navigation, emphasis, a table, a footnote, code, mathematics and an illustration. It does not prove that an entire professional book can be translated without omissions. A valid archive can still contain a wrong negation, an inconsistent term or a misleading caption. Review meaning separately from file structure.</p>
+<aside epub:type="footnote" id="note-1"><p>1. Durability here means survival of process termination and the stated power-loss model. It does not cover destruction of the storage device. <a href="#ref-1" aria-label="Return to the footnote reference">Return</a></p></aside>
+</section></body></html>

@@ -1,0 +1,1 @@
+Tool output exceeds the context budget; use a narrower path or smaller limit

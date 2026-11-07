@@ -1,0 +1,2 @@
+
+The whole episode budget is {{target_words}} spoken words; {{written}} words are already accepted in previous sections. Write {{target}} spoken words in this section, between {{lower}} and {{upper}}. 

@@ -6,23 +6,44 @@ build-backend = "hatchling.build"
 name = "brofessor"
 version = "0.1.0"
 license = "MIT"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "LICENSES/*", "THIRD_PARTY_NOTICES.md"]
 description = "Local sources, grounded answers, podcasts and presentations"
 requires-python = ">=3.12,<3.14"
-dependencies = ["typer>=0.15,<1", "pydantic>=2.10,<3", "pypdf>=5,<7", "httpx>=0.28,<1", "python-pptx>=1.0.2,<2", "Pillow>=11,<13", "huggingface-hub>=1.0,<3"]
+dependencies = [
+    "typer>=0.15,<1",
+    "pydantic>=2.10,<3",
+    "pypdf>=5,<7",
+    "httpx>=0.28,<1",
+    "httpx2>=2.7,<3",
+    "python-pptx>=1.0.2,<2",
+    "Pillow>=11,<13",
+    "huggingface-hub>=1.0,<3",
+    "pypdfium2==5.14.0",
+    "reportlab==5.1.0",
+    "pyphen==0.18.1",
+    "pyyaml==6.0.3",
+    "pydantic-ai-slim[openai]==2.66.0",
+]
 
 [project.optional-dependencies]
-ui = ["streamlit>=1.55,<2"]
+ui = ["streamlit>=1.64,<2"]
 speech = ["mlx-audio>=0.6.3,<0.7", "soundfile>=0.13,<1", "imageio-ffmpeg>=0.6,<1"]
 silero = ["torch>=2.5,<3", "soundfile>=0.13,<1", "imageio-ffmpeg>=0.6,<1"]
+
+russian-speech = ["ruaccent==1.5.8.3", "onnxruntime==1.31.1", "misaki==0.9.4", "phonemizer==3.4.0", "espeakng-loader==0.2.4", "soundfile>=0.13,<1", "imageio-ffmpeg>=0.6,<1"]
 
 f5 = ["f5-tts>=1.1,<2", "soundfile>=0.13,<1", "imageio-ffmpeg>=0.6,<1"]
 
 [dependency-groups]
-dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+dev = [
+    "mypy==2.4.1",
+    "pytest>=8,<10",
+    "ruff>=0.11,<1",
+    "soundfile>=0.13,<1",
+]
 
 [project.scripts]
-brofessor = "brofessor.cli:app"
+brofessor = "brofessor.interfaces.cli.app:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -33,6 +54,31 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "src/brofessor/contracts",
+    "src/brofessor/models.py",
+    "src/brofessor/application/worker.py",
+    "src/brofessor/application/initial_audio.py",
+    "src/brofessor/application/service.py",
+    "src/brofessor/application/tasks.py",
+    "src/brofessor/infrastructure/storage/workspace.py",
+    "src/brofessor/infrastructure/storage/preferences.py",
+    "src/brofessor/infrastructure/speech/contracts.py",
+    "src/brofessor/infrastructure/speech/catalogue.py",
+    "src/brofessor/infrastructure/speech/references.py",
+    "src/brofessor/infrastructure/formats/contracts.py",
+    "src/brofessor/infrastructure/formats/ingestion.py",
+    "src/brofessor/interfaces/web/state_keys.py",
+    "src/brofessor/features/reports.py",
+    "src/brofessor/features/studies.py",
+    "src/brofessor/prompts",
+]
+follow_imports = "silent"
+warn_unused_ignores = true
+check_untyped_defs = false
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/brofessor"]

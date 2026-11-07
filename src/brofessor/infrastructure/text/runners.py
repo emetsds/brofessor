@@ -1,0 +1,708 @@
+"""Bounded text generation using official subscription CLIs or local Ollama.
+
+No credentials are read by this module. The official CLIs own authentication.
+Provider output is untrusted: callers must validate the returned object against
+application models before storing it. This module never falls back to another
+provider, model, or billing profile.
+"""
+
+# Runner failures deliberately share the RuntimeError contract.
+# ruff: noqa: TRY004
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import copy
+import ipaddress
+import json
+import math
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+
+import httpx2 as httpx
+
+from brofessor import prompts
+from brofessor.contracts.text import (
+    DEFAULT_OLLAMA_ADDRESS,
+    DEFAULT_OLLAMA_PORT,
+    TEXT_PROVIDERS,
+    TextProvider,
+)
+
+_MAX_BYTES = 8 * 1024 * 1024
+_POLL_SECONDS = 0.05
+_BILLING_ENV = (
+    "OPENAI_API_KEY",
+    "CODEX_API_KEY",
+    "OPENAI_BASE_URL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+)
+
+
+_OLLAMA_SETUP = (
+    "Start or restart the Ollama server with OLLAMA_NO_CLOUD=1. "
+    "The server must expose /api/status with cloud.disabled=true. "
+    "The configured address or a client environment variable alone does not verify disabled server cloud features."
+)
+
+
+class CancelledError(RuntimeError):
+    """The caller cancelled the job; no partial result may be published."""
+
+
+def normalize_ollama_address(address: str) -> str:
+    """Accept an explicit IPv4:port or [IPv6]:port, without URL extras."""
+    message = "Ollama address must be IP:port (for example 127.0.0.1:11434 or [::1]:11434)"
+    try:
+        if not isinstance(address, str) or "://" in address:
+            raise ValueError
+        if any(char.isspace() for char in address.strip()):
+            raise ValueError
+        parsed = urlsplit("http://" + address.strip())
+        if parsed.netloc != address.strip() or parsed.username is not None:
+            raise ValueError
+        ip = ipaddress.ip_address(parsed.hostname)
+        port = parsed.port
+        if port is None or not 1 <= port <= 65535 or "%" in str(ip):
+            raise ValueError
+    except (ValueError, TypeError):
+        raise ValueError(message) from None
+    host = f"[{ip.compressed}]" if ip.version == 6 else ip.compressed
+    return f"{host}:{port}"
+
+
+def ollama_url(address: str) -> str:
+    return "http://" + normalize_ollama_address(address)
+
+
+def ollama_address_for_job(params: dict) -> str:
+    """Keep saved port-only jobs on their original loopback server."""
+    if "ollama_address" in params:
+        return normalize_ollama_address(params["ollama_address"])
+    port = params.get("ollama_port", DEFAULT_OLLAMA_PORT)
+    if type(port) is not int:
+        raise ValueError("Saved Ollama port must be an integer")
+    return normalize_ollama_address(f"127.0.0.1:{port}")
+
+
+def _check_cancel(cancelled: Callable[[], bool] | None) -> None:
+    if cancelled is not None and cancelled():
+        raise CancelledError("Model generation cancelled")
+
+
+def _json_object(text: str, description: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    except (json.JSONDecodeError, ValueError, TypeError):
+        raise RuntimeError(f"{description} returned invalid JSON") from None
+    if not isinstance(value, dict):
+        raise RuntimeError(f"{description} must return a JSON object")
+    return value
+
+
+def _binary(provider: str) -> str:
+    configured = os.environ.get(f"BROFESSOR_{provider.upper()}_BIN", provider)
+    binary = shutil.which(configured)
+    if binary is None:
+        raise RuntimeError(
+            f"{provider} CLI not found. Install the official stable CLI or set "
+            f"BROFESSOR_{provider.upper()}_BIN to its executable path."
+        )
+    return binary
+
+
+def _check_billing(provider: str) -> None:
+    names = _BILLING_ENV[:3] if provider == TextProvider.CODEX else _BILLING_ENV[3:]
+    present = [name for name in names if os.environ.get(name)]
+    if present:
+        raise RuntimeError(
+            f"{provider} subscription profile refuses inherited API/provider overrides: "
+            + ", ".join(present)
+            + ". Unset them for this process and use the official CLI subscription login."
+        )
+
+
+def _terminate_group(process: subprocess.Popen) -> None:
+    # A completed guardian has already killed its group. Never signal its reaped PID.
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=0.5)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    # A guardian which has not exited still owns this live group identifier.
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait(timeout=2)
+
+
+def _run_process(
+    args: list[str],
+    *,
+    cwd: Path,
+    prompt: str = "",
+    timeout: float = 10,
+    cancelled: Callable[[], bool] | None = None,
+    allowed_exit_codes: tuple[int, ...] = (0,),
+) -> tuple[str, str]:
+    _check_cancel(cancelled)
+    started = time.monotonic()
+    # The write side belongs only to this worker. SIGKILL closes it in the kernel,
+    # so the guardian can terminate the CLI without relying on finally or a PID file.
+    lifeline_read, lifeline_write = os.pipe()
+    status_read, status_write = os.pipe()
+    process = None
+    try:
+        # Files avoid stdin pipe deadlocks and unbounded communicate() buffering.
+        with (
+            tempfile.TemporaryFile() as stdin,
+            tempfile.TemporaryFile() as stdout,
+            tempfile.TemporaryFile() as stderr,
+        ):
+            stdin.write(prompt.encode("utf-8"))
+            stdin.seek(0)
+            guardian = [
+                sys.executable,
+                "-m",
+                "brofessor.infrastructure.text._runner_guardian",
+                str(lifeline_read),
+                str(status_write),
+                "--",
+                *args,
+            ]
+            try:
+                process = subprocess.Popen(
+                    guardian,
+                    cwd=cwd,
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    shell=False,
+                    start_new_session=True,
+                    pass_fds=(lifeline_read, status_write),
+                )
+            except OSError:
+                raise RuntimeError(
+                    "Could not start the official CLI. Check its executable and installation."
+                ) from None
+            os.close(lifeline_read)
+            lifeline_read = -1
+            os.close(status_write)
+            status_write = -1
+            try:
+                while process.poll() is None:
+                    _check_cancel(cancelled)
+                    if time.monotonic() - started >= timeout:
+                        raise RuntimeError("Model process timed out")
+                    if any(
+                        os.fstat(file.fileno()).st_size > _MAX_BYTES for file in (stdout, stderr)
+                    ):
+                        raise RuntimeError("Model process exceeded its output limit")
+                    time.sleep(_POLL_SECONDS)
+                _check_cancel(cancelled)
+                if any(os.fstat(file.fileno()).st_size > _MAX_BYTES for file in (stdout, stderr)):
+                    raise RuntimeError("Model process exceeded its output limit")
+                stdout.seek(0)
+                stderr.seek(0)
+                out = stdout.read().decode("utf-8", errors="replace")
+                err = stderr.read().decode("utf-8", errors="replace")
+                # The guardian is dead and its descriptors are closed. At most a
+                # signed integer is sent, and subprocesses never inherit this FD.
+                status = os.read(status_read, 32)
+                try:
+                    returncode = int(status.decode("ascii").strip())
+                except (UnicodeDecodeError, ValueError):
+                    raise RuntimeError(
+                        "Model supervisor stopped without a terminal status"
+                    ) from None
+                if returncode not in allowed_exit_codes:
+                    # Never copy arbitrary stderr: it can contain source text or credentials.
+                    diagnosis = (
+                        "Check CLI installation, supported flags, login, and network access."
+                    )
+                    if "ENOENT" in err:
+                        diagnosis = (
+                            "The CLI launcher is missing its binary. Repair the official installation "
+                            "or set BROFESSOR_CODEX_BIN/BROFESSOR_CLAUDE_BIN to a working stable CLI."
+                        )
+                    elif "Operation not permitted" in err:
+                        diagnosis = "The operating system sandbox blocked CLI startup or access."
+                    if "401" in err or "login" in err.lower() or "authentication" in err.lower():
+                        diagnosis = "Check subscription login with the official CLI."
+                    raise RuntimeError(f"Model process exited with code {returncode}. {diagnosis}")
+                return out, err
+            finally:
+                _terminate_group(process)
+    finally:
+        for descriptor in (lifeline_read, lifeline_write, status_read, status_write):
+            if descriptor >= 0:
+                os.close(descriptor)
+
+
+def _auth_mode(
+    provider: str,
+    binary: str,
+    cwd: Path,
+    timeout: float,
+    cancelled: Callable[[], bool] | None,
+) -> str:
+    if provider == TextProvider.CODEX:
+        out, err = _run_process(
+            [binary, "login", "status"], cwd=cwd, timeout=timeout, cancelled=cancelled
+        )
+        if "logged in using chatgpt" not in (out + err).lower():
+            raise RuntimeError("Codex requires saved ChatGPT subscription login. Run codex login.")
+        return "chatgpt_subscription"
+    out, _ = _run_process(
+        [binary, "auth", "status", "--json"],
+        cwd=cwd,
+        timeout=timeout,
+        cancelled=cancelled,
+        allowed_exit_codes=(0, 1),  # The official CLI uses 1 for a valid logged-out status.
+    )
+    status = _json_object(out, "Claude authentication status")
+    if (
+        status.get("loggedIn") is not True
+        or status.get("authMethod") not in {"oauth_token", "claude.ai", "claude_ai"}
+        or status.get("apiProvider") != "firstParty"
+    ):
+        raise RuntimeError("Claude requires its own subscription login. Run claude auth login.")
+    return "claude_subscription"
+
+
+def _strict_schema(schema: dict) -> dict:
+    """Adapt Pydantic's optional/default object properties to strict CLI transport."""
+    result = copy.deepcopy(schema)
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            node.pop("default", None)
+            if node.get("type") == "object" or "properties" in node:
+                node["additionalProperties"] = False
+                node["required"] = list(node.setdefault("properties", {}))
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(result)
+    return result
+
+
+def _codex_args(binary: str, schema_path: Path, output_path: Path, model: str | None) -> list[str]:
+    args = [
+        binary,
+        "--no-daemon",
+        "exec",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--color",
+        "never",
+        "--json",
+        "--output-schema",
+        str(schema_path),
+        "-o",
+        str(output_path),
+    ]
+    configs = [
+        'approval_policy="never"',
+        'forced_login_method="chatgpt"',
+        'web_search="disabled"',
+        "project_doc_max_bytes=0",
+        "mcp_servers={}",
+        "agents.enabled=false",
+        "features.shell_tool=false",
+        "features.unified_exec=false",
+        "features.apps=false",
+        "features.plugins=false",
+        "features.hooks=false",
+        "features.multi_agent=false",
+        "features.browser_use=false",
+        "features.computer_use=false",
+        "features.image_generation=false",
+        "features.view_image=false",
+        "features.code_mode_host=false",
+        "features.skill_search=false",
+    ]
+    for config in configs:
+        args.extend(["-c", config])
+    if model:
+        args.extend(["--model", model])
+    return [*args, "-"]
+
+
+def generate(
+    prompt: str,
+    schema: dict,
+    provider: str,
+    model: str | None = None,
+    *,
+    ollama_address: str = DEFAULT_OLLAMA_ADDRESS,
+    workdir: Path,
+    timeout: float = 600,
+    cancelled: Callable[[], bool] | None = None,
+) -> dict:
+    """Return one terminal JSON object, or fail without publishing partial output.
+
+    Ollama uses the selected IP:port; redirects, HTTP proxies and cloud aliases
+    are forbidden. Its server must report disabled cloud features before receiving
+    source data. No provider is auto-installed, downloaded, or authenticated.
+    """
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise RuntimeError("Generation timeout must be a finite positive number")
+    if not isinstance(prompt, str) or len(prompt.encode("utf-8")) > _MAX_BYTES:
+        raise RuntimeError("Prompt must be text within the 8 MiB input limit")
+    if not isinstance(schema, dict):
+        raise RuntimeError("Output schema must be a JSON object")
+    if provider not in TEXT_PROVIDERS:
+        raise RuntimeError(f"Unsupported executor: {provider}")
+    if (
+        sum(
+            len(message["content"].encode("utf-8"))
+            for message in prompts.messages(prompt, provider)
+        )
+        > _MAX_BYTES
+    ):
+        raise RuntimeError("Assembled messages exceed the 8 MiB input limit")
+    _check_cancel(cancelled)
+    if provider == TextProvider.OLLAMA:
+        from brofessor.infrastructure.storage.locks import models_lock
+
+        url = ollama_url(ollama_address)
+        validate_ollama_model(model)
+        with models_lock(check=lambda: _check_cancel(cancelled)):
+            return asyncio.run(_bounded_ollama(prompt, schema, model, timeout, cancelled, url))
+    _check_billing(provider)
+    binary = _binary(provider)
+    workdir = Path(workdir)
+    workdir.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="runner-", dir=workdir) as directory:
+        scratch = Path(directory)
+        # Bound project config discovery to this empty directory.
+        (scratch / ".git").mkdir()
+        _auth_mode(provider, binary, scratch, min(10, timeout), cancelled)
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise RuntimeError("Model process timed out during authentication check")
+        if provider == TextProvider.CODEX:
+            schema_path, output_path = scratch / "schema.json", scratch / "result.json"
+            schema_path.write_text(json.dumps(_strict_schema(schema)), encoding="utf-8")
+            _run_process(
+                _codex_args(binary, schema_path, output_path, model),
+                cwd=scratch,
+                prompt=prompts.messages(prompt, provider)[0]["content"],
+                timeout=remaining,
+                cancelled=cancelled,
+            )
+            if not output_path.is_file():
+                raise RuntimeError("Codex returned no structured terminal result")
+            if output_path.stat().st_size > _MAX_BYTES:
+                raise RuntimeError("Codex structured result exceeded its output limit")
+            return _json_object(output_path.read_text(encoding="utf-8", errors="replace"), "Codex")
+        args = [
+            binary,
+            "-p",
+            "--safe-mode",
+            "--tools",
+            "",
+            "--no-session-persistence",
+            "--disable-slash-commands",
+            "--strict-mcp-config",
+            "--mcp-config",
+            '{"mcpServers":{}}',
+            "--output-format",
+            "json",
+            "--json-schema",
+            json.dumps(_strict_schema(schema)),
+        ]
+        if model:
+            args.extend(["--model", model])
+        out, _ = _run_process(
+            args,
+            cwd=scratch,
+            prompt=prompts.messages(prompt, provider)[0]["content"],
+            timeout=remaining,
+            cancelled=cancelled,
+        )
+        terminal = _json_object(out, "Claude")
+        if (
+            terminal.get("type") != "result"
+            or terminal.get("subtype") != "success"
+            or terminal.get("is_error") is True
+        ):
+            raise RuntimeError("Claude did not return a successful terminal result")
+        result = terminal.get("structured_output")
+        if not isinstance(result, dict):
+            raise RuntimeError("Claude returned no structured terminal JSON object")
+        return result
+
+
+def validate_ollama_model(model: str | None) -> None:
+    if not model or not re.fullmatch(r"[\w.-]+(?:/[\w.-]+)*(?::[\w.-]+)?", model):
+        raise RuntimeError("Choose an installed local Ollama model by name and optional tag")
+    if "cloud" in re.split(r"[:/.-]", model.lower()):
+        raise RuntimeError("Cloud Ollama models are forbidden in the local-only executor")
+
+
+def _remote(metadata: dict) -> bool:
+    return bool(metadata.get("remote_host") or metadata.get("remote_model"))
+
+
+async def _get_object(client: httpx.AsyncClient, method: str, path: str, **kwargs) -> dict:
+    response = await client.request(method, path, **kwargs)
+    if response.status_code != 200:
+        if path == "/api/status":
+            raise RuntimeError("Cannot verify Ollama server local-only state. " + _OLLAMA_SETUP)
+        raise RuntimeError(f"Ollama {path} returned HTTP {response.status_code}")
+    if len(response.content) > _MAX_BYTES:
+        raise RuntimeError("Ollama metadata exceeded its output limit")
+    return _json_object(response.text, "Ollama")
+
+
+async def _ollama_preflight(client: httpx.AsyncClient, model: str | None) -> dict:
+    status = await _get_object(client, "GET", "/api/status")
+    cloud = status.get("cloud")
+    if not isinstance(cloud, dict) or cloud.get("disabled") is not True:
+        raise RuntimeError("Ollama cloud features are not disabled. " + _OLLAMA_SETUP)
+    tags = await _get_object(client, "GET", "/api/tags")
+    models = tags.get("models", [])
+    if not isinstance(models, list):
+        raise RuntimeError("Ollama returned invalid local model metadata")
+    if model is None:
+        return {
+            "cloud_disabled_verified": True,
+            "models": [
+                item.get("name") for item in models if isinstance(item, dict) and not _remote(item)
+            ],
+        }
+    name = model if ":" in model else model + ":latest"
+    entry = next(
+        (
+            item
+            for item in models
+            if isinstance(item, dict) and item.get("name", item.get("model")) == name
+        ),
+        None,
+    )
+    if not entry or not isinstance(entry.get("size"), int) or entry["size"] <= 0:
+        raise RuntimeError("Ollama model is not installed locally. Pull it explicitly before use.")
+    if _remote(entry):
+        raise RuntimeError("Ollama selected model points to a remote model")
+    details = await _get_object(client, "POST", "/api/show", json={"model": model})
+    if _remote(details):
+        raise RuntimeError("Ollama selected model points to a remote model")
+    result = {"cloud_disabled_verified": True, "model": name, "digest": entry.get("digest")}
+    thinking = details.get("thinking")
+    values = thinking.get("values") if isinstance(thinking, dict) else None
+    if isinstance(values, list) and any(value is False for value in values):
+        # Bounded transformations need the final JSON. Only disable reasoning when
+        # this exact model advertises support; other models keep their default.
+        result["think"] = False
+    return result
+
+
+class _LimitedOllamaStream(httpx.AsyncByteStream):
+    """Bound wire bytes before the SDK buffers or parses model output."""
+
+    def __init__(self, stream):
+        self.stream = stream
+
+    async def __aiter__(self):
+        total = 0
+        async for chunk in self.stream:
+            total += len(chunk)
+            if total > _MAX_BYTES:
+                raise RuntimeError("Ollama response exceeded its output limit")
+            yield chunk
+
+    async def aclose(self):
+        await self.stream.aclose()
+
+
+async def _limit_ollama_response(response):
+    # Keep the wire limit a memory limit: do not let decompression expand a
+    # small HTTP body into an unbounded SDK buffer. Ollama serves identity SSE.
+    if response.headers.get("content-encoding", "identity").strip().lower() != "identity":
+        await response.aclose()
+        raise RuntimeError("Ollama returned an unsupported compressed response")
+    response.stream = _LimitedOllamaStream(response.stream)
+
+
+async def _ollama_request(prompt: str, schema: dict, model: str | None, url: str) -> dict:
+    from pydantic_ai.direct import model_request_stream
+    from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
+    from pydantic_ai.messages import (
+        ModelRequest,
+        SystemPromptPart,
+        TextPart,
+        ThinkingPart,
+        UserPromptPart,
+    )
+    from pydantic_ai.models import ModelRequestParameters
+    from pydantic_ai.models.ollama import OllamaModel
+    from pydantic_ai.output import OutputObjectDefinition
+    from pydantic_ai.profiles.openai import OpenAIModelProfile
+    from pydantic_ai.providers.ollama import OllamaProvider
+
+    async with httpx.AsyncClient(
+        base_url=url,
+        timeout=30,
+        trust_env=False,
+        follow_redirects=False,
+        headers={"Accept-Encoding": "identity"},
+        event_hooks={"response": [_limit_ollama_response]},
+    ) as client:
+        profile = await _ollama_preflight(client, model)
+        provider = OllamaProvider(
+            base_url=url + "/v1", api_key=TextProvider.OLLAMA, http_client=client
+        )
+        text_model = OllamaModel(
+            model,
+            provider=provider,
+            profile=OpenAIModelProfile(
+                # Keep the original schema, including its constraints and titles,
+                # so accepted checkpoints and saved jobs retain their inputs.
+                json_schema_transformer=None,
+                openai_chat_streaming_requires_finish_reason=True,
+            ),
+        )
+        messages = prompts.messages(prompt, TextProvider.OLLAMA)
+        try:
+            async with (
+                model_request_stream(
+                    text_model,
+                    [
+                        ModelRequest(
+                            parts=[
+                                SystemPromptPart(messages[0]["content"]),
+                                UserPromptPart(messages[1]["content"]),
+                            ]
+                        )
+                    ],
+                    model_settings={
+                        "max_retries": 0,
+                        "timeout": None,  # The outer cancellation/deadline covers preflight and inference.
+                        **({"openai_reasoning_effort": "none"} if "think" in profile else {}),
+                    },
+                    model_request_parameters=ModelRequestParameters(
+                        output_mode="native",
+                        output_object=OutputObjectDefinition(
+                            json_schema=schema, name="result", strict=False
+                        ),
+                    ),
+                    instrument=False,
+                ) as stream
+            ):
+                async for _ in stream:
+                    pass
+                result = stream.get()
+        except ModelHTTPError as error:
+            raise RuntimeError(f"Ollama generation returned HTTP {error.status_code}") from None
+        except ModelAPIError:
+            raise RuntimeError(
+                "Cannot reach the selected Ollama server or its response was interrupted"
+            ) from None
+        if result.finish_reason != "stop" or any(
+            not isinstance(part, (TextPart, ThinkingPart)) for part in result.parts
+        ):
+            raise RuntimeError("Ollama did not complete a structured text result")
+        return _json_object(result.text, "Ollama")
+
+
+async def _bounded_ollama(prompt, schema, model, timeout, cancelled, url) -> dict:
+    task = asyncio.create_task(_ollama_request(prompt, schema, model, url))
+    started = time.monotonic()
+    try:
+        while True:
+            _check_cancel(cancelled)
+            if time.monotonic() - started >= timeout:
+                raise RuntimeError("Ollama generation timed out")
+            finished, _ = await asyncio.wait({task}, timeout=_POLL_SECONDS)
+            if finished:
+                _check_cancel(cancelled)
+                return task.result()
+    except httpx.HTTPError:
+        raise RuntimeError(
+            "Cannot reach the selected Ollama server or its response was interrupted"
+        ) from None
+    finally:
+        if not task.done():
+            task.cancel()
+        with contextlib.suppress(Exception, asyncio.CancelledError):
+            await task
+
+
+def doctor(
+    provider: str, model: str | None = None, *, ollama_address: str = DEFAULT_OLLAMA_ADDRESS
+) -> dict:
+    """Read-only, nonsecret diagnostics. Does not generate tokens or log in."""
+    result = {
+        "provider": provider,
+        "available": False,
+        "auth_mode": "unknown",
+        "capabilities": ["structured_output", "timeout", "cancellation"],
+    }
+    try:
+        if provider == TextProvider.OLLAMA:
+            url = ollama_url(ollama_address)
+            result["address"] = normalize_ollama_address(ollama_address)
+            if model:
+                validate_ollama_model(model)
+
+            async def inspect():
+                async with httpx.AsyncClient(
+                    base_url=url, timeout=3, trust_env=False, follow_redirects=False
+                ) as client:
+                    return await _ollama_preflight(client, model)
+
+            result.update(asyncio.run(inspect()))
+            result.update(available=True, auth_mode="server_no_auth")
+        elif provider in {TextProvider.CODEX, TextProvider.CLAUDE}:
+            _check_billing(provider)
+            binary = _binary(provider)
+            with tempfile.TemporaryDirectory(prefix="brofessor-doctor-") as directory:
+                cwd = Path(directory)
+                out, _ = _run_process([binary, "--version"], cwd=cwd)
+                # Version banners are safe only if they match an expected bounded pattern.
+                version = re.search(r"\b\d+\.\d+\.\d+(?:[-.][\w.-]+)?\b", out)
+                result["version"] = version.group() if version else "unknown"
+                result["auth_mode"] = _auth_mode(provider, binary, cwd, 10, None)
+                result["available"] = True
+        else:
+            raise RuntimeError(f"Unsupported executor: {provider}")
+        result["diagnostic"] = "Ready for a real generation check (not yet smoke-tested)."
+    except (ValueError, RuntimeError, httpx.HTTPError) as error:
+        result["diagnostic"] = (
+            str(error)
+            if isinstance(error, (ValueError, RuntimeError))
+            else ("Cannot reach the selected Ollama server. " + _OLLAMA_SETUP)
+        )
+    return result

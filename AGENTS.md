@@ -30,6 +30,16 @@ Keep the architecture small: one SQLite workspace, one OS-locked local worker, a
 
 ## Verification and reporting
 
+Use named values consistently across the application, tests, and developer tools:
+
+- Closed domain choices use `StrEnum` with explicit existing serialized values. Keep job status, stage state, initial audio state, and presentation state distinct.
+- Put shared contracts in `contracts/`; feature, format, adapter, and UI values stay with their owner. Use module constants and `Final` for shared contract names, and immutable groups for behavioral membership rules.
+- Describe shared records with `TypedDict` while preserving their dictionary and JSON shape. Keep existing runtime validation at its boundaries; annotations alone do not validate external data. Persisted records retain plain strings and readable historical unknown values.
+- Reuse existing named definitions. Leave obvious local literals, external field/flag names, UI translation messages, catalog data, and source text inline when naming adds no meaning. Do not unify different concepts just because their current strings match.
+- Preserve model JSON schemas, defaults, prompt text, request/checkpoint/cache identities, and browser keys. Use the existing `Literal` aliases when an enum field would change a persisted model schema. Shared prompt references do not replace `catalogue.json` as the source of valid templates.
+- Streamlit options and initialized widget values cross through `widget_options`/`widget_value`; browser key construction belongs to `interfaces/web/state_keys.py`. Verify recovery when changing Python/JS contracts.
+- Use domain symbols in test setup, and independent raw expectations for serialized and vendor contracts. Run the scoped mypy configuration as well as Ruff and relevant behavioral tests; do not expand typing by hiding errors with blanket `Any` or ignores.
+
 Test behavior at module boundaries: source provenance, task contracts, job recovery, interface parity, and output usability. Do not substitute JSON validity for factual correctness or PPTX file existence for visual review.
 
 Each test should detect a concrete behavioral regression. Mock expensive external boundaries, not the behavior being tested. Avoid fixed fixture counts, required helper calls, and decorative layout choices. Exact vendor flags and file-format rules are legitimate external contracts; snapshot preservation and avoiding repeated model calls are domain contracts. When removing a test, identify where its useful protection remains. Prefer a targeted controlled fault over adding assertions solely to increase test or coverage counts.

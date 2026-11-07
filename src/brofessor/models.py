@@ -1,8 +1,13 @@
 """The small set of model outputs accepted by the workflows."""
 
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from brofessor.contracts.content import (
+    ContentLanguageValue,
+    EvidenceStatus,
+    EvidenceStatusValue,
+    SpeakerValue,
+)
 
 
 class Output(BaseModel):
@@ -17,14 +22,12 @@ class Quote(Output):
 class Answer(Output):
     answer: str = Field(min_length=1)
     citations: list[str]
-    evidence_status: Literal["supported", "insufficient_evidence", "conflicting_evidence"] = (
-        "supported"
-    )
+    evidence_status: EvidenceStatusValue = EvidenceStatus.SUPPORTED
     quotes: list[Quote] = Field(default_factory=list, max_length=24)
 
     @model_validator(mode="after")
     def supported_answer_has_citations(self):
-        if self.evidence_status == "supported" and not self.citations:
+        if self.evidence_status == EvidenceStatus.SUPPORTED and not self.citations:
             raise ValueError("A supported answer requires source citations")
         return self
 
@@ -42,14 +45,14 @@ class Note(Output):
 
 
 class Turn(Output):
-    speaker: Literal["host", "guest"]
+    speaker: SpeakerValue
     text: str = Field(min_length=1, max_length=1000)
     citations: list[str] = Field(min_length=1)
 
 
 class Podcast(Output):
     title: str = Field(min_length=1)
-    language: Literal["ru", "en"]
+    language: ContentLanguageValue
     turns: list[Turn] = Field(min_length=2)
 
 
@@ -87,7 +90,7 @@ class Slide(Output):
 
 class Slides(Output):
     title: str = Field(min_length=1)
-    language: Literal["ru", "en"]
+    language: ContentLanguageValue
     slides: list[Slide] = Field(min_length=1, max_length=40)
 
 

@@ -1,0 +1,1 @@
+Full scope has unread originals. Read them before finishing.

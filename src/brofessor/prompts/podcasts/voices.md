@@ -1,0 +1,2 @@
+
+DIALOGUE VOICES: host uses the default male voice and guest the default female voice. Use corresponding grammatical gender when they refer to themselves or address each other. Preserve the gender of characters and people in source quotations.

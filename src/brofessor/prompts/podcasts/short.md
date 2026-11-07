@@ -1,0 +1,2 @@
+{{base}}
+Write part {{part_number}} of {{parts}} of a coherent dialogue between host and guest. Aim for {{target_words}} spoken words in this part. Both speakers must contribute. Keep each turn under 600 characters. Explain mechanisms and examples, avoid filler and repetitive agreement. Only part 1 has an opening; only part {{last_part}} has a closing. Progress through the source topics in order. Previous ending: {{previous}}

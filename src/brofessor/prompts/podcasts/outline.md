@@ -1,0 +1,2 @@
+{{base}}
+Plan one {{minutes}}-minute learning podcast with exactly {{parts}} sections. Assign each section a distinct purpose and evidence IDs; progress from context through mechanisms, specific examples and consequences. Respect the user focus. Separate facts from interpretation. Do not repeat a topic just to fill time. Each brief must explain what this section adds and what belongs in other sections. Sections share the time equally; do not put minute estimates in titles or briefs. This is one episode, not a series.

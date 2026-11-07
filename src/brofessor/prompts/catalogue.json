@@ -1,0 +1,717 @@
+{
+  "books/align_translation": {
+    "variables": [
+      "translation",
+      "metalinguistic",
+      "occurrences"
+    ],
+    "source": "features/books/terminology.py",
+    "purpose": "Перевод с привязкой каждого употребления термина к целевой фразе",
+    "schema": "AlignedBatch",
+    "versions": "Все translation_version",
+    "uses": [
+      "books/translate",
+      "books/metalinguistic"
+    ],
+    "path": "books/align_translation.md"
+  },
+  "books/glossary": {
+    "variables": [
+      "language",
+      "payload"
+    ],
+    "source": "features/books/terminology.py",
+    "purpose": "Извлечение значений терминов и исходных употреблений",
+    "schema": "GlossaryBatch",
+    "versions": "Все translation_version",
+    "uses": [],
+    "path": "books/glossary.md"
+  },
+  "books/metalinguistic": {
+    "variables": [],
+    "source": "features/books/terminology.py",
+    "purpose": "Сохранение исходного написания обсуждаемых слов",
+    "schema": "AlignedBatch",
+    "versions": "translation_version >= 2",
+    "uses": [],
+    "path": "books/metalinguistic.md"
+  },
+  "books/repair_alignment": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/books/terminology.py",
+    "purpose": "Одна коррекция только отклонённых привязок без правки перевода",
+    "schema": "AlignmentBatch",
+    "versions": "Версии с протоколом исправления привязок",
+    "uses": [],
+    "path": "books/repair_alignment.md"
+  },
+  "books/review_glossary": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/books/terminology.py",
+    "purpose": "Обзор пропущенных повторяющихся терминов",
+    "schema": "GlossaryReviewBatch",
+    "versions": "translation_version >= 4",
+    "uses": [],
+    "path": "books/review_glossary.md"
+  },
+  "books/revise_term": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/books/terminology.py",
+    "purpose": "Изменение только целевых терминологических фраз",
+    "schema": "Replacements",
+    "versions": "terminology_update",
+    "uses": [],
+    "path": "books/revise_term.md"
+  },
+  "books/translate": {
+    "variables": [
+      "language",
+      "payload"
+    ],
+    "source": "infrastructure/formats/epub.py",
+    "purpose": "Полный перевод блоков с неизменяемыми inline-маркерами",
+    "schema": "TranslationBatch / AlignedBatch",
+    "versions": "Все translation_version; также локальная проба",
+    "uses": [],
+    "path": "books/translate.md"
+  },
+  "common/coverage": {
+    "variables": [
+      "verification"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Проверенные host сведения о полноте чтения; не evidence содержания",
+    "schema": "Схема автора материала",
+    "versions": "Навигация с verification",
+    "uses": [],
+    "path": "common/coverage.md"
+  },
+  "common/evidence": {
+    "variables": [
+      "instructions",
+      "evidence"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Присоединение сериализованных evidence к общим правилам",
+    "schema": "Схема автора материала",
+    "versions": "Все версии обычных материалов",
+    "uses": [
+      "common/materials",
+      "common/coverage"
+    ],
+    "path": "common/evidence.md"
+  },
+  "common/materials": {
+    "variables": [
+      "language",
+      "language_name",
+      "focus"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Общие правила evidence, языка и пользовательского фокуса",
+    "schema": "Схема автора материала",
+    "versions": "Все версии обычных материалов",
+    "uses": [],
+    "path": "common/materials.md"
+  },
+  "common/runner": {
+    "variables": [],
+    "source": "infrastructure/text/runners.py",
+    "purpose": "Общая граница Codex, Claude и Ollama; добавляется к каждому запросу",
+    "schema": "Схема конкретной операции",
+    "versions": "Все текстовые обращения",
+    "uses": [],
+    "path": "common/runner.md"
+  },
+  "experiments/episode_materials": {
+    "variables": [
+      "focus"
+    ],
+    "source": "tools/compare_episode_writers.py",
+    "path": "experiments/episode_materials.md",
+    "purpose": "Общие инструкции пробы сравнения авторов подкаста",
+    "schema": "Podcast",
+    "versions": "Только явная developer-проба, не workflow продукта",
+    "uses": []
+  },
+  "experiments/episode_outline": {
+    "variables": [
+      "base"
+    ],
+    "source": "tools/compare_episode_writers.py",
+    "path": "experiments/episode_outline.md",
+    "purpose": "План в пробе сравнения двух авторов",
+    "schema": "Outline",
+    "versions": "Только явная developer-проба, не workflow продукта",
+    "uses": [
+      "experiments/episode_materials",
+      "experiments/evidence"
+    ]
+  },
+  "experiments/evidence": {
+    "variables": [
+      "instructions",
+      "evidence"
+    ],
+    "source": "tools/compare_episode_writers.py",
+    "path": "experiments/evidence.md",
+    "purpose": "Присоединение evidence в пробе сравнения",
+    "schema": "Outline / Podcast",
+    "versions": "Только явная developer-проба, не workflow продукта",
+    "uses": [
+      "experiments/episode_materials"
+    ]
+  },
+  "experiments/whole_xhtml": {
+    "variables": [
+      "payload"
+    ],
+    "source": "tools/probe_epub_translation.py",
+    "path": "experiments/whole_xhtml.md",
+    "purpose": "Базовый опыт перевода XHTML целиком, без гарантий проекции",
+    "schema": "WholeDocuments",
+    "versions": "Только явная developer-проба, не workflow продукта",
+    "uses": []
+  },
+  "navigation/agent": {
+    "variables": [],
+    "source": "infrastructure/agents/navigation.py",
+    "purpose": "Инструкции агента выбора и чтения оригинальных документов",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов",
+    "uses": [],
+    "path": "navigation/agent.md"
+  },
+  "navigation/heading_hint": {
+    "variables": [],
+    "source": "features/sources/navigation.py",
+    "path": "navigation/heading_hint.md",
+    "purpose": "Подсказка выбрать fragment offset при неоднозначном заголовке",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов; feedback",
+    "uses": []
+  },
+  "navigation/narrow_tool": {
+    "variables": [],
+    "source": "features/sources/navigation.py",
+    "purpose": "Подсказка уменьшить область или limit слишком большого результата",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов; retry",
+    "uses": [],
+    "path": "navigation/narrow_tool.md"
+  },
+  "navigation/read_candidates": {
+    "variables": [],
+    "source": "features/sources/navigation.py",
+    "purpose": "Подсказка повторить чтение после преждевременного finish по поиску",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов; retry",
+    "uses": [],
+    "path": "navigation/read_candidates.md"
+  },
+  "navigation/read_scope": {
+    "variables": [],
+    "source": "features/sources/navigation.py",
+    "purpose": "Подсказка дочитать заданную полную область",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов; retry",
+    "uses": [],
+    "path": "navigation/read_scope.md"
+  },
+  "navigation/retrieve": {
+    "variables": [],
+    "source": "infrastructure/agents/navigation.py",
+    "purpose": "Описание инструмента для SDK; метаданные, не отдельное сообщение runner",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов",
+    "uses": [],
+    "path": "navigation/retrieve.md"
+  },
+  "navigation/selection_hint": {
+    "variables": [],
+    "source": "features/sources/navigation.py",
+    "path": "navigation/selection_hint.md",
+    "purpose": "Подсказка сузить запрос при переполнении выбранного контекста",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов; feedback",
+    "uses": []
+  },
+  "navigation/step": {
+    "variables": [
+      "agent"
+    ],
+    "source": "infrastructure/agents/navigation.py",
+    "purpose": "Запрос одного типизированного шага через bounded runner",
+    "schema": "NavigationStep",
+    "versions": "Каталоги документов",
+    "uses": [
+      "navigation/agent",
+      "navigation/read_candidates",
+      "navigation/read_scope",
+      "navigation/narrow_tool",
+      "navigation/heading_hint",
+      "navigation/selection_hint"
+    ],
+    "path": "navigation/step.md"
+  },
+  "podcasts/check": {
+    "variables": [
+      "language"
+    ],
+    "source": "features/podcasts/checks.py",
+    "purpose": "Инструкции предметной сверки реплик с оригиналами",
+    "schema": "CheckBatch",
+    "versions": "check_podcast",
+    "uses": [],
+    "path": "podcasts/check.md"
+  },
+  "podcasts/check_packet": {
+    "variables": [
+      "header",
+      "turns"
+    ],
+    "source": "features/podcasts/checks.py",
+    "purpose": "Пакет реплик после правил сверки; префикс перед ORIGINALS",
+    "schema": "CheckBatch",
+    "versions": "check_podcast",
+    "uses": [
+      "podcasts/check"
+    ],
+    "path": "podcasts/check_packet.md"
+  },
+  "podcasts/correct_originals": {
+    "variables": [
+      "target",
+      "low",
+      "high",
+      "first_version"
+    ],
+    "source": "features/podcasts/episode_writer.py",
+    "purpose": "Коррекция раздела по оригиналам и его handoff; суффикс",
+    "schema": "WrittenSection",
+    "versions": "dialogue_version >= 4",
+    "uses": [
+      "podcasts/originals_section"
+    ],
+    "path": "podcasts/correct_originals.md"
+  },
+  "podcasts/correct_section": {
+    "variables": [
+      "prompt",
+      "count",
+      "target",
+      "correction_instruction",
+      "first_version"
+    ],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Одна коррекция длины и состава ведущих",
+    "schema": "Podcast",
+    "versions": "dialogue_version < 4",
+    "uses": [
+      "podcasts/section",
+      "podcasts/correction_range",
+      "podcasts/correction_range_v1"
+    ],
+    "path": "podcasts/correct_section.md"
+  },
+  "podcasts/correction_range": {
+    "variables": [
+      "lower",
+      "upper"
+    ],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Числовые границы корректировки длины",
+    "schema": "Podcast",
+    "versions": "dialogue_version = 3",
+    "uses": [],
+    "path": "podcasts/correction_range.md"
+  },
+  "podcasts/correction_range_v1": {
+    "variables": [],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Прежний относительный допуск корректировки длины",
+    "schema": "Podcast",
+    "versions": "dialogue_version = 1/2",
+    "uses": [],
+    "path": "podcasts/correction_range_v1.md"
+  },
+  "podcasts/originals_outline": {
+    "variables": [
+      "instructions",
+      "evidence",
+      "minutes",
+      "target_words",
+      "lower",
+      "upper"
+    ],
+    "source": "features/podcasts/episode_writer.py",
+    "purpose": "Редакторский план с достаточностью источников и отношениями между ними",
+    "schema": "EpisodePlan",
+    "versions": "dialogue_version >= 4",
+    "uses": [
+      "common/materials",
+      "podcasts/voices",
+      "podcasts/series_context"
+    ],
+    "path": "podcasts/originals_outline.md"
+  },
+  "podcasts/originals_section": {
+    "variables": [
+      "instructions",
+      "plan",
+      "handoff",
+      "previous",
+      "section_number",
+      "sections",
+      "section",
+      "target",
+      "low",
+      "high",
+      "target_words",
+      "written"
+    ],
+    "source": "features/podcasts/episode_writer.py",
+    "purpose": "Раздел по оригиналам с редакторской памятью; префикс перед ORIGINALS",
+    "schema": "WrittenSection",
+    "versions": "dialogue_version >= 4",
+    "uses": [
+      "common/materials",
+      "podcasts/voices",
+      "podcasts/series_context"
+    ],
+    "path": "podcasts/originals_section.md"
+  },
+  "podcasts/outline": {
+    "variables": [
+      "base",
+      "minutes",
+      "parts"
+    ],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Равновесный план длинного выпуска",
+    "schema": "Outline",
+    "versions": "dialogue_version < 4; minutes >= 20",
+    "uses": [
+      "common/materials",
+      "common/evidence",
+      "podcasts/voices",
+      "podcasts/series_context"
+    ],
+    "path": "podcasts/outline.md"
+  },
+  "podcasts/section": {
+    "variables": [
+      "base",
+      "outline",
+      "section_number",
+      "parts",
+      "section",
+      "word_instruction",
+      "previous"
+    ],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Раздел выпуска по плану и концу предыдущего раздела",
+    "schema": "Podcast",
+    "versions": "dialogue_version < 4; minutes >= 20",
+    "uses": [
+      "common/materials",
+      "common/evidence",
+      "podcasts/voices",
+      "podcasts/series_context",
+      "podcasts/word_budget",
+      "podcasts/word_budget_v1"
+    ],
+    "path": "podcasts/section.md"
+  },
+  "podcasts/series": {
+    "variables": [
+      "base",
+      "count",
+      "minutes"
+    ],
+    "source": "features/podcasts/series.py",
+    "purpose": "План серии с распределением тем и общими терминами",
+    "schema": "Series",
+    "versions": "podcast_series",
+    "uses": [
+      "common/materials",
+      "common/evidence"
+    ],
+    "path": "podcasts/series.md"
+  },
+  "podcasts/series_context": {
+    "variables": [
+      "series"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Границы одного выпуска серии и общие термины",
+    "schema": "Podcast",
+    "versions": "Эпизод серии",
+    "uses": [],
+    "path": "podcasts/series_context.md"
+  },
+  "podcasts/short": {
+    "variables": [
+      "base",
+      "part_number",
+      "parts",
+      "target_words",
+      "last_part",
+      "previous"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Короткий диалог с последовательным продолжением",
+    "schema": "Podcast",
+    "versions": "minutes < 20",
+    "uses": [
+      "common/materials",
+      "common/evidence",
+      "podcasts/voices"
+    ],
+    "path": "podcasts/short.md"
+  },
+  "podcasts/voices": {
+    "variables": [],
+    "source": "application/pipeline.py",
+    "purpose": "Грамматический род ведущих и сохранение рода персонажей",
+    "schema": "Podcast",
+    "versions": "dialogue_version >= 2",
+    "uses": [],
+    "path": "podcasts/voices.md"
+  },
+  "podcasts/word_budget": {
+    "variables": [
+      "target_words",
+      "written",
+      "target",
+      "lower",
+      "upper"
+    ],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Остаток общего бюджета слов и границы раздела",
+    "schema": "Podcast",
+    "versions": "dialogue_version = 3",
+    "uses": [],
+    "path": "podcasts/word_budget.md"
+  },
+  "podcasts/word_budget_v1": {
+    "variables": [
+      "target"
+    ],
+    "source": "features/podcasts/writer.py",
+    "purpose": "Прежний равный бюджет слов раздела",
+    "schema": "Podcast",
+    "versions": "dialogue_version = 1/2",
+    "uses": [],
+    "path": "podcasts/word_budget_v1.md"
+  },
+  "questions/answer": {
+    "variables": [
+      "base"
+    ],
+    "source": "features/questions.py",
+    "purpose": "Ответ с точными оригинальными цитатами и статусом доказательств",
+    "schema": "Answer",
+    "versions": "ask",
+    "uses": [
+      "common/materials",
+      "common/evidence",
+      "questions/conversation"
+    ],
+    "path": "questions/answer.md"
+  },
+  "questions/conversation": {
+    "variables": [
+      "conversation"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Ограничения использования прежних вопросов и ответов",
+    "schema": "Answer",
+    "versions": "Follow-up",
+    "uses": [],
+    "path": "questions/conversation.md"
+  },
+  "questions/search": {
+    "variables": [
+      "conversation_rule",
+      "payload"
+    ],
+    "source": "features/questions.py",
+    "purpose": "Варианты лексического поиска по большим наборам оригиналов",
+    "schema": "SearchQueries",
+    "versions": "Превышен прямой контекст",
+    "uses": [
+      "questions/search_conversation"
+    ],
+    "path": "questions/search.md"
+  },
+  "questions/search_conversation": {
+    "variables": [],
+    "source": "features/questions.py",
+    "purpose": "Правило трактовки follow-up при поиске",
+    "schema": "SearchQueries",
+    "versions": "Поиск с conversation",
+    "uses": [],
+    "path": "questions/search_conversation.md"
+  },
+  "reading/fragments": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/sources/reading.py",
+    "purpose": "Чтение каждого исходного фрагмента в отдельную заметку",
+    "schema": "ReadingBatch",
+    "versions": "Все reading_version",
+    "uses": [],
+    "path": "reading/fragments.md"
+  },
+  "reading/reduce": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/sources/reading.py",
+    "purpose": "Сжатие заметок с раздельными ссылками на каждый оригинал",
+    "schema": "SectionNotes",
+    "versions": "reading_version >= 2",
+    "uses": [],
+    "path": "reading/reduce.md"
+  },
+  "reading/reduce_v1": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/sources/reading.py",
+    "purpose": "Прежнее объединение заметок; сохранено для старых заданий",
+    "schema": "SectionNote",
+    "versions": "reading_version = 1",
+    "uses": [],
+    "path": "reading/reduce_v1.md"
+  },
+  "reports/arguments": {
+    "variables": [],
+    "source": "features/reports.py",
+    "purpose": "Задача разбора аргументации",
+    "schema": "Report",
+    "versions": "template = arguments",
+    "uses": [],
+    "path": "reports/arguments.md"
+  },
+  "reports/comparison": {
+    "variables": [],
+    "source": "features/reports.py",
+    "purpose": "Задача сравнения источников",
+    "schema": "Report",
+    "versions": "template = comparison",
+    "uses": [],
+    "path": "reports/comparison.md"
+  },
+  "reports/guide": {
+    "variables": [],
+    "source": "features/reports.py",
+    "purpose": "Задача практического руководства",
+    "schema": "Report",
+    "versions": "template = guide",
+    "uses": [],
+    "path": "reports/guide.md"
+  },
+  "reports/reference": {
+    "variables": [],
+    "source": "features/reports.py",
+    "purpose": "Задача тематического справочника",
+    "schema": "Report",
+    "versions": "template = reference",
+    "uses": [],
+    "path": "reports/reference.md"
+  },
+  "reports/scope": {
+    "variables": [
+      "base",
+      "scope"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Область отобранных оригиналов и ограничения полноты",
+    "schema": "Report",
+    "versions": "Все четыре template",
+    "uses": [],
+    "path": "reports/scope.md"
+  },
+  "reports/terminology": {
+    "variables": [
+      "glossary"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Принятые термины конкретной редакции перевода",
+    "schema": "Report",
+    "versions": "report с terminology",
+    "uses": [],
+    "path": "reports/terminology.md"
+  },
+  "reports/write": {
+    "variables": [
+      "base",
+      "task"
+    ],
+    "source": "features/reports.py",
+    "purpose": "Общий формат отчёта, атрибуция, цитаты и статус доказательств",
+    "schema": "Report",
+    "versions": "Все четыре template",
+    "uses": [
+      "common/materials",
+      "common/evidence",
+      "reports/scope",
+      "reports/terminology",
+      "reports/comparison",
+      "reports/guide",
+      "reports/reference",
+      "reports/arguments"
+    ],
+    "path": "reports/write.md"
+  },
+  "slides/create": {
+    "variables": [
+      "base",
+      "slide_count"
+    ],
+    "source": "application/pipeline.py",
+    "purpose": "Содержание слайдов, таблиц, последовательностей и speaker notes",
+    "schema": "Slides",
+    "versions": "slides",
+    "uses": [
+      "common/materials",
+      "common/evidence"
+    ],
+    "path": "slides/create.md"
+  },
+  "studies/create": {
+    "variables": [
+      "base",
+      "count"
+    ],
+    "source": "features/studies.py",
+    "purpose": "Вопросы на понимание, эталон ответа и критерии",
+    "schema": "StudySet",
+    "versions": "study",
+    "uses": [
+      "common/materials",
+      "common/evidence"
+    ],
+    "path": "studies/create.md"
+  },
+  "studies/review": {
+    "variables": [
+      "payload"
+    ],
+    "source": "features/studies.py",
+    "purpose": "Разбор сохранённых ответов ученика",
+    "schema": "FeedbackBatch",
+    "versions": "review_study",
+    "uses": [],
+    "path": "studies/review.md"
+  }
+}

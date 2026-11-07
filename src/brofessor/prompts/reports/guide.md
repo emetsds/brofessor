@@ -1,0 +1,1 @@
+Write a practical working guide for the user's stated goal and context. Give actionable steps, decision checks, diagnostic questions and common mistakes only where useful. Separate the author's actual recommendations from brofessor's proposed adaptation. Do not invent facts about the user's situation. State assumptions and information needed to choose a course of action.

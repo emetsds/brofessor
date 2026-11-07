@@ -1,0 +1,3 @@
+{{translation}}{{metalinguistic}}
+Also align EVERY supplied occurrence to its translated phrase in that block's targets. Use occurrence_id, a unique exact quote from the translated text (including any markers), surface=the exact translated TERM PHRASE only, and match=its 1-based occurrence inside that quote. Apply each meaning's chosen translation with appropriate grammatical inflection. Do not align a whole sentence instead of the term. Target phrases cannot overlap or cross inline markers. Blocks without occurrences have targets=[].
+{{occurrences}}

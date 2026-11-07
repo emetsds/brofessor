@@ -1,0 +1,2 @@
+{{base}}
+Plan one twenty-minute learning episode with exactly four distinct sections. For each section explain its purpose and boundaries in brief and cite the most relevant original IDs, at most six per section. Cover the amendments, actual unresolved discrepancy, untested properties and inference limits. Do not repeat material to fill time.

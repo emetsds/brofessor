@@ -1,0 +1,1 @@
+Execute a bounded batch of read-only document navigation actions.
