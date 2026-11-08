@@ -1,201 +1,187 @@
-# Именованные значения и сохранение строковых контрактов
+# Named values and preservation of string contracts
 
-Исторический результат. Поддержка прежних внутренних форматов и профилей отменена 08.11.2026 ([D034](../decision-log.md)); упомянутые архивы, эталоны и legacy-адаптеры удалены. Эти инструкции не являются текущим маршрутом восстановления.
+Historical result. Support for previous internal formats and profiles was removed on 08.11.2026 ([D034](../decision-log.md)); the archives, baselines, and legacy adapters mentioned here were deleted. These instructions are not a current recovery path.
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md); decisions and cancellations are in the [Decision log](../decision-log.md). References to later stages describe the state at the time of the experiment.
 
-07.11.2026 выполнены семь шагов этапа 3 и проверка стабилизации из единого плана.
-Объём — приложение, оба интерфейса, тесты и developer tools. Сравнение с рабочим
-срезом перед рефакторингом показывает изменения в 122 существовавших Python-файлах,
-восемь новых модулей приложения, один новый тестовый модуль и два JS-ресурса.
-Прежние незакоммиченные изменения сохранены; исходный срез скопирован в отдельный
-временный каталог до правок.
+On 07.11.2026, seven steps of stage 3 and the stabilization check from the single plan were completed.
+Scope covered the application, both interfaces, tests, and developer tools. Comparison with the working
+snapshot before refactoring shows changes in 122 existing Python files, eight new application modules,
+one new test module, and two JS resources. Previous uncommitted changes were preserved; the original
+snapshot was copied to a separate temporary directory before edits.
 
-## Владельцы значений и записей
+## Owners of values and records
 
-| Владелец | Что определяет |
+| Owner | Defines |
 |---|---|
-| `contracts/jobs.py` | Виды и статусы jobs, независимые состояния этапов/первой озвучки и отображения, группы активных/терминальных/возобновляемых состояний и видов workflow, записи job/draft/progress/task |
-| `contracts/text.py` | Провайдеры, адрес/порт по умолчанию, роли runner-сообщений, записи подключения и настроек |
-| `contracts/content.py` | Язык содержимого и отдельный язык интерфейса, роли собеседников, доказательность, состояния извлечённого фрагмента, виды артефактов и записи источников |
-| `features/` | Виды отчётов, происхождение разделов/терминов, вопросы и оценки ответов, навигационные операции, состояния чтения, методы написания, виды отношений источников и результатов сверки |
-| `infrastructure/speech/contracts.py` | Движки речи, model/voice records и общие имена locks/каталога. Model IDs и ревизии остались данными |
-| `infrastructure/formats/` | Форматы, расширения и MIME; namespace URI — у `epub_xml`, общие имена файлов/суффиксов — у своего рендерера |
-| `interfaces/web/state_keys.py` | Фиксированные ключи, страницы/разделы, editor suffixes, сборка прежних project keys и обычные строковые значения для Streamlit |
-| `prompts/` | Типы каталога/snapshot и именованные повторяемые ссылки в `ids.py`; список допустимых шаблонов по-прежнему определяет `catalogue.json` |
+| `contracts/jobs.py` | Job kinds/statuses, independent stage/first-narration/presentation states, active/terminal/resumable status and workflow-kind groups, job/draft/progress/task records |
+| `contracts/text.py` | Providers, default address/port, runner-message roles, connection and settings records |
+| `contracts/content.py` | Content language and separate interface language, speaker roles, evidence status, extracted-fragment states, artifact kinds, and source records |
+| `features/` | Report kinds, section/term provenance, questions and answer assessments, navigation operations, reading states, writing methods, source-relation kinds, and checking results |
+| `infrastructure/speech/contracts.py` | Speech engines, model/voice records, and shared lock/catalogue names. Model IDs and revisions remain data |
+| `infrastructure/formats/` | Formats, extensions, and MIME; namespace URIs belong to `epub_xml`, shared filenames/suffixes to their renderer |
+| `interfaces/web/state_keys.py` | Fixed keys, pages/sections, editor suffixes, construction of existing project keys, and ordinary string values for Streamlit |
+| `prompts/` | Catalogue/snapshot types and named recurring references in `ids.py`; `catalogue.json` still defines allowed templates |
 
-Общие `contracts` импортируют только стандартную библиотеку. Поля SQLite/JSON
-сохраняют обычные строки; чтение неизвестных исторических значений не заменяет их
-дефолтом и не требует приведения к enum. Новых таблиц, версии workspace, очереди,
-SDK-модели предметной области или обязательной миграции материалов нет.
+Shared `contracts` import only the standard library. SQLite/JSON fields retain plain strings;
+reading unknown historical values neither replaces them with defaults nor requires enum conversion.
+There are no new tables, workspace version, queue, SDK domain model, or mandatory material migration.
 
-Существующая схема workspace — **6**. README ранее описывал 5; описание исправлено,
-формат данных из-за именования не менялся.
+The existing workspace schema is **6**. The README previously described 5; that description was fixed,
+while naming changes did not alter the data format.
 
-## Схемы и идентичность
+## Schemas and identity
 
-Прямое enum-поле в Pydantic меняет JSON schema, участвующую в хеше checkpoint.
-Использованы именованные `Literal`-алиасы из членов enum с исходными порядком,
-подмножествами и defaults. Все **59 исходных схем** совпали с рабочим срезом;
-независимые SHA-256 и provenance находятся в `tests/fixtures/contracts/`.
-Эталон не вычисляется из новых констант. Проверяются также обычные строковые
-значения после сохранения/открытия job и чтение неизвестных исторических значений.
+A direct Pydantic enum field changes the JSON schema used in the checkpoint hash. Named `Literal`
+aliases from enum members were used with original order, subsets, and defaults. All **59 original
+schemas** matched the working snapshot; independent SHA-256 values and provenance are in
+`tests/fixtures/contracts/`. The baseline is not computed from new constants. Checks also cover plain
+string values after saving/opening a job and reading unknown historical values.
 
-Не менялись байты **64 ресурсов**: авторские Markdown-промпты с оглавлением,
-каталог/архив промптов, каталог речи и четыре файла шрифта. Все прежние тестовые
-функции сохранены. В setup применены предметные символы, независимые ожидания
-сериализации и vendor contracts оставлены строками.
+The bytes of **64 resources** were unchanged: authored Markdown prompts and their catalogue README,
+prompt catalogue/archive, speech catalogue, and four font files. All existing test functions were
+preserved. Setup uses domain symbols, while independent serialization expectations and vendor
+contracts remain strings.
 
-## UI и обнаруженные особенности
+## UI and findings
 
-Streamlit различает enum и обычную строку при восстановлении выбора. Преобразование
-в `widget_options`/`widget_value` оставляет старые значения в browser/session state;
-типизированные значения используются в логике. Это проверено существующим сценарием
-первого открытия настроек и всеми интерфейсными тестами.
+Streamlit distinguishes enums from plain strings when restoring selections. Conversion in
+`widget_options`/`widget_value` keeps old browser/session-state values; typed values are used in logic.
+This is checked by the existing first-settings-open scenario and all interface tests.
 
-Python передаёт прежний prefix закрытого поля, trigger name и ключ разделителя
-в JS через существующий `data`. В настоящем браузере из установленного wheel:
+Python passes the existing closed-field prefix, trigger name, and divider key into JS through the
+existing `data`. In a real browser using the installed wheel:
 
-- разделитель изменён клавишами с 50 до 20; после reload осталось 20;
-- текст введён в активное поле заметки без blur и сохранения;
-- reload и возврат к заметке показали `Recovered unsaved changes` с точным текстом;
-- Save сохранил revision 2, второй Python-клиент прочитал те же байты текста.
+- the divider changed by keyboard from 50 to 20 and remained 20 after reload;
+- text was entered into the active note field without blur or saving;
+- reload and return to the note showed `Recovered unsaved changes` with the exact text;
+- Save persisted revision 2, and a second Python client read the same text bytes.
 
-При запуске вне checkout обнаружилось дополнительное автоматическое меню Streamlit
-из служебного `pages/`. Штатный CLI и локальная конфигурация теперь явно задают
-`client.showSidebarNavigation=false`. Проверены аргументы запуска и отсутствие меню
-в настоящем браузере. Собственная навигация приложения сохранена.
+Running outside the checkout revealed an extra automatic Streamlit menu from the service `pages/`
+directory. The standard CLI and local configuration now explicitly set
+`client.showSidebarNavigation=false`. Launch arguments and absence of the menu were checked in a
+real browser. The application's own navigation was preserved.
 
-## Проверки
+## Checks
 
-| Проверка | Фактический результат |
+| Check | Actual result |
 |---|---|
-| Исходный полный offline-набор | 753 passed / 58,31 с |
-| Финальный полный offline-набор | **814 passed / 58,46 с** |
-| Финальный wheel в чистом окружении вне checkout | **444 passed / 25,69 с**, включая worker/guardian, CLI/UI, sources/formats, frozen prompts и новые wire contracts |
-| mypy 2.4.1 | 22 модуля общих контрактов и аннотированных границ; ошибок нет. Это ограниченная область, не strict typing всего приложения |
-| Статика | Ruff check/format прошли; staged diff проверен с четырьмя исключениями для исходных ресурсов, перечисленными ниже |
-| Установка | Штатный `uv build --offline --wheel`; Python 3.12.13, UI и dev-зависимости из lock в отдельном venv. Для чистой установки скачаны публичные пакеты; веса не скачивались |
-| Ресурсы пакета | Содержимое 180 файлов wheel совпало с исходным пакетом; CLI и UI запущены вне checkout |
-| Зависимости | Добавлены только mypy 2.4.1 и четыре его зависимости; версии прежних пакетов сохранены |
+| Original full offline suite | 753 passed / 58.31 s |
+| Final full offline suite | **814 passed / 58.46 s** |
+| Final wheel in a clean environment outside checkout | **444 passed / 25.69 s**, including worker/guardian, CLI/UI, sources/formats, frozen prompts, and new wire contracts |
+| mypy 2.4.1 | 22 shared-contract and annotated-boundary modules; no errors. This is a scoped check, not strict typing of the entire application |
+| Static checks | Ruff check/format passed; staged diff checked with four original-resource exceptions listed below |
+| Installation | Standard `uv build --offline --wheel`; Python 3.12.13, UI and dev dependencies from lock in a separate venv. Public packages downloaded for the clean install; no weights downloaded |
+| Package resources | Contents of 180 wheel files matched the source package; CLI and UI launched outside checkout |
+| Dependencies | Only mypy 2.4.1 and its four dependencies were added; existing package versions retained |
 
-Дополнительные адресные прогоны после групп переноса: 158 проверок жизненного цикла,
-250 предметных/prompts/pipeline, 119 интерфейсов и речи, 145 wire/prompts/progress.
-Они не заменяют финальный полный набор.
+Additional targeted runs after migration groups: 158 lifecycle checks, 250 domain/prompts/pipeline,
+119 interface/speech, and 145 wire/prompts/progress. They do not replace the final full suite.
 
-При включении прежних untracked-файлов в коммит `git diff --cached --check`
-сообщает об исходных пробелах в `prompts/common/runner.md`,
-`prompts/podcasts/word_budget.md`, `prompts/podcasts/word_budget_v1.md`
-и `LICENSES/DejaVu.txt`. Все четыре файла побайтно совпадают с исходным срезом;
-они сохранены ради точности промптов и сторонней лицензии. Проверка staged diff
-с исключением этих четырёх путей проходит; новых замечаний нет.
+When previous untracked files were included in the commit, `git diff --cached --check` reported
+original whitespace in `prompts/common/runner.md`, `prompts/podcasts/word_budget.md`,
+`prompts/podcasts/word_budget_v1.md`, and `LICENSES/DejaVu.txt`. All four are byte-identical to the
+original snapshot and retained for prompt and third-party-license fidelity. Staged diff checking
+excluding those four paths passes; there are no new findings.
 
-### Переход со старого кода
+### Transition from old code
 
-Отдельный процесс на исходном пакете подготовил два задания: legacy без snapshot
-и новое с frozen prompts. Контролируемый сбой произошёл после принятия checkpoint;
-в обоих заданиях сохранена ручная r2. Другой процесс из установленного нового wheel
-продолжил тот же workspace при запрещённом inference. Оба задания завершились;
-дополнительных модельных вызовов **0**, params, ручные редакции, имена и байты
-checkpoints совпали.
+A separate process on the original package prepared two jobs: legacy without a snapshot and new with
+frozen prompts. A controlled failure occurred after checkpoint acceptance; both jobs contain manual
+r2. Another process from the newly installed wheel resumed the same workspace with inference
+prohibited. Both jobs completed, with **0** additional model calls and matching params, manual
+revisions, names, and checkpoint bytes.
 
-### Настоящий Codex
+### Real Codex
 
-Стабильный **Codex CLI 0.162.1**, штатная ChatGPT subscription authentication.
-Независимый установленный worker завершил синтетический `ask` после выхода процесса,
-который поставил задание. Получен правильный ответ о трёх роутерах Alpha/Beta/Gamma
-с двумя точными цитатами. Оригинальные байты источника сохранены. После правки
-сохранена r2; повтор с запрещённым inference переиспользовал принятый checkpoint
-и сохранил ручной текст.
+Stable **Codex CLI 0.162.1**, standard ChatGPT subscription authentication. An independent installed
+worker completed a synthetic `ask` after its submitting process exited. The correct answer about
+three Alpha/Beta/Gamma routers was obtained with two exact quotations. Original source bytes were
+preserved. After editing, r2 was saved; replay with inference prohibited reused the accepted
+checkpoint and preserved the manual text.
 
-В окружении вне checkout PATH сначала выбирал сломанный Homebrew launcher с ENOENT.
-Для опыта применён существующий `BROFESSOR_CODEX_BIN` с явным путём к установленному
-стабильному CLI. Системный PATH, установка CLI, credentials, провайдер и оплата не
-менялись. Ранние ошибки запуска не выдаются за генерацию или отказ модели.
+Outside the checkout, PATH initially selected a broken Homebrew launcher with ENOENT. The experiment
+used existing `BROFESSOR_CODEX_BIN` with the explicit installed stable-CLI path. System PATH, CLI
+installation, credentials, provider, and payment were unchanged. Early launch failures are not
+presented as generation or model refusal.
 
-## Обоснованно оставленные литералы и границы проверки
+## Literals deliberately retained and verification boundaries
 
-- Ключи JSON/Pydantic и JSON paths редактора, включая поле `slides`, остаются именами
-  полей. Они не становятся `JobKind` только из-за совпадающего написания.
-- Известные внешние CLI flags, SDK-поля, XML/DOM/ARIA-атрибуты и локализационные
-  сообщения сохранены, когда дополнительное имя не делает код понятнее.
-- Каталожные IDs/ревизии, содержимое промптов/источников, snapshots и отрицательные
-  или независимые проверочные данные остались данными. Полного второго реестра
-  допустимых промптов нет.
-- Кодировки, режимы файлов, разделители и очевидные местные литералы не вынесены
-  автоматически. Фонетические таблицы адаптированного G2P и два неизменённых
-  DOM-компонента просмотрены без переписывания их стандартных значений.
-- Настоящие Claude/Ollama/TTS и новая визуальная приёмка PPTX/PDF в этом рефакторинге
-  не запускались. Проверка маленького синтетического вопроса не является приёмкой
-  книги или качества озвучивания; отменённая M4 не возобновлялась.
+- JSON/Pydantic keys and editor JSON paths, including `slides`, remain field names. They do not
+  become `JobKind` merely because they have the same spelling.
+- Known external CLI flags, SDK fields, XML/DOM/ARIA attributes, and localization messages were
+  retained where an extra name would not make the code clearer.
+- Catalogue IDs/revisions, prompt/source content, snapshots, and negative or independent checking
+  data remain data. There is no complete second registry of allowed prompts.
+- Encodings, file modes, separators, and obvious local literals were not automatically extracted.
+  Phonetic tables from the adapted G2P and two unchanged DOM components were reviewed without
+  rewriting standard values.
+- Real Claude/Ollama/TTS and new PPTX/PDF visual acceptance were not run in this refactor. A short
+  synthetic question is not acceptance of a book or narration quality; cancelled M4 was not resumed.
 
-QA хранится вне репозитория: `/private/tmp/brofessor-string-contracts-z3ct8l6e/`.
-Там находятся исходный срез, логи, wheel/venv, compatibility manifests, synthetic
-workspaces, `real-proof.json` и `browser-recovery.png`. Тестовые UI и worker остановлены.
-Пользовательские материалы и настройки не менялись; push и публикация не выполнялись.
+QA is outside the repository: `/private/tmp/brofessor-string-contracts-z3ct8l6e/`. It contains the
+baseline snapshot, logs, wheel/venv, compatibility manifests, synthetic workspaces, `real-proof.json`,
+and `browser-recovery.png`. Test UI/worker processes were stopped. User materials and settings were
+unchanged; no push or publication was performed.
 
-## Ревью именования — 07.11.2026
+## Naming review — 07.11.2026
 
-По следующему запросу пользователя проведены собственный обзор и независимое ревью
-отдельным критиком. Для выделения именно строкового рефакторинга использован исходный
-рабочий срез перед этапом 3: коммит `68ce29f` также включает ранее незакоммиченные
-продуктовые работы. Сопоставлены функции, SQL, схемы, сериализованные значения,
-параметры операций и динамические UI-ключи; поиск литералов проверен по смыслу.
+Following the user's next request, a self-review and independent review by a separate critic were
+performed. To isolate the string refactor, the original working snapshot before stage 3 was used:
+commit `68ce29f` also includes previously uncommitted product work. Functions, SQL, schemas,
+serialized values, operation parameters, and dynamic UI keys were compared; literal searches were
+checked semantically.
 
-Собственный обзор исправил следующие недоделки:
+The self-review fixed these unfinished details:
 
-- Именованы режимы общего coverage, происхождение настроек модели и состояния
-  навигации. Последние отделены от состояний job; исторические значения читаются
-  без принудительного преобразования к enum.
-- Переиспользованы владельцы имён audio-segments, префикса ID коллекций, признака
-  каталога, семейства Qwen, стадий, видов вопросов и артефактов, namespaces и ключей UI.
-- Исправлено использование `StageState.COMPLETED` вместо имени поля `completed`,
-  `JobKind`/`DocumentFormat` вместо вида артефакта и `JobStatus` вместо stage default.
-  Написание значений совпадало, поэтому эти ошибки связывания понятий не меняли
-  прежние ветвления, но мешали дальнейшему рефакторингу.
-- Удалены неиспользуемые `EPUB_MIME`, `CONTAINER`, `MAIN_PAGES`. Убраны 39 вызовов
-  `widget_options` для обычных чисел и ID, лишнее преобразование адреса и рекурсивная
-  обработка произвольных структур в `widget_value`. Оставлены скалярные преобразования
-  enum там, где они нужны Streamlit; формат ключей и завершающие двоеточия сохранены.
+- Named shared coverage modes, model-settings provenance, and navigation states. Navigation states
+  are separate from job states; historical values are read without forced enum conversion.
+- Reused name owners for audio-segments, collection ID prefixes, the directory marker, Qwen family,
+  stages, question/artifact kinds, namespaces, and UI keys.
+- Fixed use of `StageState.COMPLETED` instead of the field name `completed`, `JobKind`/`DocumentFormat`
+  instead of artifact kind, and `JobStatus` instead of a stage default. Their spellings matched, so
+  these concept-binding errors did not change existing branches but hindered later refactoring.
+- Removed unused `EPUB_MIME`, `CONTAINER`, and `MAIN_PAGES`. Removed 39 `widget_options` calls for
+  ordinary numbers and IDs, unnecessary address conversion, and recursive arbitrary-structure
+  processing in `widget_value`. Scalar enum conversion remains where Streamlit needs it; key formats
+  and trailing colons are preserved.
 
-Критик независимо подтвердил пять пропусков P3: coverage аудиокниги, dispatch FINISH
-в адаптере, остаточные виды JSON/EMPTY в UI, оставшиеся Page и локальный протокол
-ссылок коллекций. Исправлены producer/consumer `ReadingStatus` и `ReadingMode.NARRATION`,
-`NavigationOperation.FINISH`, `ArtifactKind`, `UnitStatus`, `Page`; `LinkSyntax` и
-`LinkStatus` находятся только у владельца `collections`, без связи с форматом артефакта.
-Функциональных регрессий критик не обнаружил. После исправлений повторное ревью
-завершилось без замечаний и препятствий для слияния.
+The critic independently confirmed five P3 omissions: audiobook coverage, FINISH dispatch in the
+adapter, remaining JSON/EMPTY kinds in UI, remaining Page values, and the local collection-link
+protocol. Producer/consumer `ReadingStatus` and `ReadingMode.NARRATION`, `NavigationOperation.FINISH`,
+`ArtifactKind`, `UnitStatus`, and `Page` were fixed. `LinkSyntax` and `LinkStatus` belong only to
+`collections`, independent of artifact format. The critic found no functional regressions. After
+fixes, repeated review concluded with no findings or merge blockers.
 
-| Проверка после ревью | Результат |
+| Post-review check | Result |
 |---|---|
-| Собственный адресный контроль | 254 passed / 30,93 с |
-| Независимый контроль критика | 298 passed / 33,08 с; повторная проверка исправлений — 40 passed |
-| Финальный полный набор из checkout | **814 passed / 56,91 с** |
-| Финальный полный набор из установленного wheel вне checkout | **814 passed / 49,95 с**, без пропусков |
-| Статика | mypy — 22 модуля; Ruff check/format и diff check прошли |
-| Сборка | Штатный offline wheel build; все 180 файлов пакета совпали с исходным кодом и ресурсами |
-| Неизменённые материалы | Все 59 исходных схем и 65 ресурсов промптов/каталогов/шрифтов, включая README шрифтов, сохранены |
-| Переход со старого пакета | Legacy/frozen задания, принятые checkpoints и ручные r2 после контролируемого сбоя; новый установленный пакет продолжил оба, **0** новых вызовов, params/редакции/checkpoint bytes прежние |
+| Targeted self-check | 254 passed / 30.93 s |
+| Independent critic check | 298 passed / 33.08 s; rechecking fixes — 40 passed |
+| Final full suite from checkout | **814 passed / 56.91 s** |
+| Final full suite from installed wheel outside checkout | **814 passed / 49.95 s**, without skips |
+| Static checks | mypy — 22 modules; Ruff check/format and diff check passed |
+| Build | Standard offline wheel build; all 180 package files matched source code and resources |
+| Unchanged materials | All 59 original schemas and 65 prompt/catalogue/font resources, including the font README, preserved |
+| Transition from old package | Legacy/frozen jobs, accepted checkpoints, and manual r2 after a controlled failure; the newly installed package resumed both, **0** new calls, unchanged params/revisions/checkpoint bytes |
 
-Для чистого окружения использован Python 3.12.13 и закреплённые UI/dev-зависимости.
-Первый полный вынос тестов не включал `tools/`: четыре audit-проверки упали из-за
-отсутствия developer scripts, ещё две проверки M4B пропустились без FFmpeg. Подготовка
-QA исправлена: инструменты скопированы рядом с тестами, установлен уже закреплённый
-в lock `imageio-ffmpeg==0.7.0`. Повторный полный прогон выше прошёл; продукт и lock
-ради этих ошибок окружения не менялись. Это тестовое аудио, не приёмка голосов.
+The clean environment used Python 3.12.13 and pinned UI/dev dependencies. The first complete test
+copy omitted `tools/`: four audit checks failed because developer scripts were absent, and two M4B
+checks skipped without FFmpeg. QA setup was fixed: tools were copied alongside tests, and
+`imageio-ffmpeg==0.7.0`, already pinned in lock, was installed. The repeated full run above passed;
+the product and lock were not changed for these environment errors. This is test audio, not voice
+acceptance.
 
-Тесты не удалялись и не добавлялись ради именования: существующие поведенческие
-проверки защищают затронутые границы. Имена внешних полей/флагов, исходные тексты,
-локализационные сообщения, очевидные локальные литералы и независимые ожидания
-сериализации оставлены обоснованно. Новых глобальных реестров, контейнеров констант,
-сервисов или миграции данных нет. Настоящие модели и браузер в этом дополнительном
-ревью не запускались; результаты предыдущего этапа не выданы за повторную проверку.
+Tests were not removed or added for naming: existing behavioral checks protect affected boundaries.
+External field/flag names, original text, localization messages, obvious local literals, and
+independent serialization expectations were deliberately retained. There are no new global
+registries, constant containers, services, or data migrations. Real models and the browser were not
+run in this additional review; previous-stage results are not presented as repeated verification.
 
-QA дополнительного ревью: `/private/tmp/brofessor-named-values-review-wL23oX/` —
-diff/AST-пробы, логи двух полных прогонов, чистый venv/wheel, отдельные synthetic
-workspace и manifest перехода. Материалы пользователя и глобальные настройки не менялись.
+Additional-review QA: `/private/tmp/brofessor-named-values-review-wL23oX/` — diff/AST probes, logs of
+two full runs, clean venv/wheel, separate synthetic workspaces, and a transition manifest. User
+materials and global settings were unchanged.
 
-Исправления ревью зафиксированы в `bfd722b`; после всех проверок ветка
-`codex/named-values` слита fast-forward в локальную `main` с `726c87c` без конфликтов.
-Код при слиянии не менялся. На момент слияния итоговое завершение было отмечено в документах этапа;
-push и публикация не выполнялись.
+Review fixes were committed in `bfd722b`; after all checks, branch `codex/named-values` was
+fast-forward merged into local `main` from `726c87c` without conflicts. Code did not change during
+the merge. Final completion was recorded in the stage documents at merge time; no push or
+publication was performed.

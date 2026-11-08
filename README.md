@@ -2,7 +2,7 @@
 
 Turn books and other source materials into answers and written reports with citations, practice questions, two-voice podcasts, chaptered audiobooks, and editable PowerPoint presentations. Work in a local web UI or use the same workspace from a terminal or coding agent.
 
-**Early working version.** Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/evidence/2026-11-01-whole-book.md). Four earlier 25/60-minute cases passed duration checks with legacy voices. Fresh Qwen Base scripts now produce RU 20:43 for a 20-minute request and EN 55:24 for 60 minutes; [measurements and limits](docs/evidence/2026-11-03-qwen-long-dialogues.md#свежие-сценарии-после-пересчёта-бюджета). Editable lists, tables, and sequences have passed [PPTX layout checks](docs/evidence/2026-11-02-pptx.md). [Content review and listening preparation](docs/evidence/2026-11-01-long-podcasts.md#содержательная-проверка-прежних-выпусков) have progressed; full listening quality has not been established by these development checks.
+**Early working version.** Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/evidence/2026-11-01-whole-book.md). Four earlier 25/60-minute cases passed duration checks with legacy voices. Fresh Qwen Base scripts now produce RU 20:43 for a 20-minute request and EN 55:24 for 60 minutes; [measurements and limits](docs/evidence/2026-11-03-qwen-long-dialogues.md#fresh-scripts-after-budget-recalculation). Editable lists, tables, and sequences have passed [PPTX layout checks](docs/evidence/2026-11-02-pptx.md). [Content review and listening preparation](docs/evidence/2026-11-01-long-podcasts.md#content-review-of-earlier-episodes) have progressed; full listening quality has not been established by these development checks.
 
 [Get started](#get-started) · [Web UI](#use-the-web-ui) · [CLI workflows](#use-the-cli) · [For agents](#for-agents) · [Troubleshooting](#troubleshooting)
 
@@ -81,7 +81,7 @@ For Ollama models that explicitly advertise support for `think: false`, brofesso
 uv run --no-sync brofessor ui
 ```
 
-Open [localhost:8501](http://localhost:8501). Open **Settings → General** and use **Язык интерфейса / Interface language** to switch between **Русский** and **English**. Your choice is saved for your local user and survives browser/app restarts, workspace changes, and port changes. On the first visit, the app follows your browser language (Russian or English).
+Open [localhost:8501](http://localhost:8501). Open **Settings → General** and use **Язык интерфейса / Interface language** to switch between **Русский** (Russian) and **English**. Your choice is saved for your local user and survives browser/app restarts, workspace changes, and port changes. On the first visit, the app follows your browser language (Russian or English).
 
 **Output language** is a separate setting: it selects the result language. For an audiobook, choose the language of its original or saved translation. Switching the interface language keeps your draft edits and output settings.
 
@@ -578,10 +578,45 @@ Measured results: [provider checks](docs/evidence/2026-11-02-provider-acceptance
 
 ## Development
 
+### OpenSpec and agent skills
+
+Development changes use [OpenSpec](https://github.com/Fission-AI/OpenSpec), with
+selected [Matt Pocock skills](https://github.com/mattpocock/skills) for testing,
+diagnosis, design vocabulary, and review. These are development tools, separate
+from brofessor's Python runtime.
+
+The initial setup uses OpenSpec **1.16.1** and Matt Pocock skills **v1.3.2**.
+The selected skill sources, revision, and licenses are recorded in
+[the upstream manifest](.agents/UPSTREAM.md). The skill directories are checked
+into `.agents/skills/`, so another checkout does not need a global skill install.
+Install the pinned CLI separately if it is not on your PATH:
+
+```sh
+npm install --global @fission-ai/openspec@1.16.1 --prefix "$HOME/.local"
+openspec --version
+openspec list
+```
+
+Ensure `$HOME/.local/bin` is on your PATH. Node.js 22.12 or later is required by
+this npm release; it is not an application dependency. Anonymous CLI usage
+telemetry can be disabled with `OPENSPEC_TELEMETRY=0`.
+
+In Codex, invoke `$openspec-explore` to investigate a question and
+`$openspec-propose` to prepare a change. Review the generated proposal,
+requirements, design, and tasks before invoking `$openspec-apply-change`.
+Use `$openspec-sync-specs` and `$openspec-archive-change` to finish accepted work.
+Codex uses these skills rather than `/opsx:...` slash commands.
+
+Active task lists belong to `openspec/changes/<change>/tasks.md`.
+[The tracker guide](docs/agents/issue-tracker.md) explains how Matt's skills read
+these artifacts. [The domain guide](docs/agents/domain.md) identifies the product
+baseline and decision sources. OpenSpec validation checks artifact structure;
+it does not replace behavior tests, document review, or media acceptance.
+
 ### Edit prompts
 
 All application instructions and explicit developer probe prompts are in
-[`src/brofessor/prompts`](src/brofessor/prompts/README.md). The Russian catalogue explains
+[`src/brofessor/prompts`](src/brofessor/prompts/README.md). The English catalogue explains
 each UTF-8 Markdown template, its variables, shared parts, output schema, and workflow
 versions. Edit the relevant `.md`, then inspect the complete message framing locally:
 
@@ -609,7 +644,7 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. Each test should detect a concrete behavioral regression; mock expensive external boundaries. Check current-job recovery and user edits when changing stored inputs. Real runner/model checks are separate from offline tests; report unavailable integrations as unverified. See the [test-quality review](docs/evidence/2026-11-02-test-quality.md) for examples. For project work, read [AGENTS.md](AGENTS.md). Project documentation is in Russian: [specification](docs/specification.md) for current requirements and architecture, [Decision log](docs/decision-log.md) for decisions and their history, and [Plan](docs/plan.md) for unfinished work. Supporting reports in [docs/evidence](docs/evidence) describe checks at their recorded versions; they do not create a separate backlog.
+Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. Each test should detect a concrete behavioral regression; mock expensive external boundaries. Check current-job recovery and user edits when changing stored inputs. Real runner/model checks are separate from offline tests; report unavailable integrations as unverified. See the [test-quality review](docs/evidence/2026-11-02-test-quality.md) for examples. For project work, read [AGENTS.md](AGENTS.md). Project documentation is in English: [specification](docs/specification.md) for current requirements and architecture, [Decision log](docs/decision-log.md) for historical decisions, and [OpenSpec changes](openspec/changes/) for proposals and implementation tasks. The former [Plan](docs/plan.md) is a navigation pointer. Supporting reports in [docs/evidence](docs/evidence) preserve checks at their recorded versions and do not create a separate backlog. Russian UI labels, source quotations, and multilingual examples retain their original text where it matters to the product.
 
 The Python package uses a `src` layout. Code is grouped by responsibility:
 
@@ -637,7 +672,7 @@ The CLI entry point is `brofessor.interfaces.cli.app:app`; Streamlit starts from
 `brofessor/interfaces/web/app.py`. The worker and runner guardian are separate Python
 modules under `application` and `infrastructure/text`. Bundled JS, fonts, and the speech
 catalogue are package resources and work from an installed wheel outside the checkout.
-See the [package structure](docs/specification.md#структура-пакета) for module ownership.
+See the [package structure](docs/specification.md#package-structure) for module ownership.
 
 Run developer tools from the repository root as modules, for example:
 

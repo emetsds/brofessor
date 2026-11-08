@@ -1,40 +1,40 @@
-# Структура разделов UI brofessor
+# brofessor UI section structure
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md); decisions and cancellations are in the [Decision log](../decision-log.md). References to later stages describe the state at the time of the experiment.
 
-07.11.2026. Реализация повторно открытого этапа структуры UI, принятого по [D028](../decision-log.md#d028-0607112026--единая-структура-всех-экранов-и-повторная-приёмка), после команды пользователя продолжить работу. Это отдельная приёмка структуры, а не повтор прежних измерений типографики.
+07.11.2026. Implementation of the reopened UI-structure stage accepted in [D028](../decision-log.md#d028-0607112026--consistent-screen-structure-and-repeated-acceptance), after the user's instruction to continue. This is separate structural acceptance, not repetition of previous typography measurements.
 
-## Что изменилось
+## What changed
 
-Общий `ui_layout.section()` оформляет крупные нативные раскрывающиеся разделы: заголовок 20 px при тексте 16 px, стрелка, горизонтальная граница и отступ. Вложенные примечания сохраняют компактную роль. Небольшой `section_roles.js` добавляет заголовкам нативных summary `role=heading` и `aria-level=3`; в настоящем accessibility tree они видны как H3. Компонент не управляет состоянием, вводом или заданиями. Пользовательский текст не превращается в HTML.
+Shared `ui_layout.section()` styles large native collapsible sections: a 20 px heading with 16 px body text, an arrow, horizontal boundary, and spacing. Nested notes retain a compact role. Small `section_roles.js` adds `role=heading` and `aria-level=3` to native summary headings; the real accessibility tree shows H3. The component does not manage state, inputs, or jobs. User text does not become HTML.
 
-Карточка разделена на готовый файл, материал, предметные источники/проверки и отдельный служебный низ «Сведения и настройки задачи». JSON-редактор, сведения об источниках, история, завершённый ход, модели и операции находятся после этой границы. Ошибки и управление незавершённой проверкой сценария/ответов выведены перед результатом, поэтому закрытие её содержимого не скрывает Cancel/Resume.
+The card separates the finished file, material, domain sources/checks, and a distinct service area at the bottom, “Сведения и настройки задачи” (“Task information and settings”). The JSON editor, source information, history, completed progress, models, and operations sit after this boundary. Errors and controls for unfinished script/answer checks precede the result, so collapsing their contents does not hide Cancel/Resume.
 
-Обычный редактор и JSON используют прежний канонический буфер и recovery. JSON размещается в отдельной области служебного низа; сохранение обычных правок, предупреждение и загрузка актуальной версии остаются вне сворачиваемого материала. Начальное раскрытие фиксируется при первом показе раздела: появление первого файла не сбрасывает выбор при обновлении прогресса. Вход в редактирование использует отдельный ключ раскрытия и открывает поля, в том числе у заметки. Выбранная глава аудиокниги общая для чтения и редактирования.
+The ordinary and JSON editors use the existing canonical buffer and recovery. JSON occupies its own bottom service area; ordinary edit saving, warnings, and loading the latest version remain outside collapsible material. Initial expansion is fixed when a section first appears: the first file's arrival does not reset the choice on progress updates. Entering edit mode uses a separate expansion key and opens fields, including for notes. The selected audiobook chapter is shared between reading and editing.
 
-EPUB/PDF больше не пропускают общие сведения и историю. Исторический preview получает настоящий `job_id` отдельно от ключа виджета. У истории свои селекторы: она не меняет текущий буфер, выбранный фрагмент и файл. История обучения показывает сохранённые ответы и ожидаемые объяснения; история серии сохраняет её терминологию.
+EPUB/PDF no longer skip shared information and history. Historical preview receives the real `job_id` separately from its widget key. History has independent selectors: it does not change the current buffer, selected fragment, or file. Study history shows saved answers and expected explanations; series history retains terminology.
 
-Для всех четырёх отчётов сохранены пометки «Из источников» / «Адаптация brofessor». У ответа и отчёта отдельные разделы источников. Серия отделяет план, словарь и подготовку выпуска; обучение — вопросы/ответы и разбор. У аудиокниги текст главы закрывается отдельно от плеера. PDF-оговорки и сохранённые объекты стоят у соответствующего файла.
+All four report types retain “Из источников” / “Адаптация brofessor” (“From sources” / “brofessor adaptation”) labels. Answers and reports have separate source sections. Series separate the plan, glossary, and episode preparation; studies separate questions/answers from review. Audiobook chapter text collapses independently of the player. PDF qualifications and retained objects appear beside their file.
 
-В источниках, формах и заметках добавлены границы крупных групп. Каталоги и sidebar сохраняют компактные строки. В настройках длинное содержимое прокручивается в своей области, Save/Cancel находятся под ней. Первоначальная вставка больших разделителей вернула Save ниже первого экрана; браузерная проверка выявила это, и компоновка исправлена до завершения этапа.
+Sources, forms, and notes gained boundaries between major groups. Catalogues and sidebar retain compact rows. In Settings, long content scrolls in its own region with Save/Cancel underneath. Initially adding large dividers pushed Save below the first screen again; browser checking found this, and layout was fixed before stage completion.
 
-Core, SQLite, контракты редакций, очередь, модели и правила передачи данных в этом этапе не менялись.
+Core, SQLite, revision contracts, queue, models, and data-transfer rules did not change in this stage.
 
-## Исправления по независимому review
+## Independent-review fixes
 
-Критик проверял актуальный код, отдельную копию синтетического workspace и снимки. Найденные дефекты исправлены:
+The critic checked current code, a separate synthetic-workspace copy, and screenshots. The defects found were fixed:
 
-- Промежуточный JSON `[]` или `{"turns": null}` больше не ломает заголовок подкаста до появления Save/Reload; ошибочный ввод можно исправить или перезагрузить.
-- Постановка нового рендера EPUB/PDF сохраняет доступ к первому автоматическому экспорту. Он включён в выбор готового файла и остаётся доступен при queued/failed рендере.
-- Закрытый материал раскрывается при входе в редактор; выбранная глава не сбрасывается.
-- История серии/обучения сохраняет содержательные данные, а статусы незавершённых проверок не скрываются вместе с отчётом проверки.
-- Служебные секции уплотнены без потери границ. Save/Cancel настроек проверены после исправления компоновки.
+- Intermediate JSON `[]` or `{"turns": null}` no longer breaks the podcast heading before Save/Reload appears; invalid input can be fixed or reloaded.
+- Queuing a new EPUB/PDF render preserves access to the first automatic export. It is included in the finished-file selector and remains available during queued/failed rendering.
+- Closed material expands when entering the editor; the selected chapter does not reset.
+- Series/study history retains substantive data, and unfinished-check statuses do not disappear when their review report collapses.
+- Service sections were compacted without losing boundaries. Settings Save/Cancel were checked after the layout fix.
 
-Финальное заключение критика: замечаний, препятствующих завершению этого этапа, не осталось. Его просмотр включал основные и дополнительные страницы, итоговые мобильные кадры и настройки при увеличенном тексте.
+The critic's final conclusion: no findings remained that blocked completion of this stage. Review included main and additional pages, final mobile screenshots, and settings with enlarged text.
 
-## Автоматические проверки
+## Automated checks
 
-Итоговый прогон после последних изменений — **118 passed за 56,04 с**:
+Final run after the last changes: **118 passed in 56.04 s**:
 
 ```sh
 .venv/bin/pytest -q \
@@ -44,86 +44,86 @@ Core, SQLite, контракты редакций, очередь, модели 
   tests/test_pdf_workflow.py tests/test_audiobooks.py
 ```
 
-Добавлены семь поведенческих случаев: история EPUB/PDF при несохранённой текущей редакции; доступ первого файла при queued/failed пересборке обоих форматов; два некорректных промежуточных JSON подкаста; сохранение исходного раскрытия при появлении первого файла и закрытое начало в новой сессии с готовым файлом. Они проверяют версии, буфер, recovery, отсутствие новых модельных обращений и доступ к артефактам, а не декоративные размеры.
+Seven behavioral cases were added: EPUB/PDF history with unsaved current edits; access to the first file during queued/failed rebuilding of both formats; two invalid intermediate podcast JSON values; retention of initial expansion when the first file appears; and an initially closed section in a new session with a finished file. They check revisions, buffers, recovery, no new model calls, and artifact access rather than decorative dimensions.
 
-Существующие проверки цитат/локаторов и переключения языка адаптированы к новому представлению: имя источника стало вложенным заголовком, локатор остался подписью, название плана — summary. Проверки содержимого, цитат, версий и пользовательского ввода сохранены; тесты не удалялись.
+Existing quotation/locator and language-switching checks were adapted to the new presentation: source names became nested headings, locators stayed captions, and plan titles became summary labels. Content, quotation, revision, and user-input checks were retained; tests were not removed.
 
-Ruff check/format и `git diff --check` прошли. Wheel собран offline через штатный `hatchling.build.build_wheel` из уже имеющегося кеша Hatchling 1.33.0. Обычный `uv build --offline` не смог разрешить build backend по метаданным выбранного кеша; загрузки и изменение зависимостей для обхода не выполнялись. Все `ui*.py` и `section_roles.js` побайтно сверены с wheel; UI-модули импортированы из распакованного пакета вне checkout. QA-материалов в пакете нет.
+Ruff check/format and `git diff --check` passed. The wheel was built offline through standard `hatchling.build.build_wheel` using the existing Hatchling 1.33.0 cache. Ordinary `uv build --offline` could not resolve the build backend using the selected cache's metadata; no downloads or dependency changes were used as a workaround. All `ui*.py` and `section_roles.js` files were checked byte-for-byte against the wheel; UI modules were imported from the extracted package outside checkout. The package contains no QA materials.
 
-## Настоящий браузер
+## Real browser
 
-Streamlit 1.66.1, IAB, отдельные временные XDG-настройки и синтетический проект. Презентация собрана настоящим локальным рендерером. EPUB/PDF и обратная связь подготовлены с существующими тестовыми моделями на границе inference. Для плеера использован синтетический WAV и локально упакованный M4B; речи и новых вызовов настоящих моделей не было.
+Streamlit 1.66.1, IAB, separate temporary XDG settings, and a synthetic project. The presentation was built by the real local renderer. EPUB/PDF and feedback used existing test models at the inference boundary. The player used a synthetic WAV and locally packaged M4B; no speech or new real-model calls were made.
 
-| Срез | Фактически проверено |
+| Slice | Actually checked |
 |---|---|
-| Основные задачи, светлая RU, 1280×720 | Ответ, четыре отчёта, серия, обучение, EPUB, PDF, подкасты и презентации с файлом/без файла, текст аудиокниги и плеер; начало, раскрытый/закрытый материал и служебный низ |
-| История | В браузере прочитана история 12 представлений: презентация, подкаст, ответ, четыре отчёта, серия, обучение, аудиокнига, EPUB и PDF; исключений нет |
-| Редактирование | Правка слайда пережила закрытие материала и переход в источники; Save при закрытом плане создал r3. PPTX r1 сохранился с явной подписью несовпадения. История EPUB r1 открылась при несохранённой правке r2, текущий текст остался прежним. Вторая глава сохранилась при Edit. Закрытый текст заметки открылся при Edit note |
-| Дополнительные страницы | Все девять видов формы создания, источники с подключённой папкой/поиском/просмотром, заметки, General/Models/Storage, проекты, поиск, каталог, диалоги проекта/файлов/папки/удаления. Удаление отменено, загрузки не запускались |
-| Тёмная EN, 900×768 и 390×844 | Подкаст и презентация, раскрытие с клавиатуры, листание сценария, граница после третьего слайда, устойчиво закрытый сценарий; аудиокнига и мобильные настройки. Ширина документа 390 px при viewport 390 px |
-| Текст 200%, светлая EN, 1280×720 | Базовый текст 32 px, фактический H1 64 px; материал и служебные разделы доступны вертикальной прокруткой, ширина документа 1280 px. Настройки сохраняют доступные Save/Cancel |
+| Main tasks, light RU, 1280×720 | Answer, four reports, series, studies, EPUB, PDF, podcasts and presentations with/without files, audiobook text and player; initial view, expanded/collapsed material, and bottom service area |
+| History | History of 12 views read in the browser: presentation, podcast, answer, four reports, series, study, audiobook, EPUB, and PDF; no exceptions |
+| Editing | Slide edits survived material collapse and navigation to sources; Save with the plan closed created r3. PPTX r1 remained with an explicit mismatch label. EPUB r1 history opened with unsaved r2 edits, leaving current text unchanged. The second chapter persisted after Edit. Closed note text opened on Edit note |
+| Additional pages | All nine creation-form types, sources with connected directory/search/preview, notes, General/Models/Storage, projects, search, catalogue, project/file/folder/delete dialogs. Deletion was cancelled and downloads not started |
+| Dark EN, 900×768 and 390×844 | Podcast and presentation, keyboard expansion, script paging, boundary after the third slide, persistently closed script; audiobook and mobile settings. Document width 390 px with a 390 px viewport |
+| Text 200%, light EN, 1280×720 | Body text 32 px, actual H1 64 px; material and service sections accessible through vertical scrolling, document width 1280 px. Settings retain accessible Save/Cancel |
 
-Кнопка Save в итоговых настройках заканчивается на y688 при высоте 720, на y765 при мобильной высоте 844 и на y655 при тексте 200%/высоте 720. Это измерение доступности действий, а не замена визуального просмотра. Переходные кадры анимации закрытия пересняты после фактического скрытия содержимого.
+In final Settings, the Save button ends at y688 with height 720, y765 with mobile height 844, and y655 with 200% text/height 720. This measures action accessibility, not a replacement for visual inspection. Transitional collapse-animation screenshots were retaken after content was actually hidden.
 
-Снимки и `browser-checks.json` находятся вне Git в `outputs/ui-structure-2026-11-07/`; workspace и сборка — в `/private/tmp/brofessor-structure-2026-11-07/`. Временные viewport overrides сброшены, QA-вкладки закрыты, серверы 8570/8571/8572 остановлены.
+Screenshots and `browser-checks.json` are outside Git in `outputs/ui-structure-2026-11-07/`; workspace and build are in `/private/tmp/brofessor-structure-2026-11-07/`. Temporary viewport overrides were reset, QA tabs closed, and servers 8570/8571/8572 stopped.
 
-## Границы результата
+## Result boundaries
 
-Это приёмка структуры UI и сохранности данных на синтетических материалах. Конфликт редакций и CLI/UI-паритет проверены адресными offline-тестами. Полный продуктовый набор и настоящие модели не перезапускались; новый benchmark, слуховая приёмка и скачивание в обычном внешнем браузере не заявляются. Ранее отменённые пользователем работы не возобновлялись. Пользовательские проекты, настройки и credentials не менялись.
+This is acceptance of UI structure and data preservation on synthetic materials. Revision conflicts and CLI/UI parity were checked by targeted offline tests. The full product suite and real models were not rerun; no new benchmark, listening acceptance, or ordinary external-browser download is claimed. Previously cancelled user work was not resumed. User projects, settings, and credentials were unchanged.
 
-## Промежуточная проверка размеров
+## Intermediate dimension check
 
-06.11.2026. По команде пользователя «Делаем» исправлены четыре проблемы независимого аудита. Работа затронула `ui.py`, `ui_content.py`, `ui_settings.py`; бизнес-правила и данные проекта не менялись. Для браузерной проверки использованы прежние синтетические QA-проекты и отдельный `XDG_CONFIG_HOME`. Модели, загрузки и обычные пользовательские настройки не использовались.
+06.11.2026. Following the user's “Делаем” (“Let's do it”), four issues from an independent audit were fixed. Work affected `ui.py`, `ui_content.py`, and `ui_settings.py`; business rules and project data were unchanged. Browser checks used previous synthetic QA projects and a separate `XDG_CONFIG_HOME`. Models, downloads, and ordinary user settings were not used.
 
-### Изменения
+### Changes
 
-Верхний отступ основного содержимого уменьшен с 96 до 56px. Название проекта и навигация находятся в одном блоке, каталог и модели задачи - в одной строке с естественными ширинами. Тип/статус/происхождение объединены; редактирование и состояние сохранения показаны рядом. У заголовков результата уменьшены внутренние отступы, шрифт и межстрочный интервал основного текста сохранены. Регенерация находится в «Операциях задачи» с прежней защитой несохранённой редакции. Рендер, проба голоса и запуск серии сохранили свои действия над редактором. Плеер, выбор главы и скачивания предшествуют служебным подробностям/coverage.
+Top padding of main content was reduced from 96 to 56px. Project title and navigation occupy one block, catalogue and task models one row with natural widths. Type/status/origin were combined; editing and save state appear together. Result headings have smaller internal padding, while body font and line spacing are preserved. Regeneration is under “Операциях задачи” (“Task operations”) with the existing unsaved-revision protection. Rendering, voice preview, and series launch retain their editor actions. The player, chapter selector, and downloads precede service details/coverage.
 
-В Settings остался один локализованный нативный заголовок, два избыточных divider удалены. Save/Cancel и закрытие очищают staged-поля прежними callbacks. Для логотипа sidebar сброшен отрицательный margin native heading wrapper. Подписи недавних задач адресуют фактический caption `p`, а их wrapper имеет нулевой нижний margin: иначе штатные −16px вместе с небольшим gap дают наложение соседних строк. Основные размеры кнопок и полей сохранены.
+Settings retains one localized native heading; two redundant dividers were removed. Save/Cancel and close clear staged fields through the existing callbacks. The sidebar logo's native heading wrapper has its negative margin reset. Recent-task captions target the actual caption `p`, and their wrapper has zero bottom margin: otherwise the standard −16px plus a small gap overlaps neighboring rows. Main button/field dimensions are preserved.
 
-### Браузерные измерения
+### Browser measurements
 
-IAB, 1280×720, базовый шрифт 16px. Координаты относятся к верхней границе контрола на непрокрученном основном экране.
+IAB, 1280×720, base font 16px. Coordinates refer to the control's top edge on the unscrolled main screen.
 
-| Контроль | До | После |
+| Control | Before | After |
 |---|---:|---:|
-| Поле ответа study | y930,27 | y614,91; 100px, целиком видно |
-| Плеер аудиокниги | y684,47 | y407,52; 40px, целиком видно |
-| M4B/MP3 downloads | Ниже первого экрана | y463,52/y519,52; 40px |
-| Save/Cancel в Models | y748,38 | y568,79; 40px, весь диалог виден |
-| Логотип → первая кнопка | Наложение 10,4px | Положительный зазор 5,59px |
-| Подпись recent tasks | 14px/22,4px, selector `small` не действует | 12,8px/16,64px, реальный `p`, margin 0 |
+| Study answer field | y930.27 | y614.91; 100px, fully visible |
+| Audiobook player | y684.47 | y407.52; 40px, fully visible |
+| M4B/MP3 downloads | Below first screen | y463.52/y519.52; 40px |
+| Save/Cancel in Models | y748.38 | y568.79; 40px, entire dialog visible |
+| Logo → first button | 10.4px overlap | Positive 5.59px gap |
+| Recent-task caption | 14px/22.4px, `small` selector ineffective | 12.8px/16.64px, actual `p`, margin 0 |
 
-Дополнительно просмотрены создание задачи, чтение и редактор отчёта, источники и настройки General. В окне 900×768 проверены переносы header, плеер/скачивание и подписи действий. Фиксированное соотношение колонок сжимало «Все задачи проекта» в узком окне; оно заменено горизонтальным контейнером с естественной шириной кнопки. Временный viewport сброшен после проверки.
+Task creation, report reading/editor, sources, and General settings were also inspected. The 900×768 view checked header wrapping, player/downloads, and action labels. Fixed column ratios squeezed “Все задачи проекта” (“All project tasks”) in a narrow window; they were replaced with a horizontal container using the button's natural width. The temporary viewport was reset after checking.
 
-Это контроль указанных desktop-размеров, не гарантия одинакового первого экрана при любом названии, длине вопроса или масштабе. Длинные формы, развёрнутые параметры и материалы могут прокручиваться. Например, submit новой формы подкаста после уплотнения расположен на y778 вместо y905; все поля этой формы не объявляются помещающимися в720px. Высота textarea и содержимое материалов не сокращались ради этого замера.
+This checks the listed desktop dimensions, not identical first-screen contents for every title, question length, or zoom level. Long forms, expanded options, and material can scroll. For example, the new-podcast form's submit after compaction is at y778 rather than y905; this does not claim every field fits in720px. Textarea height and material content were not reduced for this measurement.
 
-Исходный аудит: `outputs/ui-spacing-audit-2026-11-06/audit.md`, screenshots и JSON рядом. Итоговые evidence: `outputs/ui-spacing-fix-2026-11-06/` - `study`, `audiobook`, `settings-general`, `settings-models`, `report`, `report-editor`, `new-task`, `sources`, `result-900`, `audiobook-900`, `sidebar.json`. Независимый повторный review исходников/снимков подтвердил закрытие 4/4; заключение - `review.md` того же каталога. Эти файлы игнорируются Git.
+Original audit: `outputs/ui-spacing-audit-2026-11-06/audit.md`, with screenshots and JSON beside it. Final evidence: `outputs/ui-spacing-fix-2026-11-06/` — `study`, `audiobook`, `settings-general`, `settings-models`, `report`, `report-editor`, `new-task`, `sources`, `result-900`, `audiobook-900`, `sidebar.json`. An independent repeat source/screenshot review confirmed closure of 4/4; its conclusion is `review.md` in the same directory. These files are ignored by Git.
 
-### Проверка поведения
+### Behavior checks
 
-Сначала прошли 96 целевых проверок UI/интерфейсов: сохранение и конфликт редакции, recovery, навигация и языки, настройки Save/Cancel, модели задачи, регенерация, серии, перевод, study/report и рендер. Ранний локальный прогон поймал потерянный placeholder действий рендера/серии; он восстановлен для соответствующих видов до принятия результатов.
+First, 96 targeted UI/interface checks passed: revision saving/conflicts, recovery, navigation/languages, settings Save/Cancel, task models, regeneration, series, translation, study/report, and rendering. An early local run caught a lost render/series-action placeholder; it was restored for relevant kinds before accepting results.
 
-После окончательной компоновки полный набор - **622 passed**. Ruff check/format и diff check проходят. Новые тесты на фиксированные отступы и декоративные размеры не добавлялись: геометрия проверена реальным браузером, действующие проверки поведения сохранены. Временный сервер 8566 остановлен. Реальные текстовые/речевые вызовы для этой UI-правки не нужны и не выполнялись.
+After final layout, the full suite was **622 passed**. Ruff check/format and diff check pass. No new fixed-spacing/decorative-size tests were added: geometry was checked in a real browser and existing behavior checks were preserved. Temporary server 8566 was stopped. Real text/speech calls were unnecessary for this UI edit and were not performed.
 
-### Наложение заголовка недавних задач — 06.11.2026
+### Recent-task heading overlap — 06.11.2026
 
-По новому скриншоту воспроизведено наложение заголовка «Недавние задачи» на первую строку списка. Это отдельный дефект Markdown, а не повтор прежнего дефекта caption: у `stMarkdownContainer` заголовка вычисленный `margin-bottom` равен −16 px, при высоте текста 25,59 px наружный элемент занимает только 9,59 px. При исходных 1280×720 нижняя граница текста находится на y461,78, первая задача начинается на y448,98: пересечение 12,80 px.
+A new screenshot reproduced “Недавние задачи” (“Recent tasks”) overlapping the first list row. This is a separate Markdown defect, not a repetition of the earlier caption defect: the heading's `stMarkdownContainer` has computed `margin-bottom` of −16 px, and with text height 25.59 px its outer element occupies only 9.59 px. At the original 1280×720 viewport, the text's bottom edge is y461.78 and the first task starts at y448.98: an overlap of 12.80 px.
 
-В `ui_navigation.py` заголовок получил собственный контейнер `sidebar-recents-heading`. В CSS `ui.py` только для его Markdown сброшен отрицательный margin и добавлен нижний padding 4 px. Существующие размеры строк, подписи, выделение задачи и разделитель сохранены. После исправления между текстом заголовка и первой кнопкой 7,20 px.
+In `ui_navigation.py`, the heading received its own `sidebar-recents-heading` container. In `ui.py` CSS, only this Markdown has its negative margin reset and bottom padding of 4 px added. Existing row dimensions, captions, task highlighting, and divider are preserved. After the fix, the gap between heading text and the first button is 7.20 px.
 
-Проверен настоящий Streamlit 1.66.1 в IAB с отдельными временными XDG-настройками и синтетическим проектом из 18 готовых задач. Светлая/тёмная темы проверены на 1280×720 и 390×844, доли панелей 15%/85% изменялись клавишами Home/End; обычная доля 50% восстановлена стрелками. На мобильной ширине sidebar раскрыт перед измерениями. Дополнительно проверен обычный viewport 600×795. На всех записанных измерениях зазор 7,20 px, горизонтального переполнения документа нет. PageDown прокручивает список недавних (подтверждён `scrollTop=139`), не меняя прокрутку проектов (`scrollTop=0`). При минимальной высоте панели список доступен прокруткой; размещение всех задач одновременно не заявляется. Временный viewport сброшен.
+Real Streamlit 1.66.1 was checked in IAB with separate temporary XDG settings and a synthetic project containing 18 finished tasks. Light/dark themes were checked at 1280×720 and 390×844; panel shares 15%/85% were changed with Home/End, and the ordinary 50% share restored with arrows. At mobile width, the sidebar was expanded before measurement. A normal 600×795 viewport was also checked. All recorded measurements show a 7.20 px gap and no horizontal document overflow. PageDown scrolls the recent list (confirmed `scrollTop=139`) without changing project scrolling (`scrollTop=0`). At minimum panel height, the list is accessible by scrolling; simultaneous display of all tasks is not claimed. The temporary viewport was reset.
 
-`uv run --no-sync pytest -q tests/test_ui_redesign.py tests/test_ui_followthrough.py`: **27 passed за 21,55 с**. Ruff check/format двух изменённых UI-модулей и `git diff --check` прошли. Новые тесты на декоративные размеры не добавлены; существующие проверки навигации недавних, независимых черновиков, настроек и редактирования сохранены. Полный продуктовый набор и настоящие модели для этого исправления не запускались.
+`uv run --no-sync pytest -q tests/test_ui_redesign.py tests/test_ui_followthrough.py`: **27 passed in 21.55 s**. Ruff check/format of the two changed UI modules and `git diff --check` passed. No new decorative-size tests were added; existing checks of recent-task navigation, independent drafts, settings, and editing were preserved. The full product suite and real models were not run for this fix.
 
-Снимки и геометрия сохранены вне Git: `outputs/ui-hierarchy-2026-11-06/measurements.json`, `workspace-light.jpg`, `sidebar-light-mobile.jpg`, `sidebar-dark-mobile.jpg`. Временные серверы 8567/8568 остановлены. Пользовательский проект и настройки не менялись. Этот промежуточный срез не подтверждал завершения всей типографики и структуры; последующий итоговый контроль приведён в начале отчёта.
+Screenshots and geometry are outside Git: `outputs/ui-hierarchy-2026-11-06/measurements.json`, `workspace-light.jpg`, `sidebar-light-mobile.jpg`, `sidebar-dark-mobile.jpg`. Temporary servers 8567/8568 were stopped. The user project and settings were unchanged. This intermediate slice did not establish completion of all typography and structure; later final checks appear at the beginning of the report.
 
-## История проверок интерфейса
+## Interface-check history
 
-- 02.11 UX-аудит выявил смешение материала и служебных сведений, плоский список технических jobs и перегруженные формы. После пользовательского одобрения интерфейс перестроен вокруг задач, источников и заметок, с обычными редакторами и дополнительным JSON.
-- 03.11 связанные запуски сгруппированы в задачи; общие настройки, модели задач и обслуживание хранилища отделены от результата. Проверки использовали синтетические проекты; они не подтверждали качество моделей.
-- 06.11 отдельный аудит плотности выявил положение результата ниже первого экрана, недоступные Save/Cancel и наложение sidebar. Измерения и поведенческая проверка этого среза приведены в разделе выше.
-- 06.11 типографическая иерархия была ошибочно объявлена завершением всей структуры. Повторные снимки выявили отсутствие внешнего сворачивания слайдов, отчётов, серии и глав аудиокниги, границы перед настройками и общей истории переводов. Это уточнение сохранено в D028; прежняя отметка не является доказательством готовности.
-- 07.11 выполнены структурные исправления и отдельная браузерная матрица всех типов задач, истории и дополнительных экранов. Итоговые проверки этого отчёта закрывают повторно открытый этап; прежние промежуточные скриншоты его не заменяют.
+- 02.11: a UX audit found mixing of material and service information, a flat technical-job list, and overloaded forms. After user approval, the interface was rebuilt around tasks, sources, and notes, with ordinary editors and additional JSON.
+- 03.11: related runs were grouped into tasks; shared settings, task models, and storage maintenance were separated from results. Checks used synthetic projects and did not establish model quality.
+- 06.11: a separate density audit found results below the first screen, inaccessible Save/Cancel, and sidebar overlap. Measurements and behavior checks for that slice appear above.
+- 06.11: typographic hierarchy was incorrectly announced as completion of the entire structure. Repeat screenshots found missing outer collapse controls for slides, reports, series, and audiobook chapters, a boundary before settings, and shared translation history. D028 retains this clarification; the earlier completion mark is not evidence of readiness.
+- 07.11: structural fixes and a separate browser matrix of all task types, history, and additional screens were completed. The final checks in this report close the reopened stage; earlier intermediate screenshots do not replace them.
 
-Локальные исходные аудиты, измерения и снимки не включены в публичный репозиторий. Установка и текущие действия описаны в README; это история UI-решений, не отдельный план.
+Local original audits, measurements, and screenshots are not in the public repository. Installation and current operations are described in the README; this is UI-decision history, not a separate plan.

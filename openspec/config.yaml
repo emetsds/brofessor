@@ -1,0 +1,41 @@
+schema: spec-driven
+
+context: |
+  brofessor is a local application for source-based answers, reports, practice,
+  podcasts, presentations, book translation, and audiobooks.
+  Stack: Python 3.12, uv, Typer, Streamlit, Pydantic, SQLite, Pydantic AI.
+  Read AGENTS.md and README.md for development principles and checks.
+  docs/specification.md is the existing product baseline. openspec/specs holds
+  accepted capabilities captured with OpenSpec; changes hold proposed deltas.
+  Each requirement has one owning specification. Do not copy the whole product
+  baseline into every change or maintain duplicate task lists.
+  Write artifacts and maintained developer documentation in English. Explain
+  the learning workflow to the user in Russian. Documentation translation must
+  preserve product requirements and supported UI/content languages.
+  Use the standard spec-driven schema and core Codex skills. Matt Pocock's
+  selected skills are installed unchanged in .agents/skills; their project
+  integration is documented in docs/agents/issue-tracker.md and domain.md.
+
+rules:
+  proposal:
+    - Identify the bounded outcome, affected capabilities, and explicit exclusions.
+  specs:
+    - Describe observable requirements with concrete acceptance scenarios.
+    - Preserve existing requirement IDs and semantics in translation-only changes.
+  design:
+    - Match verification to the change; documentation-only work does not require new runtime tests.
+  tasks:
+    - Use actionable checkboxes and include verification of the stated outcome.
+    - Keep implementation tasks here rather than duplicating them in docs/plan.md or another tracker.
+
+operations:
+  apply:
+    guidance:
+      - Read docs/agents/issue-tracker.md before using a Matt Pocock engineering skill.
+      - Use tdd for behavior changes at agreed public interfaces and diagnosing-bugs for reproducible defects.
+      - For documentation-only work, review semantic fidelity, links, and the absence of runtime changes.
+      - Before declaring implementation complete, review against the selected change artifacts and repository standards. Supply the actual review scope, including uncommitted files when relevant.
+  archive:
+    guidance:
+      - Report implementation checks separately from OpenSpec structural validation.
+      - Explain which capability specifications were synchronized and which checks remain unverified.

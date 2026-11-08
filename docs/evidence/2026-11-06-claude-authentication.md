@@ -1,92 +1,92 @@
-# Claude Desktop и вход терминального runner
+# Claude Desktop and terminal-runner login
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md), and decisions and cancellations are in the [Decision log](../decision-log.md). References to subsequent stages describe the state at the time of the experiment.
 
-06.11.2026, по запросу пользователя разобраться с Claude при работающем Desktop.
+06.11.2026, following the user's request to investigate Claude while Desktop was working.
 
-## Что установлено
+## Findings
 
-На компьютере установлен `/Applications/Claude.app`, версия **4.23118.0**.
-Терминальная команда `/Users/demets/.local/bin/claude` ведёт на стабильный
-Claude Code **2.1.317**. Другие команды `claude` в `/opt/homebrew/bin` и
-`/usr/local/bin` не найдены. Переменная `CLAUDE_CONFIG_DIR` и подмены API/billing
-в окружении проверки не заданы.
+The computer has `/Applications/Claude.app`, version **4.23118.0**.
+The terminal command `/Users/demets/.local/bin/claude` points to stable
+Claude Code **2.1.317**. No other `claude` commands were found in `/opt/homebrew/bin`
+or `/usr/local/bin`. `CLAUDE_CONFIG_DIR` and API/billing overrides were not set
+in the verification environment.
 
-Официальный `claude auth status --json` вернул **код 1**, `loggedIn=false`,
-`authMethod=none`, `apiProvider=firstParty`. Тот же результат получен вне
-песочницы; ограничение текущей песочницы не объясняет этот статус.
-Наличие работающего Desktop само по себе не подтверждает вход этого CLI.
+Official `claude auth status --json` returned **exit code 1**, `loggedIn=false`,
+`authMethod=none`, `apiProvider=firstParty`. The same result was obtained outside
+the sandbox; the current sandbox restriction does not explain that status.
+A working Desktop alone does not establish that this CLI is signed in.
 
-По [официальному сравнению Desktop и CLI](https://code.claude.com/docs/en/desktop#cli-flag-equivalents),
-Desktop не предоставляет `--print`/`--output-format`; для фонового runner
-остаётся терминальный Claude Code. Вход выполняет сам CLI согласно
-[инструкции Anthropic](https://code.claude.com/docs/en/authentication).
+According to the [official Desktop/CLI comparison](https://code.claude.com/docs/en/desktop#cli-flag-equivalents),
+Desktop does not provide `--print`/`--output-format`; the background runner
+therefore still uses terminal Claude Code. The CLI itself handles login according
+to [Anthropic's instructions](https://code.claude.com/docs/en/authentication).
 
-## Исправления brofessor
+## brofessor fixes
 
-В текущем [CLI reference](https://code.claude.com/docs/en/cli-reference#cli-commands)
-названо значение `authMethod=claude.ai`. Адаптер принимал `oauth_token` и
-`claude_ai`; теперь принимает и `claude.ai`. Во всех случаях нужны
-`loggedIn=true` и `apiProvider=firstParty`. Ключи API, helper и сторонние
-провайдеры по-прежнему не допускаются, генерация до проверки не начинается.
+The [CLI reference](https://code.claude.com/docs/en/cli-reference#cli-commands)
+at the time named `authMethod=claude.ai`. The adapter accepted `oauth_token` and
+`claude_ai`; it now also accepts `claude.ai`. All cases require
+`loggedIn=true` and `apiProvider=firstParty`. API keys, helpers, and third-party
+providers are still rejected, and generation does not start before verification.
 
-Код 1 у команды статуса теперь разбирается как штатный JSON без входа, вместо
-общей ошибки процесса. Настоящий `brofessor.executors.doctor('claude')`
-сообщает `available=false` и явную команду `claude auth login`.
-Остальные команды по умолчанию продолжают требовать код 0.
+Exit code 1 from the status command is now parsed as ordinary signed-out JSON,
+rather than a general process error. Real `brofessor.executors.doctor('claude')`
+reports `available=false` and the explicit `claude auth login` command.
+Other commands continue to require exit code 0 by default.
 
-## Проверки и текущая граница
+## Checks and current boundary
 
-**147 offline-проверок** адаптеров, навигации Pydantic, коллекций, pipeline и
-worker прошли. Существующий тест ограничений Claude теперь покрывает три
-варианта подписочного статуса; отдельные отрицательные случаи проверяют отказ
-до отправки текста. Настоящий синтетический CLI с кодом 1 проверяет понятную
-диагностику doctor/generate и отсутствие inference. Ruff check/format двух
-изменённых Python-файлов прошли.
+**147 offline checks** of adapters, Pydantic navigation, collections, pipeline,
+and worker passed. The existing Claude-restrictions test now covers three
+subscription-status variants. Separate negative cases check rejection before
+text is sent. A real synthetic CLI with exit code 1 checks clear doctor/generate
+diagnostics and absence of inference. Ruff check/format passed for both modified
+Python files.
 
-Официальный вход `claude auth login --claudeai` выполнен пользователем через
-обычный Terminal. Первый запуск в служебном терминале остановлен: пользователь
-получил одноразовый код и должен был вставить его непосредственно в CLI.
-Прямое открытие выданного CLI адреса `https://claude.com/cai/oauth/authorize`
-и доступный пользователю Terminal завершили вход. Ссылка на документацию в
-прежнем ответе не была страницей входа; этот лишний шаг исправлен.
-Пароль, одноразовый код и tokens не читались и не копировались агентом.
-Подписка и способ оплаты не менялись.
+The user completed official `claude auth login --claudeai` through ordinary
+Terminal. The first run in the service terminal was stopped: the user received
+a one-time code and needed to paste it directly into the CLI.
+Opening the CLI-provided `https://claude.com/cai/oauth/authorize` address directly
+and using the user's accessible Terminal completed login. The documentation link
+in the earlier response was not a login page; that unnecessary step was corrected.
+The agent did not read or copy passwords, one-time codes, or tokens.
+The subscription and payment method were unchanged.
 
-После входа официальный статус вернул **код 0**, `loggedIn=true`,
-`authMethod=claude.ai`, `apiProvider=firstParty`. Тем самым новое значение
-метода подтверждено установленным CLI, а не только документацией.
-`brofessor.executors.doctor('claude')` вернул `available=true`,
-`auth_mode=claude_subscription` для версии 2.1.317.
+After login, official status returned **exit code 0**, `loggedIn=true`,
+`authMethod=claude.ai`, `apiProvider=firstParty`. Thus the new method value
+was confirmed by the installed CLI, not only documentation.
+`brofessor.executors.doctor('claude')` returned `available=true`,
+`auth_mode=claude_subscription` for version 2.1.317.
 
-## Настоящая навигация и содержательная сверка
+## Real navigation and content verification
 
-Запущен существующий `tools/probe_collection_navigation.py` с `--provider claude`
-и моделью-алиасом `sonnet`, через обычные worker, Pydantic Agent и ограниченный
-CLI runner. Точная серверная ревизия модели не установлена. Источники — восемь
-синтетических заметок; личный vault и файлы пользователя не использовались.
+The existing `tools/probe_collection_navigation.py` was run with `--provider claude`
+and model alias `sonnet`, through the ordinary worker, Pydantic Agent, and bounded
+CLI runner. The exact server-side model revision was not established. Sources were
+eight synthetic notes; the personal vault and user files were not used.
 
-Задание **`88e54976525c4a18`** завершилось за **23,586 с**, четыре настоящих
-обращения: три `NavigationStep` и один `Answer`. Навигация искала River,
-просматривала каталоги и прочитала четыре оригинала: Главная, River, North и
-South. Ответ сослался на три содержательных документа и семь точных цитат.
+Job **`88e54976525c4a18`** completed in **23,586 s**, with four real calls:
+three `NavigationStep` and one `Answer`. Navigation searched for River,
+listed directories, and read four originals: Главная (Home), River, North,
+and South. The answer cited three substantive documents and seven exact quotes.
 
-Проверены весь ответ и каждая цитата по оригиналу: текущий таймаут **12 мс**
-отделён от исторических **35 мс**; сохранены **48 запросов на одном узле**,
-отсутствие гарантии для кластера и непроверенная потеря питания. Причины разницы
-между прогонами не выдуманы. Семь цитат входят в исходные фрагменты без замены
-слов, все исходные файлы остались прежними. Навигация имеет `complete`, проблем
-в отчёте нет. Это короткая функциональная и содержательная проба, не оценка
-качества на больших материалах.
+The entire answer and every quote were checked against originals: the current
+**12 ms** timeout is separated from historical **35 ms**; **48 requests on one node**,
+absence of a cluster guarantee, and untested power loss are retained. Reasons for
+differences between runs were not invented. All seven quotes occur in original
+fragments without word substitutions, and all source files remained unchanged.
+Navigation has `complete`, with no report problems. This is a short functional
+and content check, not a quality assessment for large materials.
 
-Артефакты вне репозитория: `/private/tmp/brofessor-claude-auth-2026-11-06/` —
-`calls.json`, `result-ask.json`, `audit.json`, возвращённые ответы и workspace
-с источниками/checkpoints. Новые генерации аудио и изменения пользовательского
-выбора моделей не выполнялись. Временный файл запуска обычного Terminal —
-`/private/tmp/brofessor-claude-login/Claude Code Login.command`, только команда
-официального CLI, без credentials.
+Artifacts outside the repository: `/private/tmp/brofessor-claude-auth-2026-11-06/` —
+`calls.json`, `result-ask.json`, `audit.json`, returned answers, and the workspace
+with sources/checkpoints. No new audio generation or changes to the user's model
+selection were performed. The temporary ordinary-Terminal launcher was
+`/private/tmp/brofessor-claude-login/Claude Code Login.command`, containing only
+the official CLI command, without credentials.
 
-Обычный путь после установки CLI: один раз выполнить `claude auth login --claudeai`
-в своём терминале, пройти вход в браузере и при необходимости вставить код
-непосредственно в CLI; затем `brofessor doctor --provider claude`. Этот путь
-добавлен в README. Открытый пункт настоящей навигации Claude закрыт в плане.
+The ordinary path after CLI installation is to run `claude auth login --claudeai`
+once in your own terminal, sign in through the browser, and paste a code directly
+into the CLI if needed; then run `brofessor doctor --provider claude`. This path
+was added to README. The open real-Claude-navigation item was closed in the plan.

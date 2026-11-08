@@ -1,63 +1,63 @@
-# Полная книга: чтение и проверка фактов
+# Whole book: reading and fact checking
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md); decisions and cancellations are in the [Decision log](../decision-log.md). References to later stages describe the state at the time of the experiment.
 
-Проверено 01.11.2026 на целевом Mac. Это первый пункт M2: целый источник, покрытие чтения и ссылки. Длинная озвучка и серия здесь не проверялись.
+Checked 01.11.2026 on the target Mac. This is the first M2 item: a complete source, reading coverage, and references. Long narration and a series were not checked here.
 
-## Материал и запуск
+## Material and execution
 
-Взята полная английская книга Mary Shelley, *Frankenstein; or, The Modern Prometheus*, [Project Gutenberg №84](https://www.gutenberg.org/ebooks/84), [EPUB без изображений](https://www.gutenberg.org/ebooks/84.epub.noimages).
+The complete English book by Mary Shelley, *Frankenstein; or, The Modern Prometheus*, was used: [Project Gutenberg No. 84](https://www.gutenberg.org/ebooks/84), [EPUB without images](https://www.gutenberg.org/ebooks/84.epub.noimages).
 
-- Файл: 294 175 байт, SHA-256 `bf04d57cf243314ab770df6fcea6a9cfb1e5a281426453e23c128c5a9c3eb662`.
-- Импорт: 437 333 символа, 90 фрагментов; 89 читаемых и один пустой. Обработаны также предисловие и служебные материалы EPUB; финал книги не обрезан.
-- Задание `ask`: `52b4f92c68f1476e`, русский вопрос к английскому источнику, шесть вопросов о деталях начала, середины и финала. Выбран весь источник.
-- Исполнитель: настроенный официальный стабильный Codex CLI с подпиской ChatGPT, без API billing. Имя модели оставлено на выбор CLI; точная серверная ревизия не записана, побитовая воспроизводимость не заявляется.
+- File: 294 175 bytes, SHA-256 `bf04d57cf243314ab770df6fcea6a9cfb1e5a281426453e23c128c5a9c3eb662`.
+- Import: 437 333 characters, 90 fragments, of which 89 were readable and one empty. The preface and EPUB auxiliary material were also processed; the book's ending was not truncated.
+- `ask` job: `52b4f92c68f1476e`, a Russian query over an English source, with six questions about details from the beginning, middle, and ending. The entire source was selected.
+- Runner: the configured official stable Codex CLI with a ChatGPT subscription, without API billing. Model selection was left to the CLI. The exact server revision was not recorded, and bit-for-bit reproducibility is not claimed.
 
-Вопросы касались адресата и места первого письма Уолтона, трёх прочитанных книг, разговора с Де Лейси, убийства Клерваля и алиби Виктора, решения повернуть корабль и заключительной сцены с существом.
+The questions concerned the recipient and location of Walton's first letter, the three books read, the conversation with De Lacey, Clerval's murder and Victor's alibi, the decision to turn the ship around, and the final scene with the creature.
 
-## Измерения
+## Measurements
 
-| Показатель | Результат |
+| Metric | Result |
 |---|---|
-| Статус задания | `succeeded` |
-| Покрытие чтения | 89/89 читаемых, 1 пустой исключён |
-| Чтение | 22 модельных вызова, один результат на каждый исходный ID |
-| Итоговый ответ | 1 модельный вызов, 10 исходных ID в ссылках |
-| Полное время задания | 469,26 с — 7 мин 49 с |
-| Сумма времени модельных вызовов | 468,98 с |
-| Самый большой prompt чтения | 24 716 символов, включая инструкции и вопрос |
-| Итоговый prompt | 53 449 символов |
-| Повторное исполнение с запретом новых модельных вызовов | 0,06 с, использованы принятые checkpoints |
+| Job status | `succeeded` |
+| Reading coverage | 89/89 readable, 1 empty excluded |
+| Reading | 22 model calls, one result for every original ID |
+| Final answer | 1 model call, 10 original IDs in references |
+| Total job time | 469.26 s — 7 min 49 s |
+| Sum of model-call durations | 468.98 s |
+| Largest reading prompt | 24 716 characters, including instructions and the question |
+| Final prompt | 53 449 characters |
+| Replay with new model calls prohibited | 0.06 s, accepted checkpoints reused |
 
-Бюджет пакета относится к сериализованным исходным фрагментам: 24 тысячи символов; инструкции и пользовательский вопрос идут дополнительно. В этом прогоне заметки поместились в итоговый бюджет 90 тысяч символов без второго обобщения. Ветка дополнительного обобщения проверена offline на синтетическом длинном источнике.
+The batch budget applies to serialized original fragments: 24 thousand characters, with instructions and the user's question added separately. In this run, the notes fit within the final budget of 90 thousand characters without a second reduction. The additional reduction branch was checked offline on a synthetic long source.
 
-## Сверка с оригиналом
+## Comparison with the original
 
-Ответ прочитан вместе с оригинальными фрагментами, а не только проверен на наличие ID. Ниже ID сокращены до суффикса: полный префикс — `bf04d57cf243314ab770:`.
+The answer was read alongside the original fragments, rather than merely checked for IDs. IDs below are shortened to their suffixes; the full prefix is `bf04d57cf243314ab770:`.
 
-| Проверка | Что подтверждено оригиналом | ID |
+| Check | What the original confirms | ID |
 |---|---|---|
-| Начало | Письмо сестре Маргарет Савилл; первое письмо из Санкт-Петербурга | `4` |
-| Три книги | «Потерянный рай», Плутарх, «Вертер»; дневник найден отдельно в одежде | `51` |
-| Де Лейси | Старик предлагает помощь; возвращение домашних и нападение Феликса прерывают разговор | `53` |
-| Клерваль и алиби | Ирландское побережье, бухта около двух миль от гавани; алиби относится ко времени обнаружения тела | `67`, `69`, `71`, `72` |
-| Решение Уолтона | Опасность льдов, требование команды и отказ вести людей дальше против их воли | `84`, `85` |
-| Финал | Самосожжение — намерение существа; рассказчик наблюдает уход на плоту и исчезновение вдали | `87` |
+| Beginning | A letter to his sister Margaret Saville; the first letter is from Saint Petersburg | `4` |
+| Three books | *Paradise Lost*, Plutarch, and *Werther*; the journal was found separately in the clothes | `51` |
+| De Lacey | The old man offers help; the family's return and Felix's attack interrupt the conversation | `53` |
+| Clerval and the alibi | The Irish coast, a bay about two miles from the harbor; the alibi concerns the time the body was discovered | `67`, `69`, `71`, `72` |
+| Walton's decision | Danger from the ice, the crew's demand, and refusal to take the men farther against their will | `84`, `85` |
+| Ending | Self-immolation is the creature's intention; the narrator sees it depart on a raft and disappear into the distance | `87` |
 
-Все шесть контрольных вопросов получили подтверждаемые ответы и ссылки. Название ирландского города не выдумано. Намерение в финале не выдано за наблюдаемое событие. Это результат шести конкретных проверок одной книги, а не оценка точности всех возможных пересказов.
+All six control questions received supportable answers and references. No Irish town name was invented. The intention in the ending was not presented as an observed event. This is the result of six specific checks on one book, not an accuracy assessment of every possible retelling.
 
-`chapter N` в EPUB-локаторе обозначает позицию импорта по spine, а не печатный номер главы. В этом издании, например, исходный `chapter 22` содержит текст `Chapter 15`. ID, путь внутри EPUB и диапазон символов позволяют открыть оригинал без подмены нумерации.
+`chapter N` in an EPUB locator denotes the spine import position, not the printed chapter number. In this edition, for example, the original `chapter 22` contains the text `Chapter 15`. The ID, path inside the EPUB, and character range allow the original to be opened without substituting one numbering system for another.
 
-## Интерфейсы и восстановление
+## Interfaces and recovery
 
-CLI `job coverage ID` и настоящий Streamlit на временном порту 18501 показали одинаковые числа: прочитано 89, исключён 1, цитируется 10. Проверены RU/EN подписи и таблица со статусами, локаторами и ссылками; статус чтения виден до горизонтальной прокрутки.
+CLI `job coverage ID` and real Streamlit on temporary port 18501 showed the same numbers: 89 read, 1 excluded, 10 cited. RU/EN labels and the table of statuses, locators, and references were checked. Reading status is visible before horizontal scrolling.
 
-239 offline-тестов, Ruff lint и format проходят. Добавлены проверки пакетного чтения всех фрагментов по порядку, неполных/дублированных заметок, ограничения длины, сохранения прогресса при отмене, повторного использования checkpoints после сбоя worker, дополнительного обобщения без новых ID, CLI/UI-паритета, старого формата покрытия и закреплённой редакции render. Неуспешная генерация по короткому источнику не помечает его прочитанным.
+239 offline tests, Ruff lint, and format pass. Added checks cover reading all fragments in batches and in order, incomplete/duplicate notes, length limits, progress retention on cancellation, checkpoint reuse after worker failure, additional reduction without new IDs, CLI/UI parity, the old coverage format, and pinned render revisions. Failed generation from a short source does not mark it read.
 
-Локальные результаты находятся в игнорируемом `outputs/whole-book/`: исходный EPUB, проект `workspace/`, ответ `answer.md`/`answer.json`, карта `coverage.json`, замеры `metrics.json`, снимки `coverage-ru.jpg`/`coverage-en.jpg`. Они не входят в публичный Git. Для открытия проекта достаточно `brofessor -w outputs/whole-book/workspace ui` из корня репозитория или подключения папки через UI.
+Local results are in ignored `outputs/whole-book/`: the source EPUB, project `workspace/`, answer `answer.md`/`answer.json`, coverage map `coverage.json`, measurements `metrics.json`, and screenshots `coverage-ru.jpg`/`coverage-en.jpg`. They are not in public Git. To open the project, run `brofessor -w outputs/whole-book/workspace ui` from the repository root or connect the folder through the UI.
 
-## Границы результата
+## Result boundaries
 
-Карта покрытия показывает принятые результаты чтения, а не полноту всех фактов и не смысловое доказательство каждой ссылки. Заметки сжаты под пользовательский фокус; повторное обобщение тоже может терять детали. Важные утверждения нужно сверять с оригиналом. Проверка ссылок в коде обеспечивает только их принадлежность переданной доказательной базе.
+The coverage map shows accepted reading results, not completeness of all facts or semantic proof for every reference. Notes are compressed to the user's focus; further reduction can also lose detail. Important claims must be checked against the original. Reference validation in code ensures only that references belong to the supplied evidence.
 
-Здесь не проверены 20–60-минутные RU/EN подкасты, серия, полная презентация по этой книге и реальные Claude/Ollama. Следующий пункт M2 — длительная озвучка с измерением продолжительности и содержательной редактурой сценария.
+20–60-minute RU/EN podcasts, a series, a complete presentation based on this book, and real Claude/Ollama were not checked here. The next M2 item is long narration with duration measurement and substantive script editing.

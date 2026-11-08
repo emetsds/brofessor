@@ -1,204 +1,246 @@
-# Создание задачи, первая озвучка и сохраняемый ход выполнения
+# Task creation, first narration, and durable execution progress
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md), and decisions and cancellations are in the [Decision log](../decision-log.md). References to subsequent stages describe the state at the time of the experiment.
 
-06.11.2026. Работа выполнена после команды «Действуй по плану шаг за шагом».
-Исходная рабочая копия уже содержала большой незакоммиченный срез; её изменения
-сохранены. Commit, push, публикация и изменение пользовательских defaults не выполнялись.
+06.11.2026. Work followed the instruction “Действуй по плану шаг за шагом” (“Follow the plan step by step”).
+The initial working copy already contained a large uncommitted slice, whose changes
+were preserved. No commit, push, publication, or changes to user defaults were performed.
 
-## Пользовательский процесс
+## User workflow
 
-Успешное создание/открытие проекта закрывает диалог обновлением всего приложения.
-При ошибке форма и значения остаются. В шапке открытого проекта доступны три кнопки:
-«Новая задача», «Добавить источник», «Удалить проект» с прежним подтверждением.
-Название папки открывает каталог, стрелка раскрывает только задачи. Отдельной строки
-«Открыть проект» внутри папки больше нет. Несколько папок остаются раскрытыми независимо.
+Successful project creation/opening closes the dialog by refreshing the whole application.
+On error, the form and values remain. The open project's header has three buttons:
+“Новая задача” (“New task”), “Добавить источник” (“Add source”), and “Удалить проект”
+(“Delete project”) with the existing confirmation. A folder name opens its catalogue,
+while its arrow expands tasks only. The separate “Открыть проект” (“Open project”) row
+inside a folder is gone. Several folders remain independently expanded.
 
-Заголовок проекта и Sources открывают один диалог файлов/папки. Для файлов показаны
-форматы и предел размера, выбор, одна команда добавления и результат по каждому файлу.
-Частичный успех и дубликаты сохраняются при исправлении ошибки; замена уже добавленного
-файла новыми байтами не пропускается. Успех закрывает диалог и обновляет источники.
-Папка подключается только по пути, без запуска модели. Obsidian объяснён как частный
-случай папки. Нативный uploader сохранён, переведены его подписи.
+The project header and Sources open the same file/folder dialog. For files, it shows
+formats and size limit, selection, one add command, and an outcome for each file.
+Partial success and duplicates are retained while fixing errors. Replacing an already
+added file with new bytes is not overlooked. Success closes the dialog and refreshes
+sources. A folder is connected by path only, without a model call. Obsidian is explained
+as a specific kind of folder. The native uploader remains, with its labels translated.
 
-«Создать задачу» описывает выбранный результат и открывает конкретную задачу.
-Пользовательское имя отделено от полного запроса и заголовка материала; пустое имя
-получает короткое значение без модели. Переименование доступно в CLI/UI, не меняет
-редакции. Общий поиск использует ту же префиксную логику и строку результата, что каталог,
-группирует задачи по проектам, находит пустые проекты и не пишет MRU при вводе.
+“Создать задачу” (“Create task”) describes the selected result and opens that specific task.
+The user-provided task name is separate from the full request and material title. An empty name
+receives a short value without a model. Renaming works in CLI/UI without changing
+revisions. Global search shares the catalogue's prefix logic and result row, groups
+tasks by project, finds empty projects, and does not write MRU while typing.
 
-После сохранения первого сценария новый подкаст автоматически продолжает озвучивание
-в прежнем worker. Общая SQLite закрепляет политику, первую редакцию и speech snapshot.
-Новые выпуски копируют политику серии и текущие модели её задачи; повторные запросы
-оставляют первоначальные входы. Ручной и автоматический render сходятся к одному ключу.
-Ошибка речи не отменяет готовность сценария. При отсутствии весов/runtime показаны
-причина и переход в настройки; автоматического скачивания нет. Отмена продолжения
-сохраняется после повторного открытия и снимается явным Resume.
+After the first script is saved, a new podcast automatically continues to narration
+in the existing worker. Shared SQLite pins policy, first revision, and speech snapshot.
+New episodes copy the series policy and its task's current models. Repeated requests
+retain initial inputs. Manual and automatic renders converge on one key.
+Speech failure does not undo script readiness. Missing weights/runtime show a reason
+and a Settings link, without automatic download. Continuation cancellation survives
+reopening and is cleared by explicit Resume.
 
-Правки требуют сохранения и явного «Переозвучить». Старое аудио остаётся доступным,
-редакция звука подписана рядом с действиями. «Редактировать» и «Переозвучить» стоят
-в одной строке в этом порядке. Сценарий изначально свёрнут, пагинация содержит две
-стрелки и небольшое текстовое поле. Некорректный номер не меняет страницу.
+Edits require saving and explicit “Переозвучить” (“Revoice”). Old audio remains available,
+with its revision labeled beside the actions. “Редактировать” (“Edit”) and “Переозвучить”
+(“Revoice”) appear in that order on one row. The script starts collapsed. Pagination
+has two arrows and a small text field. An invalid number does not change the page.
 
-Главная панель процесса показывает завершённые, текущий и предстоящие этапы,
-необязательные ветви и локальные единицы счётчика. История времени сохраняется в
-`job_stages`, отдельно учитываются очередь и паузы. Во время внешнего вызова worker
-раз в секунду фиксирует активный интервал. После аварии учитывается только записанное
-время; неизвестный хвост и прежняя история старой задачи не реконструируются.
-Долгое ожидание не объявляется зависанием. После успеха панель сворачивается.
+The main progress panel shows completed, current, and upcoming stages, optional branches,
+and stage-local counter units. Timing history persists in `job_stages`, separately
+accounting for queue and paused time. During an external call, the worker records an
+active interval every second. After a crash, only recorded time counts. An unknown tail
+and an older task's prior history are not reconstructed. A long wait is not labeled
+a hang. The panel collapses after success.
 
-## Проверки общих сервисов и интерфейсов
+## Shared-service and interface checks
 
-Контракты проверяют сохранение первоначальных редакций, моделей и источников;
-отмену и продолжение; отсутствие модели и runtime; одновременный ручной и автоматический
-render; восстановление до/после enqueue без второго текста или звука; наследование
-новыми выпусками будущей модели без изменения прежнего выпуска. CLI `--wait` следует
-также за первой озвучкой, сообщает её отказ и возвращает артефакты готового звука.
-Проверяется реальный WAV с PCM-кадрами, а не только существование файла.
+Contracts check retention of initial revisions, models, and sources; cancellation and
+resume; absent model/runtime; simultaneous manual and automatic rendering; recovery
+before/after enqueue without a second text or audio result; and inheritance by new
+episodes of a future model without changing an earlier episode. CLI `--wait` also
+follows first narration, reports its failure, and returns finished-audio artifacts.
+It checks a real WAV with PCM frames, not merely the existence of a file.
 
-Управляемые часы проверяют границы этапов, остановленный worker, текущую и законченную
-паузу, повторные проходы, пропущенное обобщение, динамический локальный объём и одинаковый
-отчёт CLI/UI. Имя задачи сохраняется до/после генерации, правок, переименования и открытия
-workspace заново. Поиск проверен на пустом проекте, связанном ответе, исходном запросе,
-удалении, регистре и нескольких префиксах без изменения MRU.
+Controlled clocks check stage boundaries, a stopped worker, current and completed
+pauses, repeated passes, omitted summarization, dynamic local scope, and identical
+CLI/UI reports. The task name survives before/after generation, edits, renaming, and
+reopening the workspace. Search is checked on an empty project, related answer,
+original request, deletion, case, and multiple prefixes without changing MRU.
 
-AppTest проверяет создание и открытие задачи, переход к фоновой работе из новой формы
-и Sources без потери неотправленного запроса, доступность сценария при заблокированном
-звуке, переход в Settings без запуска скачивания, сохранение старых редакций и кеша.
-Проверена отменённая аудио/файловая операция в главной панели с продолжением того же job.
-Пагинация проверяет ручной номер, ошибку, обе границы, стрелки и уменьшение числа реплик
-после явной загрузки новой редакции. Импорт проверяет частичный успех, дубликат,
-повтор, замену содержимого и сохранение ошибочного пути.
+AppTest checks task creation/opening, transition to background work from the new-task
+form and Sources without losing an unsubmitted request, script availability when
+audio is blocked, Settings navigation without starting a download, and retention of
+old revisions/cache. A cancelled audio/file operation in the main panel is checked
+with continuation of the same job. Pagination checks manual numbers, errors, both
+bounds, arrows, and fewer turns after explicitly loading a new revision. Import
+checks partial success, duplicates, retries, replacement content, and retention of
+an invalid path.
 
-Прежние проверки ручного рендера и голосовых референсов используют явный
-`auto_audio=False`: их защита кеша и закреплённых голосов сохранена. Проверка отсутствия
-runtime теперь ожидает выключенную кнопку озвучивания; прежняя защита от запуска
-сохраняется. Проверка UI/CLI-уточнения учитывает отдельное название новой задачи.
-Декоративных тестов на точные размеры или фиксированное число виджетов не добавлено.
+Earlier manual-render and voice-reference checks use explicit `auto_audio=False`,
+preserving their cache and pinned-voice protection. The no-runtime check now expects
+a disabled narration button, retaining the earlier protection against launch.
+The UI/CLI follow-up check accounts for the new task's separate name.
+No decorative tests for exact dimensions or fixed widget counts were added.
 
-## Настоящий процесс и браузер
+## Real process and browser
 
-Все данные находятся в `/tmp/brofessor-plan-ui`, вне репозитория. Исходник — собственное
-синтетическое наблюдение об испытании моста. Работали настоящие Streamlit, SQLite,
-OS-lock, worker, checkpoints, кеш сегментов и FFmpeg. На дорогих границах использованы
-синтетические ответы и синусоидальный PCM вместо вызова текстовой или речевой модели.
-Это проверка процесса и интерфейса, не качества сценариста или настоящего голоса.
+All data is in `/tmp/brofessor-plan-ui`, outside the repository. The source is a
+self-authored synthetic bridge-test observation. Real Streamlit, SQLite, OS-lock,
+worker, checkpoints, segment cache, and FFmpeg ran. At expensive boundaries, synthetic
+answers and sinusoidal PCM replaced text/speech model calls. This checks process and
+interface, not writer quality or a real voice.
 
-В первом задании принудительный `os._exit(75)` произошёл после постановки аудио, до
-сохранения связи с ним. После запуска нового worker восстановлен тот же render.
-Сценарий и пользовательское имя не изменились. Затем в браузере изменена первая
-реплика, сохранена r2 и явно запущено переозвучивание. Его отмена/продолжение сохранили
-ID. Для этого задания текстовая граница вызвана один раз. У r1 сегменты имели
-`reused=[false,false]`, у r2 — `[false,true]`; прежние файлы остались.
-Аудиозадания: r1 `0f83c92db082484e`, r2 `4be072442274489b`.
+In the first job, forced `os._exit(75)` occurred after audio enqueue but before saving
+its relationship. Starting a new worker recovered the same render. The script and
+user-provided name were unchanged. The first turn was then edited in the browser,
+r2 saved, and revoicing explicitly launched. Its cancellation/resume preserved the
+ID. The text boundary was called once for this task. r1 segments had
+`reused=[false,false]`, r2 had `[false,true]`, and previous files remained.
+Audio jobs: r1 `0f83c92db082484e`, r2 `4be072442274489b`.
 
-Отдельное задание с контролируемым ожиданием ответа 20 секунд показало в браузере
-синий текущий этап, собственный счётчик разделов, heartbeat и ожидание модели.
-После завершения история сохранила 20 секунд выполнения отдельно от 13:40 в очереди
-при остановленном проверочном worker. Имена и результаты пережили перезапуск UI.
+A separate job with a controlled 20-second response wait showed a blue current stage,
+its own section counter, heartbeat, and model wait in the browser. After completion,
+history retained 20 seconds of execution separately from 13:40 queued while the test
+worker was stopped. Names and results survived a UI restart.
 
-Браузерные проверки выполнены в IAB на 1280×720 и 390×844, в светлой и тёмной темах:
+Browser checks ran in IAB at 1280×720 and 390×844, in light and dark themes:
 
-- Создание проекта закрыло окно, открыло проект и показало подтверждение. Подключение
-  папки и добавление файла закрыли общий диалог, источник сохранён.
-- Глобальный поиск обновлялся на «пус», «пуст» и «ПОЛ ПУТ» без Enter. Найдены пустой
-  проект и задача другого проекта. Фокус оставался в input, счётчик полных запусков
-  страницы оставался 16 при изменении запроса.
-- Стрелка папки мышью и Space с клавиатуры раскрыли несколько папок без полного rerun.
-  Перетаскивание разделителя изменило долю с 55% до 44%, счётчик запусков остался 9.
-  Home/End проверили 15%/85% в узком тёмном sidebar; оба раздела различимы и прокручиваются.
-- На сценарии из 44 реплик ручной ввод 6 открыл 41–44, выключил «Вперёд»; 99 оставил
-  последнюю страницу и показал объяснение, «Назад» вернул 5. На 390 px строка пагинации
-  помещается целиком. Номер и свёрнутость не сбрасывались опросом прогресса.
-- Найдено реальное складывание колонок шапки sidebar на узком экране: Streamlit задавал
-  каждой колонке `min-width: calc(100% - 24px)`. Применены локальные размеры колонок
-  brand/поиска/настроек и строки Projects. После исправления ширины составили
-  156/36/36 px, внешний scrollTop — 0; логотип и оба значка находятся в одной строке.
-- Проверенные ширины документа/viewport совпали: 390/390 и 1280/1280. Время этапа
-  переносится под название на узком экране. Кнопки шапки переносятся на новую строку.
+- Creating a project closed the window, opened the project, and showed confirmation.
+  Connecting a folder and adding a file closed the shared dialog and saved the source.
+- Global search updated on “пус”, “пуст”, and “ПОЛ ПУТ” without Enter. It found an
+  empty project and a task in another project. Focus stayed in the input, and the
+  full-page-run counter stayed at 16 while the query changed.
+- Clicking the folder arrow and pressing keyboard Space expanded several folders
+  without a full rerun. Dragging the divider changed the proportion from 55% to 44%,
+  with the run counter still 9. Home/End checked 15%/85% in the narrow dark sidebar;
+  both sections were distinct and scrollable.
+- On a 44-turn script, manually entering 6 opened turns 41–44 and disabled “Вперёд”
+  (“Next”). 99 retained the last page and showed an explanation. “Назад” (“Previous”)
+  returned to 5. The pagination row fit completely at 390 px. Progress polling did
+  not reset the number or collapse state.
+- A real narrow-screen collapse of sidebar-header columns was found: Streamlit set
+  each column to `min-width: calc(100% - 24px)`. Local column sizes were applied to
+  brand/search/settings and the Projects row. After the fix, widths were
+  156/36/36 px, outer scrollTop was 0, and the logo and both icons shared one row.
+- Checked document/viewport widths matched: 390/390 and 1280/1280. Stage time wraps
+  below the title on a narrow screen. Header buttons wrap to a new line.
 
-После последней правки узкой шапки отдельно повторены 27 UI-проверок. Вкладки закрыты,
-viewport сброшен, проверочные серверы 8518/8519/8520 остановлены. Испытательные данные,
-логи и снимки сохранены вне публичного репозитория.
+After the final narrow-header edit, 27 UI checks were repeated separately. Tabs were
+closed, viewport reset, and test servers 8518/8519/8520 stopped. Test data, logs, and
+screenshots remain outside the public repository.
 
-## Границы
+## Boundaries
 
-Серая полоса поверх кнопок исходного пользовательского браузера не воспроизвелась.
-В проверенном интерфейсе нет горизонтального переполнения, но это не установление
-причины исходного скриншота. Исследование причины серой полосы позднее отменено по D027. Обычный Chrome/другой внешний браузер к инструментам не подключён.
-Повторять ранее зависавшее ожидание browser download не требовалось.
-Выбор файла через внешний filechooser занял около 30 минут при размере 113 Б;
-причина задержки инструмента не установлена. Импорт, содержимое файла и общий диалог
-проверены, но скорость приложения этим внешним ожиданием не измеряется.
+The gray bar over buttons in the user's original browser was not reproduced.
+The checked interface had no horizontal overflow, but that does not establish the
+cause of the original screenshot. Investigation of the gray bar's cause was later
+cancelled under D027. Ordinary Chrome/another external browser was not connected to
+the tools. Repeating the earlier hanging browser-download wait was unnecessary.
+Selecting a file through the external filechooser took about 30 minutes for 113 B.
+The reason for the tool delay was not established. Import, file content, and the
+shared dialog were checked, but that external wait does not measure application speed.
 
-06.11.2026 официальный Claude Code 2.1.317 повторно вернул `loggedIn=false`,
-`authMethod=none`, `apiProvider=firstParty`, код 1. В этом опыте настоящая навигация Claude не проверялась; последующий [официальный вход и реальный контроль](2026-11-06-claude-authentication.md) описаны отдельно. Реальные Codex/Ollama/TTS, новые веса,
-полные выпуски и слуховая приёмка в этой работе не запускались. Личная приёмка M4 позднее снята с актуального объёма по D027.
+On 06.11.2026, official Claude Code 2.1.317 again returned `loggedIn=false`,
+`authMethod=none`, `apiProvider=firstParty`, exit code 1. Real Claude navigation was
+not checked in this experiment. Subsequent [official login and real verification](2026-11-06-claude-authentication.md)
+are described separately. Real Codex/Ollama/TTS, new weights, full episodes, and
+listening acceptance were not run in this work. Personal M4 acceptance was later
+removed from current scope under D027.
 
-Снимки: `/tmp/brofessor-plan-ui/interface-light.jpg`, `progress-dark.jpg`,
-`progress-dark-390.jpg`, `sidebar-dark-390.jpg`. Лог полного набора:
-`/tmp/brofessor-plan-tests.log`. Синтетические голоса и ответы не являются тестовыми
-данными для оценки содержательного или слухового качества.
+Screenshots: `/tmp/brofessor-plan-ui/interface-light.jpg`, `progress-dark.jpg`,
+`progress-dark-390.jpg`, `sidebar-dark-390.jpg`. Full-suite log:
+`/tmp/brofessor-plan-tests.log`. Synthetic voices and answers are not test data for
+assessing content or listening quality.
 
-## Итоговые проверки
+## Final checks
 
-Полный offline-набор: **659 passed за 74,28 с**. После последней проверки типа
-`auto_audio` отдельно прошли **50** случаев первой озвучки, серий, задач и CLI wait.
-Из них успешный `--wait` проверяет опубликованный WAV и читаемые PCM-кадры,
-а следующий выпуск серии использует текущую выбранную модель без изменения
-уже созданного выпуска. После исправления узкой шапки прошли **27** UI-проверок;
-последующий полный прогон включает это исправление.
+Full offline suite: **659 passed in 74,28 s**. After the final `auto_audio` type check,
+**50** first-narration, series, task, and CLI-wait cases passed separately.
+Of these, successful `--wait` checks published WAV and readable PCM frames, while
+the next series episode uses the currently selected model without changing an
+already created episode. After fixing the narrow header, **27** UI checks passed.
+A subsequent full run includes that fix.
 
-`ruff check .`, `ruff format --check .` (**165 файлов**) и `git diff --check` проходят.
-`uv lock --check --offline` подтвердил lock на 221 пакет. Wheel собран offline;
-содержимое семи изменённых модулей сверено с checkout, они импортированы из
-распакованного пакета вне checkout, группа CLI `task` доступна.
-`upload_labels.js` включён, каталоги tests/tools/outputs в пакет не попали.
-Зависимости в этом продолжении не добавлялись. Эти проверки не подменяют
-настоящую генерацию моделей и слуховую приёмку, указанные в границах выше.
+`ruff check .`, `ruff format --check .` (**165 files**), and `git diff --check` pass.
+`uv lock --check --offline` confirmed the lock for 221 packages. The wheel was built
+offline. Contents of seven changed modules were compared with the checkout, and
+they were imported from an unpacked package outside the checkout. CLI group `task`
+is available. `upload_labels.js` is included, while tests/tools/outputs directories
+are not in the package. No dependencies were added in this continuation.
+These checks do not replace the real model generation and listening acceptance
+specified in the boundaries above.
 
-## Повторный скриншот: строка проекта в sidebar
+## Repeated screenshot: the sidebar project row
 
-06.11.2026 пользователь показал перекошенные стрелку, папку и имя `demo`.
-Проблема воспроизведена на изолированном UI: строка нативного expander имела
-высоту 40 px, наложенная кнопка названия — 32 px; содержимое раскрытого блока
-добавляло нижнюю рамку. Центры стрелки и названия расходились на 4 px.
+On 06.11.2026, the user showed misaligned arrow, folder, and `demo` name.
+The problem was reproduced in isolated UI: the native expander row was 40 px high,
+while the overlaid name button was 32 px. Expanded content added a bottom border.
+The arrow and name centers differed by 4 px.
 
-В `ui_navigation.py` выделен ключ строки проекта, в `ui.py` локальный CSS задаёт
-общую высоту 36 px и один фон выбранного проекта на всю шапку. Стрелка занимает
-отдельную область 36×36, название — оставшееся место. Подпись expander сохранена
-для accessibility. Убраны рамка и лишние внутренние отступы; значок папки не
-сжимается, длинный текст сокращается многоточием. Основное содержимое не изменено.
+A project-row key was extracted in `ui_navigation.py`. Local CSS in `ui.py` sets
+a shared 36 px height and one selected-project background across the whole header.
+The arrow occupies a separate 36×36 area, and the name takes the remaining space.
+The expander label is retained for accessibility. Borders and excess inner padding
+were removed. The folder icon does not shrink, and long text is ellipsized.
+Main content was unchanged.
 
-Настоящий IAB: светлая и тёмная темы на 1280×720 и 390×844, `demo`, второе имя и
-длинное русское название. Строки без переполнения, обе области имеют высоту 36 px
-и одинаковый верх. Сворачивание мышью и Space не запускает страницу заново;
-две папки раскрыты одновременно при `QA full page runs: 1`. Нажатие названия
-открывает нужный проект и обновляет активное выделение. Синтетические задачи
-подготовлены без генерации; пользовательские preferences и материалы не тронуты.
+Real IAB: light and dark themes at 1280×720 and 390×844, `demo`, a second name, and
+a long Russian name. Rows had no overflow, both regions were 36 px high with the
+same top. Mouse and Space collapse did not rerun the page. Two folders were expanded
+at once with `QA full page runs: 1`. Clicking a name opened the correct project and
+updated active highlighting. Synthetic tasks were prepared without generation.
+User preferences and materials were untouched.
 
-**27 существующих UI-проверок прошли за 19,69 с**; Ruff check/format двух модулей
-и diff check прошли. Новых тестов на декоративные размеры нет. Полный набор и
-модели заново не запускались. Проверочные серверы 8522/8523 остановлены,
-созданные вкладки закрыты, viewport сброшен.
+**27 existing UI checks passed in 19,69 s**. Ruff check/format for two modules and
+diff check passed. No new decorative-dimension tests. The full suite and models
+were not rerun. Test servers 8522/8523 were stopped, created tabs closed, and the
+viewport reset.
 
-Снимки вне репозитория: `/private/tmp/brofessor-sidebar-heading-2026-11-06/` —
+Screenshots outside the repository: `/private/tmp/brofessor-sidebar-heading-2026-11-06/` —
 `sidebar-light.jpg`, `sidebar-dark.jpg`, `sidebar-light-390.jpg`,
-`sidebar-dark-390.jpg`. Этот дефект строки проекта не устанавливает причину
-прежней серой полосы над действиями основной страницы: его исследование позднее отменено по D027.
+`sidebar-dark-390.jpg`. This project-row defect does not establish the cause of the
+earlier gray bar over main-page actions. That investigation was later cancelled
+under D027.
 
-## Компактное листание сценария — 06.11.2026
+## Compact script pagination — 06.11.2026
 
-По повторному скриншоту пользователя ряд «Назад · Страница [номер] из N · Вперёд» заменён двумя кнопками с шевронами и селектором `1 / N`. Подписи стрелок сохранены для доступности, визуально показаны только значки. Счётчик позволяет выбрать любую страницу сразу. На первой/последней странице соответствующая стрелка отключена; для одной страницы контрол не выводится. Восемь реплик на странице и свёрнутый по умолчанию сценарий сохранены.
+Following another user screenshot, the “Назад · Страница [номер] из N · Вперёд”
+(“Previous · Page [number] of N · Next”) row was replaced with two chevron buttons
+and a `1 / N` selector. Arrow labels remain for accessibility, while only icons are
+shown visually. The counter allows direct selection of any page. On the first/last
+page, the corresponding arrow is disabled. For one page, the control is absent.
+Eight turns per page and the initially collapsed script were retained.
 
-Текущая страница хранится отдельно от selectbox, поэтому скрытие виджета при переходе в источники не теряет позицию. При загрузке более короткой редакции номер ограничивается новой длиной. Существующий тест ручного ввода адаптирован к селектору: сохранены прямой переход, обе границы, обе стрелки и сокращение сценария, добавлен возврат через источники и недавнюю задачу. Проверка произвольного некорректного ввода больше не нужна: селектор содержит только допустимые страницы.
+The current page is stored separately from the selectbox, so hiding the widget
+when navigating to Sources does not lose position. Loading a shorter revision clamps
+the number to its new length. The existing manual-input test was adapted to the
+selector, retaining direct navigation, both bounds, both arrows, and script shortening,
+and adding return through Sources and a recent task. Arbitrary invalid input no
+longer needs checking: the selector contains valid pages only.
 
-`tests/test_ui_followthrough.py` и `tests/test_ui_language.py`: **16 passed за 3,21 с**. Ruff check/format четырёх затронутых Python-файлов и `git diff --check` прошли. Настоящий IAB проверен на синтетическом сценарии из девяти реплик: переход 1 → 2 → 1, выбор второй страницы из списка, выключенные граничные стрелки. На 1280×720 и 390×844 кнопки 40×40 px, селектор 112 px, три элемента занимают 200 px одной строкой; ширина документа на мобильном экране равна 390 px. Снимки вне Git: `outputs/ui-pagination-2026-11-06/desktop.jpg`, `mobile.jpg`, `pager.jpg`. Пользовательские данные, модельные вызовы и озвучивание не затрагивались. Временный viewport сброшен, вкладка закрыта.
+`tests/test_ui_followthrough.py` and `tests/test_ui_language.py`: **16 passed in 3,21 s**.
+Ruff check/format for four affected Python files and `git diff --check` passed.
+Real IAB was checked on a synthetic nine-turn script: 1 → 2 → 1 navigation, selecting
+the second page from the list, and disabled boundary arrows. At 1280×720 and 390×844,
+buttons were 40×40 px and the selector 112 px. The three elements occupied 200 px
+on one row, with mobile document width equal to 390 px. Screenshots outside Git:
+`outputs/ui-pagination-2026-11-06/desktop.jpg`, `mobile.jpg`, `pager.jpg`.
+User data, model calls, and narration were unaffected. The temporary viewport was
+reset and the tab closed.
 
-## Проверка загрузки после перезапуска
+## Download verification after restart
 
-06.11.2026 проверен отдельный синтетический файл 35 520 000 байт через локальный HTTP-сервер, настоящий worker/SQLite и Streamlit 1280×720. Это контролируемая транспортная граница без модели и внешней загрузки весов.
+On 06.11.2026, a separate synthetic 35 520 000-byte file was checked through a local
+HTTP server, real worker/SQLite, and Streamlit at 1280×720. This is a controlled
+transport boundary without a model or external weight download.
 
-Загрузка запущена в Models. После закрытия/открытия настроек прогресс продолжался. Worker принудительно завершён; UI показал прерывание на 24,1 из 35,5 МБ. Полный перезапуск тестового приложения и новая браузерная сессия сохранили прогресс, в том числе в General. Первая попытка выявила различие `/var` и `/private/var` на macOS; канонизация исправлена и покрыта отдельной регрессией.
+The download was started in Models. Progress continued after closing/reopening
+Settings. The worker was forcibly terminated, and the UI showed interruption at
+24,1 of 35,5 MB. A full test-application restart and new browser session retained
+progress, including in General. The first attempt exposed the distinction between
+`/var` and `/private/var` on macOS. Canonicalization was fixed and covered by a
+separate regression.
 
-Повторный Resume сохранил ID и pinned request, отправил `Range: bytes=24117248-` и докачал хвост. Два HTTP-запроса, одно задание, итоговый SHA-256 совпал; UI показал установку. Проверены конкурентный submit/resume, живой/умерший worker и перезапуск только одного файла при отказе сервера от Range. Реальные Hugging Face/Ollama/Qwen этим продолжением не скачивались; скорость обычного внешнего браузера не измерялась. Исходный отчёт находился в разделе загрузок прежнего плана; результаты не означают новую приёмку реальных весов.
+Repeated Resume retained the ID and pinned request, sent `Range: bytes=24117248-`,
+and downloaded the remaining tail. Two HTTP requests, one job, matching final
+SHA-256, and the UI showed installation. Concurrent submit/resume, live/dead workers,
+and restarting only one file when a server rejects Range were checked.
+Real Hugging Face/Ollama/Qwen weights were not downloaded in this continuation.
+Ordinary external-browser speed was not measured. The original report was in the
+old plan's downloads section. These results do not imply new acceptance of real weights.

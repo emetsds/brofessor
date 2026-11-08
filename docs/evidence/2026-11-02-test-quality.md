@@ -1,48 +1,48 @@
-# Проверка полезности тестов
+# Assessing test usefulness
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md); decisions and cancellations are in the [Decision log](../decision-log.md). References to later stages describe the state at the time of the experiment.
 
-02.11.2026. Независимый субагент проверил offline suite, затем изменения выполнены и проверены локально. В этой проверке использовались только синтетические материалы и подставленные внешние границы; настоящие модели, подписочные CLI и удалённый Ollama не запускались.
+02.11.2026. An independent subagent reviewed the offline suite, then changes were made and checked locally. This check used only synthetic materials and substituted external boundaries; real models, subscription CLIs, and remote Ollama were not run.
 
-## Что убрано или переписано
+## What was removed or rewritten
 
-| Слабая проверка | Сохранённая защита |
+| Weak check | Protection retained |
 |---|---|
-| Ровно 20 примеров и заданный набор статусов в контрольном корпусе | Эталонные цитаты действительно существуют в исходных документах; статусы ответов проверяются на сценариях |
-| Два одинаковых смешанных RU/EN PPTX с разной меткой языка | Один реальный файл с обоими языками, сохранением и повторным открытием |
-| Обязательные RECTANGLE/CHEVRON/DOWN_ARROW, число стрелок и полный запрет картинок | Редактируемые подписи и таблицы, порядок чтения, читаемые размеры, отсутствие пересечений подписей и выходов за страницу |
-| Дублирующий тест native PPTX | Проверка без офисного приложения/внешних процессов объединена с проверкой реального PPTX, заметок и OOXML bullets |
-| CLI `--wait` вызывает конкретный helper | Реальное сохранённое состояние `interrupted`, JSON и ненулевой код выхода |
-| Повтор всей грамматики адреса на каждом внешнем слое и отдельная проверка URL-строки | Полная грамматика проверяется один раз; сервис и CLI проверяют отказ до enqueue/соединения, HTTP-контракт — реальные адреса и крайние порты |
-| Отдельная проверка значений по умолчанию DTO для старых bullets | Старые drafts проходят через настоящее построение PPTX |
+| Exactly 20 examples and a fixed status set in the control corpus | Gold quotes really exist in source documents; answer statuses are checked in scenarios |
+| Two identical mixed RU/EN PPTX files with different language labels | One real bilingual file, saved and reopened |
+| Mandatory RECTANGLE/CHEVRON/DOWN_ARROW shapes, arrow counts, and a complete ban on images | Editable labels and tables, reading order, readable sizes, no label overlaps or page overflow |
+| Duplicate native-PPTX test | Checking without an office application/external processes is combined with checking a real PPTX, notes, and OOXML bullets |
+| CLI `--wait` calls a particular helper | Actual saved `interrupted` state, JSON, and nonzero exit code |
+| Repeating the entire address grammar at every external layer and separately checking a URL string | Full grammar is checked once; service and CLI check refusal before enqueue/connection, and the HTTP contract checks real addresses and boundary ports |
+| Separate check of DTO defaults for old bullets | Old drafts go through actual PPTX building |
 
-Точные флаги официальных CLI, правила внешнего формата, provenance, конкурентное редактирование, остановка процессов, восстановление и отсутствие лишних модельных вызовов оставлены: это требования, а не случайные детали реализации. В `AGENTS.md` добавлен этот критерий для следующих изменений.
+Exact official CLI flags, external-format rules, provenance, concurrent editing, process termination, recovery, and the absence of unnecessary model calls were retained: these are requirements, not incidental implementation details. This criterion was added to `AGENTS.md` for subsequent changes.
 
-## Новые важные сценарии
+## Important new scenarios
 
-- Поставить PPTX из редакции r1 в очередь, сохранить r2 и выполнить задание: текст, заметки, ссылки и зарегистрированная редакция готового файла должны остаться из r1.
-- Сбой кодировщика, timeout и отмена после создания частичного MP3: предыдущий результат не повреждается, временные файлы удаляются, повтор использует принятые аудиосегменты.
-- HTTP 307 от Ollama: исходный текст не пересылается другому серверу.
-- Настоящий F5-адаптер с подставленной upstream-библиотекой: отдельные голоса host/guest, точные расшифровки, закреплённые локальные checkpoint/vocab/Vocos и настройки. Смена пользовательского образца после submit не подменяет сохранённый. ASR и сеть запрещены тестом.
-- Смена голоса между фиксацией входов и enqueue, смена только расшифровки или настроек, одновременные повторы с одним явным ключом. Повторы CLI и UI с теми же входами возвращают одно задание; новый явный ключ создаёт отдельное.
+- Queue a PPTX from revision r1, save r2, then execute the job: the text, notes, references, and registered revision of the finished file must remain from r1.
+- Encoder failure, timeout, and cancellation after partial MP3 creation: preserve the previous result, remove temporary files, and reuse accepted audio segments on retry.
+- HTTP 307 from Ollama: source text is not forwarded to another server.
+- Real F5 adapter with a substituted upstream library: separate host/guest voices, exact transcripts, pinned local checkpoint/vocab/Vocos, and settings. Changing the user sample after submit does not replace the saved sample. The test prohibits ASR and network access.
+- A voice change between input pinning and enqueue, changes only to transcript or settings, and concurrent retries sharing one explicit key. CLI and UI retries with the same inputs return one job; a new explicit key creates a separate job.
 
-Найден и исправлен реальный дефект: UI вычислял ключ озвучки отдельно от фиксации параметров. Между этими действиями другой клиент мог сменить голос, и под ключом одного набора образцов сохранялось задание с другим. Теперь ключ вычисляет сервис из уже зафиксированных входов. Описательное изменение каталога не запускает повторную озвучку. Явный ключ сохраняет первый принятый снимок, даже если исходный пользовательский образец уже удалён.
+A real defect was found and fixed: the UI calculated the narration key separately from parameter pinning. Another client could change a voice between those actions, causing a job with one set of samples to be stored under another set's key. The service now calculates the key from already pinned inputs. A descriptive catalogue change does not trigger re-narration. An explicit key retains the first accepted snapshot even when the original user sample has been deleted.
 
-## Проверка силы новых тестов
+## Checking the strength of the new tests
 
-Временные изменения в коде вносились по одному и восстанавливались после каждого запуска. Каждый из шести дефектов был обнаружен соответствующим тестом:
+Temporary code mutations were introduced one at a time and reverted after each run. Each of the six defects was detected by the corresponding test:
 
-1. Подмена закреплённой редакции PPTX последней редакцией.
-2. Разрешение HTTP redirects с исходным текстом.
-3. Публикация частичного MP3 до проверки результата кодировщика.
-4. Использование голоса host для guest в F5.
-5. Исключение настроек речи из идентичности render.
-6. Повторное чтение изменяемых предпочтений вместо использования сохранённого снимка.
+1. Replacing the pinned PPTX revision with the latest revision.
+2. Allowing HTTP redirects carrying source text.
+3. Publishing a partial MP3 before validating encoder output.
+4. Using the host voice for the guest in F5.
+5. Excluding speech settings from render identity.
+6. Rereading mutable preferences instead of using the saved snapshot.
 
-Обратная проверка: замена прямоугольных блоков на скруглённые не ломает `test_slides.py`. Полезные проверки остаются, конкретный декоративный стиль тестами не закреплён.
+Reverse check: replacing rectangular blocks with rounded ones does not break `test_slides.py`. Useful checks remain, while a particular decorative style is not fixed by tests.
 
-## Результат и границы
+## Result and boundaries
 
-Исходный suite: 362 passing cases. После удаления дублей, сокращения повторных матриц и добавления сценариев: **355 passed** в чистом окружении core + UI без опциональных TTS-зависимостей. Ruff проходит. Число cases и процент строк сами по себе не использовались как цель. Логи и результаты контролируемых поломок сохранены вне Git в `outputs/test-quality/`.
+Original suite: 362 passing cases. After removing duplicates, reducing repeated matrices, and adding scenarios: **355 passed** in a clean core + UI environment without optional TTS dependencies. Ruff passes. Case counts and line coverage were not goals in themselves. Logs and controlled-mutation results are saved outside Git in `outputs/test-quality/`.
 
-Это проверка программных контрактов. Она не доказывает качество произношения, семантическую точность модельного ответа или внешний вид презентации в конкретном редакторе; реальные медиа и интеграции проверялись отдельно в предыдущих экспериментах.
+This checks software contracts. It does not establish pronunciation quality, the semantic accuracy of model answers, or presentation appearance in a particular editor; real media and integrations were checked separately in earlier experiments.

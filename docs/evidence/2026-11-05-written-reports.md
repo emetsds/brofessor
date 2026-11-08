@@ -1,54 +1,54 @@
-# Письменные отчёты: сравнение и рабочее руководство
+# Written reports: comparison and working guide
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md), and decisions and cancellations are in the [Decision log](../decision-log.md). References to subsequent stages describe the state at the time of the experiment.
 
-05.11.2026. По команде пользователя продолжить план после KISS-очистки реализован P2: один редактируемый отчёт с шаблонами `comparison` и `guide`. Входы - вопрос или цель с контекстом, прежние источники, язык и текстовая модель. Отдельных настроек моделей, серверов, очередей и зависимостей не добавлено.
+05.11.2026. Following the user's instruction to continue the plan after the KISS cleanup, P2 was implemented: one editable report with `comparison` and `guide` templates. Inputs are a question or goal with context, the existing sources, language, and text model. No separate model settings, servers, queues, or dependencies were added.
 
-## Реализация
+## Implementation
 
-CLI `report` и форма «Письменный отчёт» используют общий `service.submit`. Подключённые каталоги читает тот же Pydantic Agent. Отчёт получает оригинальные фрагменты через прежний `questions.prepare`, с ограниченным поиском для большого материала и сохранённым отчётом охвата. Конспект не подменяет первичные свидетельства. Автору передаётся фактический отбор по источникам.
+CLI `report` and the “Письменный отчёт” (“Written report”) form use shared `service.submit`. The same Pydantic Agent reads connected directories. The report receives original fragments through the existing `questions.prepare`, with bounded search for large material and a saved coverage report. A summary does not replace primary evidence. The writer receives the actual source selection.
 
-У раздела есть текст, метка происхождения, ссылки и точные цитаты. «По источникам» отделено от «Адаптация и выводы brofessor». Проверка каждой цитаты и соответствия языку выполняется до checkpoint, проверки цитат повторяются перед сохранением правки. Неверная цитата одного раздела не прикрывается правильной цитатой того же фрагмента в другом разделе. Эта проверка подтверждает дословность и область ссылок, смысл и правильность выводов оцениваются отдельно.
+A section has text, an origin label, references, and exact quotes. “По источникам” (“From the sources”) is separated from “Адаптация и выводы brofessor” (“brofessor adaptation and conclusions”). Every quote and the language are checked before checkpointing, and quotes are checked again before an edit is saved. A wrong quote in one section cannot be covered by a correct quote from the same fragment in another section. These checks establish verbatim integrity and reference scope. Meaning and correctness of conclusions are assessed separately.
 
-Каждая сохранённая редакция получает `report-rN.md` с разделами, метками, именами источников, локаторами и исходными цитатами. Файл пишется локально через временный путь и атомарную замену, отдельная модель или задача рендера не нужны. UI показывает обычные поля раздела и порядок разделов, advanced JSON позволяет менять цитаты вместе со ссылками. Общие история, task models и перегенерация сохраняют прежние результаты. Resume использует checkpoints и актуальную сохранённую редакцию, сохраняя пользовательские изменения.
+Each saved revision receives `report-rN.md` with sections, labels, source names, locators, and original quotes. The file is written locally using a temporary path and atomic replacement. No separate model or render job is needed. The UI shows ordinary section fields and section ordering. Advanced JSON permits changing quotes together with references. Shared history, task models, and regeneration retain previous results. Resume uses checkpoints and the current saved revision, preserving user changes.
 
-## Контрольный корпус
+## Control corpus
 
-Три авторские синтетические MIT-заметки в игнорируемом `outputs/report-probe-2026-11-05/sources/`, без личного vault:
+Three self-authored synthetic MIT notes in ignored `outputs/report-probe-2026-11-05/sources/`, without a personal vault:
 
-- Alpha и Beta одинаково определяют повтор после явного временного отказа. Надёжность в Alpha означает сохранность подтверждённой записи после перезапуска процесса, в Beta - долю успешно завершённых запросов.
-- Обе действующие инструкции относятся к протоколу P, одному узлу, 100 запросам со стабильными request ID. Alpha требует включить повторы, Beta - выключить. Приоритет отсутствует. Это настоящее противоречие.
-- Обе одноузловые заметки сообщают 12 мс как наблюдение. Cluster сообщает 35 мс на четырёх узлах. Наблюдения не объявлены обязательными настройками. Политика повторов в кластере не записана, потеря питания не испытывалась.
-- Alpha требует проверить журнал ID на дубликаты и остановиться при отсутствии ID. Beta требует сохранить конфигурацию и прекратить пробу при незавершённом запросе. Это исходные рекомендации для проверки руководства.
+- Alpha and Beta define retry after an explicit temporary failure identically. In Alpha, reliability means retaining an acknowledged record after a process restart. In Beta, it means the proportion of successfully completed requests.
+- Both current instructions concern protocol P, one node, and 100 requests with stable request IDs. Alpha requires enabling retries, Beta requires disabling them. Neither has priority. This is a genuine contradiction.
+- Both single-node notes report 12 ms as an observation. Cluster reports 35 ms on four nodes. Observations are not stated as mandatory settings. Cluster retry policy is not recorded, and power loss was not tested.
+- Alpha requires checking the ID log for duplicates and stopping if an ID is missing. Beta requires saving the configuration and ending the trial if a request is unfinished. These are the original recommendations used to check the guide.
 
-## Реальная проверка
+## Real verification
 
-Официальный Codex CLI **0.162.1**, запрошенная модель **`gpt-6.1-sol`**, штатная ChatGPT-авторизация. Использован тот же worker и production workflow, без платного API fallback. Параметры, ledger и полные результаты находятся в игнорируемом QA-каталоге.
+Official Codex CLI **0.162.1**, requested model **`gpt-6.1-sol`**, ordinary ChatGPT authorization. The same worker and production workflow were used, without paid API fallback. Parameters, ledger, and full results are in the ignored QA directory.
 
-Сопоставление **`459c53831ec94891`** завершилось за **68,216 с**, **2 NavigationStep + 1 Report**. Прочитаны три оригинала, сохранены пять разделов и 16 цитат. Полностью сверены исходные факты и итоговые разделы:
+Comparison **`459c53831ec94891`** completed in **68,216 s**, **2 NavigationStep + 1 Report**. Three originals were read, and five sections and 16 quotes were saved. Original facts and final sections were checked in full:
 
-| Контроль | Фактический результат |
+| Check | Actual result |
 |---|---|
-| Общее и разные определения | Совпадение определения повтора и разные значения надёжности описаны явно |
-| Противоречие | Включить/выключить при одинаковых условиях признано неразрешённым конфликтом, победитель не придуман |
-| Разные условия | 12 и 35 мс не объявлены конфликтом, указан один узел против четырёх |
-| Недостаток данных | Отсутствие испытания потери питания не превращено в утверждение о сохранности данных |
-| Авторские рекомендации | Проверки и условия остановки пересказаны с исходными ограничениями |
+| Shared and differing definitions | The identical retry definition and different meanings of reliability are described explicitly |
+| Contradiction | Enable/disable under the same conditions is identified as an unresolved conflict. No winner is invented |
+| Different conditions | 12 and 35 ms are not called a conflict. One node versus four is stated |
+| Insufficient data | Absence of a power-loss test is not turned into a claim of data durability |
+| Authors' recommendations | Checks and stop conditions are restated with their original limitations |
 
-Все тексты разделов и строки цитат присутствуют в фактическом Markdown размером **8 735 байт**. Хеши трёх исходных файлов до и после совпали. Это один маленький размеченный корпус, качество на произвольных книгах этим не подтверждено.
+All section texts and quote strings appear in the actual **8 735-byte** Markdown. Hashes of the three source files matched before and after. This is one small annotated corpus. It does not establish quality on arbitrary books.
 
-Первый запуск руководства через каталог **`ddf6f67597014f24`** не прошёл: исходный `NavigationStep` не вернулся от Codex за 600 с. Resume того же задания с теми же входами и лимитом пробы 180 с на обращение тоже получил таймаут. Контроль с короткой формулировкой той же цели **`e01b85879a7946f6`** завершился таймаутом первого шага за 90,270 с. Причина задержки не установлена. Draft не опубликован, источники прежние. Неудачи сохранены в `guide-timeout.json`, `guide.json`, `guide-catalog-short.json` и ledgers. Они не считаются успешной проверкой навигации руководства.
+The first directory-based guide run **`ddf6f67597014f24`** failed: its initial `NavigationStep` did not return from Codex within 600 s. Resuming the same job with the same inputs and a trial limit of 180 s per call also timed out. A control using a shorter wording of the same goal, **`e01b85879a7946f6`**, timed out at the first step after 90,270 s. The reason for the delay was not established. No draft was published, and sources were unchanged. Failures were saved in `guide-timeout.json`, `guide.json`, `guide-catalog-short.json`, and ledgers. They are not counted as successful verification of guide navigation.
 
-**Последующее продолжение 05–06.11.2026 закрыло этот наблюдаемый сбой.** Контроль plain transport снова получил таймаут, JSONL того же запроса вернул шаг. Production runner получил официальный `--json`, сохранив чтение финального JSON из `-o`; прежнее `ddf6f67597014f24` завершилось за **83,021 с / 3 обращения** с прежними источниками/моделью. Все пять разделов и Markdown сверены. Внутренняя причина CLI не установлена. [Диагностика, ledgers и границы вывода](2026-11-06-learning-and-audiobook.md#зависание-codex-при-навигации-p2).
+**Subsequent continuation on 05–06.11.2026 resolved this observed failure.** A plain-transport control timed out again, while JSONL returned a step for the same request. The production runner received the official `--json` flag while retaining final-JSON reading from `-o`. The earlier `ddf6f67597014f24` completed in **83,021 s / 3 calls** with the same sources/model. All five sections and Markdown were checked. The internal CLI cause was not established. See [diagnostics, ledgers, and conclusion boundaries](2026-11-06-learning-and-audiobook.md#codex-hang-during-p2-navigation).
 
-Отдельное руководство **`862293dc7d254a08`** прошло через обычный импорт тех же трёх файлов, без навигации по каталогу. Официальный CLI и модель не менялись. **66,523 с / 1 Report**, пять разделов и 23 цитаты. Все разделы сверены: авторские рекомендации и адаптация различимы, конфликт повторов сохранён, наблюдение 12 мс не назначено обязательной настройкой. Дополнительные проверки названы предложениями приложения. Есть порядок подготовки/пробы, диагностика, остановка и недостающие условия. Определения надёжности не смешаны, непроверенная потеря питания не выдана за подтверждённую устойчивость. Модель оставила консервативную оговорку о полноте чтения, приложение отдельно показывает фактический охват извлечённых фрагментов.
+A separate guide, **`862293dc7d254a08`**, succeeded through ordinary import of the same three files, without directory navigation. The official CLI and model were unchanged. **66,523 s / 1 Report**, five sections and 23 quotes. Every section was checked: author recommendations and adaptation are distinguishable, the retry conflict is retained, and the 12 ms observation is not made a mandatory setting. Additional checks are identified as application suggestions. The guide includes preparation/trial order, diagnosis, stopping, and missing conditions. Reliability definitions are not conflated, and untested power loss is not presented as proven resilience. The model retained a conservative caveat about reading completeness. The application separately shows actual extracted-fragment coverage.
 
-Фактический Markdown руководства **16 141 байт** содержит все тексты разделов и строки цитат. Исходники побайтно совпадают с сохранёнными оригиналами. `guide-import.json` и `guide-import-calls.json` фиксируют этот самостоятельный запуск. Это проверка руководства по импортированным файлам, без утверждения об успешности трёх запросов навигации выше.
+The actual guide Markdown, **16 141 bytes**, contains every section text and quote string. Sources match the saved originals byte for byte. `guide-import.json` and `guide-import-calls.json` record this independent run. This verifies a guide over imported files, without claiming success for the three navigation requests above.
 
-## Проверки и ограничения
+## Checks and limitations
 
-Полный offline-набор - **605 passed**. Добавлены десять случаев отчётов: оба шаблона, проверки цитат внутри разделов, неверного языка и необоснованной метки источника, пустой каталог, восстановление после отказа публикации без повторного inference и с сохранением правки пользователя, паритет CLI/UI и редактирование обычными полями. Controlled fault отдельно проверяет, что число отобранных фрагментов каталога не выдаётся за объём всего документа. Для такого отбора общий объём явно неизвестен, для обычного импорта доступны исходные числа. Реальная модель заменяется только на границе `executors.generate`.
+The full offline suite: **605 passed**. Ten report cases were added: both templates, per-section quotes, wrong language and unsupported source labels, an empty directory, recovery after publication failure without repeated inference and with the user's edit preserved, CLI/UI parity, and ordinary-field editing. A controlled fault separately checks that the selected directory-fragment count is not presented as the whole document's size. The total is explicitly unknown for that selection, while ordinary import has the original counts. The real model is replaced only at the `executors.generate` boundary.
 
-В настоящем Streamlit проверены форма отчёта, чтение, метки происхождения, точные цитаты, редактор разделов и наличие Markdown для скачивания. Вид редактора сохранён в `editor.jpg` QA-каталога. AppTest выполнил сохранение новой редакции, CLI прочитал те же данные. Повторные цитаты убраны из общего представления, внутри разделов их привязка остаётся. После уточнения контекста частичного чтения полный набор повторно прошёл. Ruff check/format, diff check и offline wheel build прошли, новый модуль включён в wheel, QA-данные в него не попали. Временный Streamlit 8563 остановлен.
+Real Streamlit checks covered the report form, reading, origin labels, exact quotes, section editor, and downloadable Markdown. The editor view is saved as `editor.jpg` in the QA directory. AppTest saved a new revision, and CLI read the same data. Duplicate quotes were removed from the shared display while retaining their per-section associations. The full suite passed again after clarifying partial-reading context. Ruff check/format, diff check, and offline wheel build passed. The new module was included in the wheel, and QA data was not. Temporary Streamlit 8563 was stopped.
 
-Настоящие отчёты через Claude и Ollama не проверялись. Штатный `doctor` для Claude 2.1.317 по-прежнему завершается диагностикой auth check с кодом 1. Обычный браузер не подключён, старый долгий download wait не повторялся. Модельные выводы и их применимость не доказываются существованием цитат, а ограниченный поиск не гарантирует полноты. Большие корпуса и новые аудио/PPTX в этом этапе не проверялись.
+Real reports through Claude and Ollama were not checked. The standard `doctor` for Claude 2.1.317 still ends with an auth-check diagnostic and exit code 1. No ordinary browser was connected, and the old long download wait was not repeated. The presence of quotes does not establish model conclusions or their applicability, and bounded search does not guarantee completeness. Large corpora and new audio/PPTX were not checked in this stage.

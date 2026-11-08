@@ -1,60 +1,60 @@
-# Организация кода brofessor по ответственностям
+# Organizing brofessor code by responsibility
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md); decisions and cancellations are in the [Decision log](../decision-log.md). References to later stages describe the state at the time of the experiment.
 
-07.11.2026 завершён первый этап нового плана: прежний плоский пакет сгруппирован по интерфейсам, общим операциям, предметным возможностям и инфраструктуре. Команда `brofessor`, рабочие пространства и обработка заданий сохранены. Этот срез предшествовал выделению промптов и стабилизации; их последующее завершение записано отдельно.
+On 07.11.2026, the first stage of the new plan was completed: the previously flat package was grouped into interfaces, shared operations, domain features, and infrastructure. The `brofessor` command, workspaces, and job processing were preserved. This slice preceded prompt extraction and stabilization; their later completion is recorded separately.
 
-## Фактическая структура
+## Actual structure
 
-| Пакет | Ответственность |
+| Package | Responsibility |
 |---|---|
-| `interfaces/cli` | Сборка Typer и отдельные группы команд; общие параметры, вывод и ожидание задания в `common.py` |
-| `interfaces/web` | Запуск Streamlit; экраны в `pages`, диалоги в `dialogs`, общие редакторы/навигация/прогресс в `components`, JS в `assets` |
-| `application` | Общие сервисы, pipeline, worker, задачи, проекты, прогресс, начальная озвучка и обслуживание |
-| `features/sources` | Коллекции, чтение и навигация по оригиналам |
-| `features/books` | Перевод, терминология и аудиокниги |
-| `features/podcasts` | Автор сценария, автор по оригиналам, серии и сверка |
-| `features/questions.py`, `reports.py`, `studies.py` | Ответы, письменные отчёты и проверка понимания |
-| `infrastructure/storage` | SQLite workspace, настройки и OS-locks |
-| `infrastructure/text`, `agents` | Три bounded runners, guardian и существующий адаптер Pydantic AI |
-| `infrastructure/speech` | Движки, каталог, референсы и подготовка русской речи |
-| `infrastructure/formats` | Импорт источников, EPUB/PDF/PPTX, монтаж аудио и шрифты |
-| `models.py` | Общие Pydantic-контракты |
+| `interfaces/cli` | Typer assembly and separate command groups; shared options, output, and job waiting in `common.py` |
+| `interfaces/web` | Streamlit startup; screens in `pages`, dialogs in `dialogs`, shared editors/navigation/progress in `components`, JS in `assets` |
+| `application` | Shared services, pipeline, worker, tasks, projects, progress, initial narration, and maintenance |
+| `features/sources` | Collections, reading, and navigation of originals |
+| `features/books` | Translation, terminology, and audiobooks |
+| `features/podcasts` | Script writer, source-backed writer, series, and checking |
+| `features/questions.py`, `reports.py`, `studies.py` | Answers, written reports, and understanding checks |
+| `infrastructure/storage` | SQLite workspace, preferences, and OS-locks |
+| `infrastructure/text`, `agents` | Three bounded runners, guardian, and the existing Pydantic AI adapter |
+| `infrastructure/speech` | Engines, catalogue, references, and Russian speech preparation |
+| `infrastructure/formats` | Source import, EPUB/PDF/PPTX, audio assembly, and fonts |
+| `models.py` | Shared Pydantic contracts |
 
-Перенесены 52 исходных модуля; крупные CLI/UI затем разделены по существующим обязанностям. `WebContext` передаёт проект, переводчик и callbacks экранам явно; глобального изменяемого workspace в модулях экранов нет. Бизнес-операции остаются в общих сервисах.
+52 source modules were moved; large CLI/UI modules were then split along existing responsibilities. `WebContext` explicitly passes the project, translator, and callbacks to screens; screen modules contain no global mutable workspace. Business operations remain in shared services.
 
-Тесты сгруппированы в `tests/application`, `features`, `infrastructure` и `interfaces`. Все прежние тестовые функции сохранены. Общие построители синтетических EPUB/PDF, fake-модели и UI-действия перенесены в `tests/helpers`. Взаимных импортов из чужих `test_*.py` и вставок в `sys.path` больше нет. Fixtures и их provenance сохранены. Developer tools запускаются из корня как `python -m tools.<module>`; пример указан в README.
+Tests are grouped into `tests/application`, `features`, `infrastructure`, and `interfaces`. All previous test functions were retained. Shared synthetic EPUB/PDF builders, fake models, and UI actions were moved to `tests/helpers`. Imports from other `test_*.py` files and `sys.path` insertions are gone. Fixtures and provenance are preserved. Developer tools run from the root as `python -m tools.<module>`; the README provides an example.
 
-## Точки входа и ресурсы
+## Entry points and resources
 
-- CLI: `brofessor.interfaces.cli.app:app`; локальная editable-установка обновлена.
-- UI: установленный ресурс `brofessor/interfaces/web/app.py`, удерживаемый через `importlib.resources.as_file` во время работы Streamlit.
+- CLI: `brofessor.interfaces.cli.app:app`; the local editable installation was updated.
+- UI: installed resource `brofessor/interfaces/web/app.py`, held through `importlib.resources.as_file` while Streamlit runs.
 - Worker: `python -m brofessor.application.worker`.
 - Guardian: `python -m brofessor.infrastructure.text._runner_guardian`.
-- JS, `speech_models.json` и DejaVu Sans читаются через `importlib.resources`; их включение в wheel проверено. Лицензии и ссылки на provenance обновлены.
+- JS, `speech_models.json`, and DejaVu Sans are read through `importlib.resources`; wheel inclusion was checked. Licenses and provenance references were updated.
 
-Старые внутренние Python-пути обновлены в коде, тестах и tools; модулей-переадресаций нет. Внешние Python-клиенты, которые импортировали прежние внутренние модули, должны использовать новые пути. Команды CLI сохраняются.
+Old internal Python paths were updated in code, tests, and tools; there are no forwarding modules. External Python clients that imported previous internal modules must use the new paths. CLI commands are preserved.
 
-## Проверки и результаты
+## Checks and results
 
-До переноса сохранён текущий рабочий срез в `/private/tmp/brofessor-reorg-2026-11-07/baseline`, без пользовательских материалов и `.git`. Он включает уже существовавшие незакоммиченные изменения; это исходная точка проверки переноса.
+Before the move, the current working snapshot was saved in `/private/tmp/brofessor-reorg-2026-11-07/baseline`, without user materials or `.git`. It includes already existing uncommitted changes and is the baseline for checking the reorganization.
 
-| Проверка | Результат |
+| Check | Result |
 |---|---|
-| Исходный полный offline-набор | 674 passed, 81,76 с |
-| Инфраструктура | 184 passed; обнаружен старый импорт во встроенном тестовом subprocess, затем он исправлен и перепроверен с worker/storage/PDF: 37 passed |
-| Предметные workflow | 122 passed, 10,77 с |
-| Application | 91 passed, 3,08 с |
-| Интерфейсы после смены путей | 88 passed, 46,38 с |
-| Экранные сценарии после разделения UI | 68 passed, 22,33 с; промежуточная ошибка ключа навигации исправлена |
-| Полный набор после группировки тестов | 674 passed, 54,40 с |
-| Установленный wheel вне checkout | 141 passed, 31,24 с: worker/recovery, guardian/process cleanup, EPUB/PDF, CLI wait, UI/navigation и заметки |
-| Статические проверки | Ruff check, format и `git diff --check` прошли |
+| Original full offline suite | 674 passed, 81.76 s |
+| Infrastructure | 184 passed; an old import was found in an embedded test subprocess, fixed, then rechecked with worker/storage/PDF: 37 passed |
+| Domain workflows | 122 passed, 10.77 s |
+| Application | 91 passed, 3.08 s |
+| Interfaces after path changes | 88 passed, 46.38 s |
+| Screen scenarios after UI splitting | 68 passed, 22.33 s; an intermediate navigation-key error was fixed |
+| Full suite after test grouping | 674 passed, 54.40 s |
+| Installed wheel outside checkout | 141 passed, 31.24 s: worker/recovery, guardian/process cleanup, EPUB/PDF, CLI wait, UI/navigation, and notes |
+| Static checks | Ruff check, format, and `git diff --check` passed |
 
-Сравнение AST с исходным срезом показало: у 38 предметных/прикладных/инфраструктурных модулей изменения ограничены импортами и путями запуска. Ещё два модуля получили явное чтение каталога речи и шрифтов как package resources. Строки интерфейса сохранены; в CLI заменено только имя ресурса `ui.py` на `app.py`. JS, шрифты и каталог речи совпадают побайтно. Промпты и их сборка не редактировались; схема SQLite, job kinds, request keys и checkpoint contracts сохранены.
+AST comparison against the initial snapshot showed changes limited to imports and launch paths in 38 domain/application/infrastructure modules. Two more modules received explicit speech-catalogue/font loading as package resources. UI strings are preserved; only the resource name `ui.py` was replaced with `app.py` in the CLI. JS, fonts, and the speech catalogue are byte-identical. Prompts and their assembly were not edited; SQLite schema, job kinds, request keys, and checkpoint contracts were preserved.
 
-Wheel собран штатным `uv build --offline --wheel`. Установлен в новое временное окружение Python 3.12.13 с UI и версиями зависимостей из рабочего окружения. Первоначальная offline-установка остановилась из-за отсутствия registry metadata для `pydantic-ai-slim`; обычная установка закреплённых текущих версий прошла, публичные пакеты скачаны. Модели и веса не скачивались. Импорты проверены из `site-packages` временного окружения; четыре JS-ресурса читаются, каталог речи загружается, четыре начертания шрифта зарегистрированы.
+The wheel was built with ordinary `uv build --offline --wheel`. It was installed into a new temporary Python 3.12.13 environment with UI and dependency versions from the working environment. The initial offline installation stopped because registry metadata for `pydantic-ai-slim` was missing; ordinary installation of the pinned current versions succeeded, downloading public packages. Models and weights were not downloaded. Imports were checked from the temporary environment's `site-packages`; four JS resources are readable, the speech catalogue loads, and four font styles are registered.
 
-Отдельный реальный локальный контроль: процесс-создатель поставил рендер синтетического сохранённого слайда и завершился. Независимый worker из установленного wheel собрал PPTX; его текст прочитан через python-pptx, публичная CLI вернула `succeeded`. Проверен также прямой `python -m ...worker --once`. Временный worker остановлен. Проверка подтверждает запуск и сохранность входа/выхода при переносе; повторная визуальная приёмка оформления PPTX не проводилась.
+A separate real local check queued a synthetic saved slide render from a creator process that then exited. The independent worker from the installed wheel built a PPTX; its text was read through python-pptx, and the public CLI returned `succeeded`. Direct `python -m ...worker --once` was also checked. The temporary worker was stopped. This confirms startup and input/output preservation after moving; PPTX appearance did not undergo repeated visual acceptance.
 
-Все проверки использовали синтетические материалы и подменённые дорогие текстовые границы. Настоящие Codex/Claude/Ollama и TTS в этом этапе не вызывались; их новые проверки относятся к последующей стабилизации. Данные, настройки, авторизация и веса пользователя не менялись. Коммит, push и публикация не выполнялись.
+All checks used synthetic materials and substituted expensive text boundaries. Real Codex/Claude/Ollama and TTS were not called in this stage; new checks of them belong to later stabilization. User data, settings, authorization, and weights were unchanged. No commit, push, or publication was performed.

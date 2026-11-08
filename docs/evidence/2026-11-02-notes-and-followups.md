@@ -1,54 +1,54 @@
-# Заметки и уточняющие вопросы
+# Notes and follow-up questions
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md), and decisions and cancellations are in the [Decision log](../decision-log.md). References to subsequent stages describe the state at the time of the experiment.
 
-Проверено 02.11.2026. Закрыт оставшийся пункт M3. В этот контроль не входили полная приёмка, реальные Claude/Ollama и чистая установка; последующие проверки описаны [отдельно](2026-11-02-provider-acceptance.md).
+Checked 02.11.2026. The remaining M3 item was closed. This check did not include full acceptance, real Claude/Ollama runs, or a clean installation. Subsequent checks are described [separately](2026-11-02-provider-acceptance.md).
 
-## Поведение
+## Behavior
 
-Во вкладке Notes и CLI появились свободные заметки, сохранение ответа в заметку и редактирование с историей. Данные заметки — `title`, `text`, `citations`; origin хранится отдельно и закрепляет job/revision ответа. Повторное сохранение того же ответа возвращает актуальную заметку и сохраняет авторские правки. Другая редакция ответа создаёт другую заметку. Для новой заметки не нужны модель и worker.
+The Notes tab and CLI gained free-form notes, saving an answer as a note, and editing with history. Note data consists of `title`, `text`, and `citations`. Origin is stored separately and pins the answer's job/revision. Saving the same answer again returns the current note and preserves the author's edits. Another answer revision creates another note. A new note needs neither a model nor a worker.
 
-SQLite schema 2 добавляет append-only таблицу notes. Существующие schemas 0/1 обновляются при открытии; старое приложение с поддержкой только schema 1 такой проект уже не откроет. Состояние остаётся в одном SQLite workspace, без отдельной БД, ORM и файлового протокола заметок. Expected revision защищает от перезаписи параллельных изменений. В UI есть обычные текстовые поля, ссылки, история версий и исходный ответ с его цитатами; CLI использует JSON envelope и тот же сервис.
+SQLite schema 2 adds an append-only notes table. Existing schemas 0/1 upgrade when opened. An old application supporting only schema 1 can no longer open that project. State remains in one SQLite workspace, without a separate database, ORM, or note-file protocol. Expected revision protects against overwriting concurrent changes. The UI provides ordinary text fields, references, version history, and the original answer with its quotes. CLI uses a JSON envelope and the same service.
 
-Уточняющий вопрос наследует источники, исполнителя, настройку модели и порт родителя. По умолчанию наследуется язык, его можно изменить. Jobs сохраняют список конкретных answer revisions, поэтому редактирование родителя после submit не меняет отправленный контекст. В контекст входят до шести последних пар вопрос/ответ, суммарно до 12 тысяч сериализованных символов. Более ранние пары сохраняются в истории, а их исключение отражается в UI/CLI. Единственный слишком большой ответ не обрезается: требуется его сократить либо задать новый отдельный вопрос.
+A follow-up inherits its parent's sources, runner, model setting, and port. Language is inherited by default and can be changed. Jobs save a list of specific answer revisions, so editing the parent after submission does not alter submitted context. Context includes up to six recent question/answer pairs within 12 thousand serialized characters in total. Earlier pairs remain in history, and their omission is shown in UI/CLI. A single oversized answer is not truncated: it must be shortened or followed by a new standalone question.
 
-История помогает разрешить «это» и «тогда», но не становится первичным источником. Поисковое расширение получает контекст, ответ вновь проверяет факты по оригинальным фрагментам. Личные заметки не включаются в model prompt автоматически. UI блокирует действия над несохранённым/устаревшим draft. CLI `ask --reply-to` отвергает одновременно заданные provider/model/source/port flags, чтобы не переключить пользователя на другой профиль незаметно. Повторный UI submit использует стабильный request key для вопроса и редакции.
+History helps resolve “это” (“this”) and “тогда” (“then”), but does not become a primary source. Query expansion receives context, and the answer checks facts again against original fragments. Personal notes are not automatically included in the model prompt. The UI blocks actions on unsaved/stale drafts. CLI `ask --reply-to` rejects provider/model/source/port flags supplied at the same time, preventing a silent switch to another profile. Repeated UI submission uses a stable request key for the question and revision.
 
-## Настоящий Codex и контрольные данные
+## Real Codex and control data
 
-Официальный стабильный Codex CLI 0.162.1 с существующим подписочным входом. Никакого API fallback или новых моделей/весов. Точная серверная ревизия текстовой модели неизвестна. Данные синтетические, из [контрольного корпуса](2026-11-02-source-questions.md): отчёт об испытании моста, руководство гавани и длинный нерелевантный геологический фон. В пилоте три источника и 16 читаемых фрагментов. Родитель и уточнения работают через ветку поиска, а не через передачу всего маленького набора.
+Official stable Codex CLI 0.162.1 with the existing subscription login. No API fallback or new models/weights. The exact server-side text-model revision is unknown. Data was synthetic, from the [control corpus](2026-11-02-source-questions.md): a bridge test report, a harbor manual, and a long irrelevant geological background. The pilot contained three sources and 16 readable fragments. Parent and follow-ups used retrieval rather than passing the entire small set.
 
-| Шаг | Job | Проверенный результат |
+| Step | Job | Verified result |
 |---|---|---|
-| Исходный вопрос о нагрузке | `be9eb765088b480b` | 1200 кг в одном испытании; максимум не установлен |
-| «А это точно максимум, и почему?» | `acd74f7e57e54346` | Опровергает ошибочную предыдущую пометку о 1400 кг и доказанном максимуме, ссылаясь на оригинал |
-| «А какой ветер был тогда?» | `c4a5f52c26644f1a` | Разрешает контекст испытания моста: 18 метров в секунду |
-| «А землетрясение?» | `60c49c1007804d6b` | `insufficient_evidence`; не придумывает сейсмостойкость |
-| Вопрос о наводнении из браузера | `9eff7323a7694fbf` | `supported`: источник прямо говорит, что flood test не проводился |
+| Initial load question | `be9eb765088b480b` | 1200 kg in one test; a maximum was not established |
+| “А это точно максимум, и почему?” (“Is that definitely the maximum, and why?”) | `acd74f7e57e54346` | Refutes the incorrect earlier note claiming 1400 kg and an established maximum, citing the original |
+| “А какой ветер был тогда?” (“What was the wind then?”) | `c4a5f52c26644f1a` | Resolves the bridge-test context: 18 meters per second |
+| “А землетрясение?” (“What about an earthquake?”) | `60c49c1007804d6b` | `insufficient_evidence`; does not invent seismic resistance |
+| Flood question from the browser | `9eff7323a7694fbf` | `supported`: the source explicitly says no flood test took place |
 
-После первого ответа создана заметка из r1. Заметка отредактирована отдельно; её тестовый приватный маркер проверялся на отсутствие в prompts всех четырёх первоначальных вопросов. Затем в r2 ответа намеренно внесена ошибочная ручная пометка «1400 кг — максимум», при сохранении оригинальной цитаты. Уточнение закрепило именно r2. После его отправки создана r3 родителя с другим текстом. Проверены params и реально переданный контекст: уточнение продолжило r2, прочитало оригинал и отвергло неверную пометку. Проверка дословности цитат сама по себе не проверяет все утверждения ручного ответа — этот эксперимент не скрывает такое ограничение.
+A note was created from r1 after the first answer. It was edited separately, and its test private marker was checked for absence from the prompts of all four initial questions. An intentionally incorrect manual note, “1400 кг — максимум” (“1400 kg is the maximum”), was then added to answer r2 while retaining the original quote. The follow-up pinned that exact r2. After its submission, parent r3 was created with different wording. Params and the actually transmitted context were checked: the follow-up continued r2, read the original, and rejected the incorrect note. Quote-verbatim checking alone does not validate every claim in a manually edited answer. This experiment does not hide that limitation.
 
-Первые четыре ответа выполнили восемь реальных вызовов: SearchQueries и Answer на каждый шаг. Пятый вопрос отправлен через обычную кнопку UI и независимый worker. Браузер закрыт после submit; задание успешно завершилось. После нового открытия видны ответ, ссылка на parent revision и точная английская цитата. При переключении UI на English русский текст ответа и оригинал не изменились.
+The first four answers made eight real calls: SearchQueries and Answer for each step. The fifth question was submitted through the ordinary UI button and an independent worker. The browser was closed after submission, and the job completed successfully. Reopening showed the answer, the parent-revision reference, and an exact English quote. Switching the UI to English changed neither the Russian answer nor the original.
 
-Во время браузерной проверки заметка стала r3 с новым заголовком и личным комментарием. Origin по-прежнему указывает на r1 родителя, а исходный ответ и прежние note revisions сохранены. Повторное `note from-answer --revision 1` не заменяет авторский текст. Копирование закрытого workspace проверяется вместе со всеми ссылками на parent revisions и оригиналы.
+During browser verification, the note became r3 with a new title and personal comment. Origin still points to parent r1, while the original answer and previous note revisions remain. Repeated `note from-answer --revision 1` does not replace the author's text. Copying the closed workspace is checked together with all parent-revision and original references.
 
-## Миграция и автоматические проверки
+## Migration and automated checks
 
-Взята закрытая копия настоящего workspace предыдущего эксперимента M3 со schema 1: 10 источников, 23 фрагмента, 20 jobs, 20 drafts, 20 artifacts. После открытия новой версией получена schema 2; все эти количества и хеши исходных файлов совпали. В новой таблице успешно создана заметка. Исходная копия предыдущего эксперимента не изменялась.
+A closed copy of the real workspace from the previous M3 experiment was taken at schema 1: 10 sources, 23 fragments, 20 jobs, 20 drafts, 20 artifacts. Opening it with the new version produced schema 2. All these counts and original-file hashes matched. A note was successfully created in the new table. The original copy of the preceding experiment was not changed.
 
-334 offline-теста и Ruff check/format проходят. Новые проверки охватывают:
+334 offline tests and Ruff check/format pass. New checks cover:
 
-- конкурентную миграцию, существующие jobs/drafts и перенос закрытого проекта;
-- редакции заметок, одного победителя при одновременных правках и сохранность исходной версии;
-- повторное одновременное копирование ответа, неизменность origin и авторских правок;
-- пустые/чужие ссылки и недопустимые note fields;
-- inherited local provider/model/port/source scope без скрытого cloud-перехода;
-- закрепление родительской редакции, поиск с историей, оригиналы вместо прошлых ответов и отсутствие личных заметок в evidence;
-- ограничение истории, явный omitted count и отказ от незакреплённой/слишком большой редакции;
-- CLI/UI parity, языки, несохранённые поля, конфликт и reload, показ контекста и исходных ссылок.
+- concurrent migration, existing jobs/drafts, and transferring a closed project;
+- note revisions, one winner during simultaneous edits, and preservation of the original version;
+- repeated concurrent copying of an answer, immutable origin, and author edits;
+- empty/foreign references and invalid note fields;
+- inherited local provider/model/port/source scope without a hidden cloud switch;
+- pinned parent revision, retrieval with history, originals instead of prior answers, and absence of personal notes from evidence;
+- bounded history, explicit omitted count, and rejection of an unpinned/oversized revision;
+- CLI/UI parity, languages, unsaved fields, conflict and reload, and display of context and original references.
 
-AppTest обнаружил ошибку сохранения UI-буферов: нельзя вручную присваивать session state кнопкам. Теперь сохраняются только поля/редакции/выбор истории; обычные повторные reruns и смена языка проходят. Проверки CLI также обнаружили разные ParameterSource enums у установленного Typer и внешнего Click. Проверяется публичное имя источника параметра, ошибки выдаются через публичный `typer.BadParameter`; явные конфликтующие флаги действительно отклоняются.
+AppTest found a UI-buffer persistence error: button session state cannot be assigned manually. Only fields/revisions/history selection are now persisted, and ordinary repeated reruns and language changes pass. CLI checks also found different ParameterSource enums in installed Typer and external Click. The public parameter-source name is checked, and errors use public `typer.BadParameter`. Explicit conflicting flags are actually rejected.
 
-Новых зависимостей нет. Wheel собран, его модули побитово совпадают с проверенными исходниками; материалов, SQLite и весов в пакете нет; чистая переустановка полного окружения и настоящие Claude/Ollama в этом срезе не заявляются. Это bounded follow-up, а не безграничная память чата. Ошибки понимания и неверная опора вывода на правильную цитату всё ещё возможны; пять проверенных ответов не гарантируют семантическую корректность любой беседы.
+No new dependencies. The wheel was built, and its modules match the checked sources bit for bit. The package contains no materials, SQLite, or weights. A clean reinstall of the full environment and real Claude/Ollama runs are not claimed for this slice. This is a bounded follow-up, not unlimited chat memory. Misunderstanding and incorrectly grounding a conclusion in a correct quote remain possible. Five checked answers do not guarantee semantic correctness of every conversation.
 
-Локальные артефакты исключены из Git: `outputs/notes-and-followups/`. Здесь сохранены основной, перенесённый и мигрированный workspace, `results.json`, `note.json`, `migration.json`, журналы, сырые JSON контрольных вызовов и скриншоты `note-ru.png`, `follow-up-en.png`. В Git находятся реализация, тесты и этот отчёт.
+Local artifacts are excluded from Git: `outputs/notes-and-followups/`. They retain the main, transferred, and migrated workspaces, `results.json`, `note.json`, `migration.json`, logs, raw JSON from control calls, and screenshots `note-ru.png` and `follow-up-en.png`. Git contains the implementation, tests, and this report.

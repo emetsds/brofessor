@@ -1,75 +1,75 @@
-# Серия подкастов по целой книге
+# A podcast series based on a whole book
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md), and decisions and cancellations are in the [Decision log](../decision-log.md). References to subsequent stages describe the state at the time of the experiment.
 
-02.11.2026. Проверена серия из трёх русских выпусков по полному EPUB «Франкенштейна» на Apple M4, 32 GiB. Это функциональный срез M2, а не полная приёмка качества речи R06.
+02.11.2026. A three-episode Russian series based on the complete Frankenstein EPUB was checked on Apple M4, 32 GiB. This is the M2 functional slice, not full R06 speech-quality acceptance.
 
-## Что реализовано
+## What was implemented
 
-`podcast_series` создаёт редактируемый план: общую карту тем с исходными ссылками, распределение ID тем по выпускам и словарь терминов/имён. Проверяются уникальные ID и заголовки, допустимые ссылки, число выпусков и назначение каждой темы ровно одному выпуску. Такая проверка ловит ошибки распределения уже составленной карты. Она не доказывает полноту самой карты и не обнаруживает все повторы под другими формулировками.
+`podcast_series` creates an editable plan: a shared topic map with source references, topic-ID allocation to episodes, and a glossary of terms/names. Checks cover unique IDs and titles, valid references, episode count, and assignment of each topic to exactly one episode. This catches allocation errors in an already constructed map. It does not establish completeness of the map itself or detect every repetition under different wording.
 
-`series_episode` создаёт обычное задание подкаста с ID серии, номером выпуска и закреплённой редакцией плана. Оно наследует источники, исполнителя, текстовую модель, язык и длительность серии. Последующие правки плана влияют на новые запросы. Повтор для того же выпуска и редакции возвращает прежнее задание. Сценарий редактируется и озвучивается обычным способом.
+`series_episode` creates an ordinary podcast job with the series ID, episode number, and pinned plan revision. It inherits the series' sources, runner, text model, language, and duration. Subsequent plan edits affect new requests. Repeating the same episode and revision returns the earlier job. Its script is edited and narrated in the ordinary way.
 
-Принятые заметки чтения сохраняются внутри проекта в `series-evidence.json`. Выпуски используют их вместе с общим словарём, своей областью и границами других выпусков. Отдельного движка очередей, автоматического запуска всей серии или общего кеша между несвязанными заданиями нет. При переносе нужно сохранять весь проект. Утрата заметок вызывает явную ошибку. Существенно новый фокус требует нового плана с чтением под этот фокус, а не только переименования тем в старой карте: сжатые заметки могли не сохранить нужные подробности.
+Accepted reading notes are saved inside the project in `series-evidence.json`. Episodes use them together with the shared glossary, their own scope, and other episodes' boundaries. There is no separate queue engine, automatic launch of the entire series, or shared cache across unrelated jobs. Preserve the whole project when transferring it. Missing notes cause an explicit error. A substantially new focus requires a new plan with reading for that focus, rather than merely renaming topics in the old map: compressed notes may not retain the details needed.
 
-CLI: `series plan` → `draft show/save` → `series episode ID NUMBER` → обычные `draft show/save/render`. UI: «Серия подкастов» в форме создания, затем карта тем, общий словарь и выбор отдельного выпуска в результатах. Перед подготовкой выпуска UI требует сохранить или загрузить актуальную версию плана. Он показывает длительность каждого эпизода и исполнителя текста.
+CLI: `series plan` → `draft show/save` → `series episode ID NUMBER` → ordinary `draft show/save/render`. UI: “Серия подкастов” (“Podcast series”) in the creation form, then the topic map, shared glossary, and individual episode selection in results. Before preparing an episode, the UI requires saving or loading the current plan version. It shows each episode's duration and text runner.
 
-## Настоящий прогон
+## Real run
 
-Источник тот же, что в [проверке целой книги](2026-11-01-whole-book.md): [Mary Shelley — Frankenstein](https://www.gutenberg.org/ebooks/84), SHA-256 `bf04d57cf243314ab770df6fcea6a9cfb1e5a281426453e23c128c5a9c3eb662`, 89 читаемых фрагментов, один пустой исключён.
+The source was the same as in the [whole-book check](2026-11-01-whole-book.md): [Mary Shelley — Frankenstein](https://www.gutenberg.org/ebooks/84), SHA-256 `bf04d57cf243314ab770df6fcea6a9cfb1e5a281426453e23c128c5a9c3eb662`, 89 readable fragments, with one empty fragment excluded.
 
-Текст: официальный стабильный Codex CLI 0.162.1 с существующим подписочным входом. Точная серверная ревизия текстовой модели не записана. Озвучка: установленный Silero CIS Base, `ru_roman` / `ru_zhadyra`, CPU, без сети. Модельные снимки сохранены в render jobs. Настройки пользователя и выбранная по умолчанию TTS-модель не менялись.
+Text: official stable Codex CLI 0.162.1 with the existing subscription login. The exact server-side text-model revision was not recorded. Narration: installed Silero CIS Base, `ru_roman` / `ru_zhadyra`, CPU, without network access. Model snapshots were saved in render jobs. User settings and the default TTS model were unchanged.
 
-Для подготовки эксперимента скопированы 44 ранее принятых reading checkpoints. Core принимает из них только результаты с совпадающими fingerprints для того же источника, фокуса и контракта. План после восстановления чтения занял 101,5 с, с одним настоящим вызовом `Series`; это не замер чтения новой книги с нуля. Все три сценария вместе сделали 15 вызовов: три `Outline` и двенадцать `Podcast`, без новых `ReadingBatch`. Генерация сценариев: 210,34 / 197,35 / 192,75 с в последовательном worker. Пример не является сравнительным бенчмарком.
+To prepare the experiment, 44 previously accepted reading checkpoints were copied. The core accepts only results with matching fingerprints for the same source, focus, and contract. Planning after restoring reading took 101,5 s with one real `Series` call. This does not measure reading a new book from scratch. The three scripts together made 15 calls: three `Outline` and twelve `Podcast`, without new `ReadingBatch` calls. Script generation took 210,34 / 197,35 / 192,75 s in the sequential worker. This example is not a comparative benchmark.
 
-### План и редактура
+### Plan and editing
 
-Серия `2ab41e4b934b4951`, сохранённая редакция 2: 12 тем, 9 словарных записей, три выпуска.
+Series `2ab41e4b934b4951`, saved revision 2: 12 topics, 9 glossary entries, three episodes.
 
-| Выпуск | Назначенные темы и граница |
+| Episode | Assigned topics and boundary |
 |---|---|
-| 1. Дарованная жизнь и оставленная ответственность | `t1–t4`: письма Уолтона, детство и исследования Виктора, оживление и оставление Существа, Уильям и Жюстина. Завершение — уход Виктора в Альпы |
-| 2. Рассказ существа: обучение, отвержение и выбор насилия | `t5–t8`: встреча на леднике, обучение у Де Лейси, книги и неудачное знакомство, признание преступлений и требование Спутницы. Завершение — принятие обязательства Виктором |
-| 3. Разрушенное обещание и последняя погоня | `t9–t12`: поездка и уничтожение незавершённой Спутницы, Клерваль и алиби, свадьба и гибель Элизабет, погоня и финал на корабле |
+| 1. Life bestowed and responsibility abandoned | `t1–t4`: Walton's letters, Victor's childhood and research, animation and abandonment of the Creature, William and Justine. Ends with Victor's departure for the Alps |
+| 2. The Creature's story: learning, rejection, and the choice of violence | `t5–t8`: the glacier meeting, learning from the De Laceys, books and the failed introduction, confession of crimes, and the demand for a Companion. Ends with Victor accepting the obligation |
+| 3. A broken promise and the final pursuit | `t9–t12`: the journey and destruction of the unfinished Companion, Clerval and the alibi, the wedding and Elizabeth's death, the pursuit and ending aboard the ship |
 
-В исходном плане удалены лишние оценки минут из названий и briefs. Уточнены забота Клерваля о больном и алиби Виктора именно в момент обнаружения тела. Убрано ненужное утверждение о противоречии дат поездки. Эти правки сохранились отдельной редакцией.
+Unnecessary minute estimates were removed from the original plan's titles and briefs. Clerval's care for the sick Victor and Victor's alibi specifically at the time the body was found were clarified. An unnecessary claim that the journey's dates contradicted one another was removed. These edits were saved as a separate revision.
 
-Проверены границы разделов и переходы между выпусками. Первый не раскрывает признание Существа вместо обвинения Виктора. Второй добавляет точку зрения Существа, а не повторяет процесс Жюстины; третий начинает с исполнения обещания, без повторного рассказа об обучении. Обрамление Уолтона возвращается в финале для развязки. Выборочно сверены существенные факты: болезнь матери, ложное признание Жюстины, книги, подброшенный портрет, самостоятельность возможной Спутницы как допущение, алиби при находке тела и обещанная, но не наблюдаемая смерть Существа. Это проверка конкретных границ и контрольных фактов, не полный независимый аудит каждого утверждения.
+Section boundaries and transitions between episodes were checked. The first does not reveal the Creature's confession in place of Victor's accusation. The second adds the Creature's perspective instead of repeating Justine's trial. The third begins with fulfilling the promise, without retelling the learning story. Walton's framing returns in the ending for the resolution. Significant facts were spot-checked: the mother's illness, Justine's false confession, the books, the planted portrait, the possible Companion's independence as an assumption, the alibi when the body was found, and the Creature's promised but unobserved death. This checks specific boundaries and control facts, not a full independent audit of every claim.
 
-В первом сценарии уточнена заключительная фраза, чтобы образное возвращение домой не подразумевало лишнего путешествия перед встречей на леднике. Третий после первого рендера оказался короче 20 минут: 19:12 (1152,1625 с). В редакцию 2 добавлены шесть реплик, 185 слов, о самостоятельном индийском предприятии Клерваля и различии его и Виктора в использовании знаний и человеческого общения. Фрагмент проверен по оригинальной главе 19, ID `bf04d57cf243314ab770:62`. Другие выпуски этот материал не пересказывали. Скорость и форма волны не изменялись; 90 прежних сегментов переиспользованы.
+The first script's closing phrase was clarified so its figurative homecoming would not imply an extra journey before the glacier meeting. The third was under 20 minutes after its first render: 19:12 (1152,1625 s). Six turns, 185 words, were added in revision 2 about Clerval's independent Indian enterprise and the differences between him and Victor in using knowledge and human companionship. The passage was checked against original chapter 19, ID `bf04d57cf243314ab770:62`. Other episodes did not retell this material. Speed and waveform were unchanged; 90 earlier segments were reused.
 
-### Готовое аудио
+### Finished audio
 
-Цель каждого выпуска — 20 минут. Все три итоговых значения проходят допуск 10% и общий диапазон 20–60 минут.
+The target for each episode was 20 minutes. All three final durations meet the 10% tolerance and the overall 20–60-minute range.
 
-| Выпуск | Длительность | Слов / реплик | Сборка, с | Из кеша |
+| Episode | Duration | Words / turns | Assembly, s | From cache |
 |---|---:|---:|---:|---:|
-| 1 | 20:25 (1224,55 с) | 2505 / 97 | 15,306 | 0 |
-| 2 | 20:10 (1209,6 с) | 2524 / 102 | 14,381 | 0 |
-| 3, редакция 2 | 20:42 (1241,55 с) | 2619 / 96 | 6,176 | 90 из 96 |
+| 1 | 20:25 (1224,55 s) | 2505 / 97 | 15,306 | 0 |
+| 2 | 20:10 (1209,6 s) | 2524 / 102 | 14,381 | 0 |
+| 3, revision 2 | 20:42 (1241,55 s) | 2619 / 96 | 6,176 | 90 of 96 |
 
-Время третьей сборки относится к шести новым репликам и монтажу, не к полному синтезу. Первичная озвучка третьего выпуска заняла около 13,5 с. Метаданные рендера являются источником значений таблицы.
+The third assembly time covers six new turns and assembly, not full synthesis. Initial narration of the third episode took about 13,5 s. Render metadata is the source of the table's values.
 
-## Найденная несовместимость и контроль звука
+## Discovered incompatibility and audio checks
 
-Типографские вложенные кавычки в названии серии не проходили проверку Silero. Исправлена нормализация только известных типографских кавычек в разрешённые ASCII-эквиваленты перед проверкой и синтезом этого движка. Исходные сценарии сохраняются. Цифры, латиница и прочие неподдерживаемые знаки по-прежнему отвергаются. Контрактный тест проверяет переданный модели текст и сохранность исходного.
+Nested typographic quotes in the series title failed Silero validation. Normalization was fixed to replace only known typographic quotes with allowed ASCII equivalents before validation and synthesis by this engine. Original scripts are retained. Digits, Latin letters, and other unsupported characters are still rejected. A contract test checks the text passed to the model and preservation of the original.
 
-Все три MP3 полностью декодированы FFmpeg без ошибок. Локальный Whisper Base MLX сверил 19 фрагментов: начало, середину и конец обоих голосов, дополнительно алиби в третьем выпуске. Использованы уже установленные модель и tokenizer из [проверки длинных выпусков](2026-11-01-long-podcasts.md), без новых зависимостей приложения или скачивания весов.
+FFmpeg decoded all three MP3 files completely without errors. Local Whisper Base MLX checked 19 excerpts: the beginning, middle, and end for both voices, plus the alibi in the third episode. The already installed model and tokenizer from the [long-episode check](2026-11-01-long-podcasts.md) were used, without new application dependencies or weight downloads.
 
-Грубого зацикливания в выборке не обнаружено. Есть расхождения отдельных слов, имён и окончаний. Без прослушивания нельзя уверенно отнести их к ошибкам ASR или TTS. Полное прослушивание, точность произношения, процент дефектных реплик и субъективное качество не объявляются проверенными.
+No obvious looping was found in the sample. Some words, names, and endings differ. Without listening, they cannot confidently be attributed to ASR or TTS errors. Full listening, pronunciation accuracy, the percentage of defective turns, and subjective quality are not claimed as verified.
 
-## Проверки интерфейсов и хранения
+## Interface and storage checks
 
-**275 offline-тестов**, Ruff lint/format и `git diff --check` проходят. Проверены распределение тем, неизвестные ссылки, параметры до submit, закрепление плана и исполнителя/порта, идемпотентность, сохранность старых версий, восстановление после неудачной генерации без повторного чтения, отсутствие fallback при утрате заметок, CLI/UI и оба языка интерфейса, защита несохранённой редактуры и нормализация кавычек Silero.
+**275 offline tests**, Ruff lint/format, and `git diff --check` pass. Checks cover topic allocation, unknown references, pre-submission parameters, plan and runner/port pinning, idempotency, preservation of old versions, recovery after failed generation without rereading, no fallback when notes are lost, CLI/UI and both interface languages, protection of unsaved edits, and Silero quote normalization.
 
-В настоящем браузере проверены форма серии, три группы тем, словарь, версия плана, выбор и повторный запрос выпуска. Русские и английские подписи проверены в настоящем браузере. Повтор из CLI и UI вернул `8f1b7edd58ab4fc4`, число заданий тогда осталось равным четырём: план и три сценария. Задания аудио создавались позднее отдельно.
+A real browser checked the series form, three topic groups, glossary, plan version, episode selection, and repeated episode requests. Russian and English labels were checked in a real browser. Repeating from CLI and UI returned `8f1b7edd58ab4fc4`; the number of jobs then remained four: the plan and three scripts. Audio jobs were created separately later.
 
-Артефакты находятся вне Git в `outputs/podcast-series/`: `final-matrix.json`, `asr-checks.json`, планы, сценарии, журналы и снимки UI. Исходные и исправленные версии сохранены в проекте `workspace/`.
+Artifacts are outside Git in `outputs/podcast-series/`: `final-matrix.json`, `asr-checks.json`, plans, scripts, logs, and UI screenshots. Original and corrected versions are retained in the `workspace/` project.
 
-| Выпуск | Сценарий / редакция | Итоговый MP3 внутри `workspace/` |
+| Episode | Script / revision | Final MP3 inside `workspace/` |
 |---|---|---|
 | 1 | `8f1b7edd58ab4fc4` / 2 | `jobs/31d5e6e165054753/podcast.mp3` |
 | 2 | `9b7be675a9724dfa` / 1 | `jobs/71ba4c1fd8114ac1/podcast.mp3` |
 | 3 | `cbccce284ad44f4d` / 2 | `jobs/cdf5854a84294dcd/podcast.mp3` |
 
-Настоящая серия проверена на одной книге и русском языке. Английские серии, другие корпуса, полная субъективная приёмка речи и реальные Claude/Ollama остаются непроверенными этим экспериментом. Предыдущие английские одиночные выпуски не подменяют такую проверку.
+The real series was checked on one book in Russian. English series, other corpora, full subjective speech acceptance, and real Claude/Ollama remain unverified by this experiment. Earlier individual English episodes do not substitute for that verification.

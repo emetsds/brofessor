@@ -1,12 +1,12 @@
-# Промпты brofessor: чтение, редактура и предпросмотр
+# brofessor prompts: reading, editing, and preview
 
-Это оглавление всех инструкций, которыми управляет brofessor: UTF-8 шаблоны `.md`, включая общие правила runner, агента, повторной навигации, отдельные developer-пробы. Файл содержит именно отправляемый текст или явно обозначенную общую часть. Заголовок, назначение, схема и связи находятся здесь и в `catalogue.json`, чтобы не попадать в запрос модели.
+This is the catalogue of all instructions managed by brofessor: UTF-8 `.md` templates, including shared runner rules, agent instructions, navigation feedback, and separate developer probes. Each file contains the actual submitted text or an explicitly identified shared part. Titles, purposes, schemas, and relationships live here and in `catalogue.json` so they do not enter model requests.
 
-## С чего начать
+## Where to start
 
-Для оценки обычных ответов откройте [общие правила](common/materials.md), [границу исполнителя](common/runner.md) и [ответ с цитатами](questions/answer.md). Для отчётов — [общий формат](reports/write.md) и один из четырёх файлов [comparison](reports/comparison.md), [guide](reports/guide.md), [reference](reports/reference.md), [arguments](reports/arguments.md). Для подкаста по оригиналам — [план](podcasts/originals_outline.md) и [раздел](podcasts/originals_section.md); для книги — [перевод](books/translate.md), [словарь](books/glossary.md) и [привязки](books/align_translation.md).
+For ordinary answers, open the [shared rules](common/materials.md), [runner boundary](common/runner.md), and [answer with citations](questions/answer.md). For reports, read the [shared format](reports/write.md) and one of [comparison](reports/comparison.md), [guide](reports/guide.md), [reference](reports/reference.md), or [arguments](reports/arguments.md). For source-backed podcasts, read the [plan](podcasts/originals_outline.md) and [section](podcasts/originals_section.md). For books, read [translation](books/translate.md), [glossary](books/glossary.md), and [alignment](books/align_translation.md).
 
-Из корня репозитория:
+From the repository root:
 
 ```sh
 uv run --no-sync brofessor prompts list
@@ -16,9 +16,9 @@ uv run --no-sync brofessor prompts preview reports/guide --provider ollama
 uv run --no-sync brofessor prompts preview --all > /tmp/brofessor-prompts.json
 ```
 
-Команды не вызывают модели, shell-инструменты агента или сеть. `preview` показывает компонент, подставленные значения, общую сборку и полные сообщения с runner-границей. Для Codex/Claude это один stdin-текст; для Ollama — отдельные `system` и `user`. Общие части показаны в составе соответствующей операции, у `common/runner` — сама граница с пустым пользовательским сообщением. Поля `purpose`, `schema`, `versions` и `uses` описывают назначение и связи. Описание `navigation/retrieve` регистрируется как SDK-метаданные: собственный bounded-запрос передаёт инструкции и историю, а не отдельный список SDK tools.
+These commands call no models, agent shell tools, or network services. `preview` shows the component, substituted values, combined framing, and complete messages including the runner boundary. For Codex/Claude this is one stdin text, while Ollama has separate `system` and `user` messages. Shared parts appear within the corresponding operation. For `common/runner`, the boundary itself appears with an empty user message. The `purpose`, `schema`, `versions`, and `uses` fields describe purposes and relationships. The `navigation/retrieve` description is registered as SDK metadata: the custom bounded request passes instructions and history rather than a separate SDK tool list.
 
-По умолчанию входы короткие и синтетические. Это возможность прочитать фактически собираемые инструкции, не оценка качества ответа и не генерация по материалам проекта. Для своих входов передайте JSON-объект переменных через `--variables PATH`. Должны присутствовать все используемые переменные; пропуски и опечатки дают ошибку. Сложные JSON-значения сериализуются с теми же `ensure_ascii=False`, что и в workflow. Например:
+Default inputs are short and synthetic. This lets you read the actual assembled instructions. It does not evaluate answer quality or generate from project materials. Supply a JSON object of variables with `--variables PATH` for your own inputs. All used variables must be present. Missing names and typos fail explicitly. Complex JSON values use the same `ensure_ascii=False` serialization as the workflow. For example:
 
 ```json
 {"base": "ORIGINAL EVIDENCE: [{\"id\":\"demo:1\",\"text\":\"Only one test was run.\"}]"}
@@ -28,149 +28,149 @@ uv run --no-sync brofessor prompts preview --all > /tmp/brofessor-prompts.json
 uv run --no-sync brofessor prompts preview questions/answer --variables /tmp/answer-inputs.json
 ```
 
-Для просмотра шаблонов сохранённого задания:
+To inspect a saved job's templates:
 
 ```sh
 uv run --no-sync brofessor -w /path/to/project prompts preview questions/answer --job JOB_ID
 uv run --no-sync brofessor -w /path/to/project prompts show questions/answer --job JOB_ID
 ```
 
-`--job` выбирает закреплённый набор инструкций; примерные входы остаются синтетическими, если не переданы `--variables`. Это не реконструкция всех прошлых запросов с исходными материалами. `show --job` выводит точный сохранённый шаблон без подстановок. В результате предпросмотра явно указаны `source`, SHA-256 набора и текущий путь редактируемого файла.
+`--job` selects the pinned instruction set. Example inputs remain synthetic unless `--variables` is supplied. This does not reconstruct every past request with original materials. `show --job` outputs the exact saved template without substitution. Preview explicitly reports `source`, the set's SHA-256, and the current editable file path.
 
-## Как редактировать
+## How to edit
 
-1. Измените нужный `.md`. Тексты оставлены на исходном английском: при выделении формулировки не переписывались. Новые строки и пробелы значимы. Для удобства чтения длинных исходных абзацев используйте перенос строк по ширине окна редактора.
-2. Сохраните подстановки вида `{{language}}`, `{{base}}`, `{{payload}}` из колонки переменных. Можно удалить ненужную подстановку, оставив остальной текст; добавить неизвестное имя без изменения Python-конструктора нельзя. Файлы не исполняют Python, Jinja или выражения. Вставка выполняется один раз: скобки и похожие инструкции внутри исходных данных остаются данными. В шаблоне можно писать буквальные JSON-примеры.
-3. Проверьте выбранный вариант командой `prompts preview ID`, затем весь каталог через `--all`. Сравнивайте `messages`, а не только компонент: общие правила и данные могут находиться в других частях.
-4. Создайте **новое задание** или явно выберите регенерацию. Изменения `.md` читаются без перезапуска worker, но уже созданное задание сохраняет свои инструкции. Повтор с тем же request key и Resume продолжают прежний вариант. Новый follow-up, эпизод, сверка или исправление термина получают актуальные инструкции при создании собственного задания.
+1. Edit the appropriate `.md`. Texts remain in their original English: wording was not rewritten during extraction. Newlines and spaces matter. Use editor word wrap to read long original paragraphs comfortably.
+2. Preserve substitutions such as `{{language}}`, `{{base}}`, and `{{payload}}` from the variables column. You may remove an unnecessary substitution while keeping the rest of the text. Adding an unknown name requires changing the Python constructor. Files execute no Python, Jinja, or expressions. Substitution runs once: braces and apparent instructions in source data remain data. Literal JSON examples are allowed in templates.
+3. Check the selected variant with `prompts preview ID`, then the entire catalogue with `--all`. Compare `messages`, not only the component: shared rules and data may live elsewhere in the framing.
+4. Create a **new job** or explicitly select regeneration. `.md` changes are read without restarting the worker, but an existing job retains its instructions. Retrying the same request key and Resume continue the earlier version. New follow-ups, episodes, checks, and term corrections receive current instructions when their own job is created.
 
-В editable checkout правится этот `src/brofessor/prompts/`. Для установленного wheel `prompts list` показывает реальный путь в установленном пакете; поддерживаемый путь изменения — исправить исходник, пересобрать wheel и переустановить его. Обновление установки может перезаписать ручные правки в `site-packages`.
+An editable checkout edits this `src/brofessor/prompts/` directory. For an installed wheel, `prompts list` shows the real installed-package path. The supported update path is to edit the source, rebuild the wheel, and reinstall it. Updating an installation may overwrite manual `site-packages` edits.
 
-Схемы результатов, сбор исходных фрагментов, JSON-сериализация, бюджеты, расчёт числа слов, допустимые citations и валидация остаются в Python. Редактирование промпта меняет смысловую инструкцию, а не эти контракты. Данные пользователя, WAV-референсы и их транскрипты не являются шаблонами: речевые адаптеры передают текст озвучки и референсные данные без дополнительных авторских system/instruction-промптов. Сообщения об ошибках файловой системы и типовые ошибки валидации SDK также остаются диагностическими данными; явные подсказки повторной навигации вынесены ниже.
+Result schemas, source-fragment assembly, JSON serialization, budgets, word-count calculations, allowed citations, and validation remain in Python. Editing a prompt changes semantic instructions, not those contracts. User data, WAV references, and their transcripts are not templates: speech adapters pass narration text and reference data without additional authored system/instruction prompts. Filesystem errors and standard SDK validation errors remain diagnostic data. Explicit navigation retry hints are extracted below.
 
-## История и воспроизводимость
+## History and reproducibility
 
-При создании текстового задания в существующих `params` сохраняется `prompt_snapshot`: полный применимый набор текстов, SHA-256 каждого файла и всего набора. Сохраняется семейство шаблонов с поддерживаемыми условными ветками; это не журнал фактически выполненных обращений. Никаких новых таблиц или сервисов нет. Во время исполнения весь workflow, включая asyncio/thread-переход runner, использует этот набор. Хеширование новых checkpoints включает фактические сообщения и общую границу runner.
+When a text job is created, existing `params` store `prompt_snapshot`: the full applicable text set, SHA-256 for each file, and the whole set's hash. It stores the template family with supported conditional branches, not a log of actual calls. There are no new tables or services. The entire workflow, including the runner's asyncio/thread transition, uses this set during execution. New checkpoint hashing includes actual messages and the shared runner boundary.
 
-Задания без `prompt_snapshot` и прежние версии workflow не поддерживаются. Для новой обработки создайте задачу заново; сохранённые результаты и авторские правки остаются на диске.
+Jobs without `prompt_snapshot` and earlier workflow versions are unsupported. Create a new task for new processing. Saved results and author edits remain on disk.
 
-Проверка после редактуры:
+After editing, check:
 
 ```sh
 uv run --no-sync brofessor prompts preview --all > /tmp/brofessor-prompts.json
 uv run --no-sync pytest tests/prompts -q
 ```
 
-Тесты защищают однократную подстановку, ошибки входов, framing, snapshot/retry/resume и сохранность редакций. Содержательное качество ответов проверяется отдельно. Для качества нужна отдельная проба на выбранных материалах.
+Tests protect single-pass substitution, input errors, framing, snapshot/retry/resume, and revision preservation. Answer content quality is evaluated separately, with a separate trial on selected materials.
 
-## Каталог
+## Catalogue
 
-Во всех строках действует общая [граница runner](common/runner.md). `base` — уже собранные общие правила и evidence; `instructions` — общие правила без evidence; `payload`, `agent`, `evidence`, `scope`, `glossary`, `occurrences`, `outline`, `section`, `plan`, `handoff`, `turns`, `first_version` — сериализованные данные соответствующего шага. `previous` — конец принятого диалога. Числовые переменные рассчитывает workflow. `task`, `word_instruction`, `correction_instruction`, `conversation_rule`, `translation`, `metalinguistic`, `header`, `prompt` связывают явно перечисленные ниже компоненты.
+Every row uses the shared [runner boundary](common/runner.md). `base` — already assembled shared rules and evidence; `instructions` — shared rules without evidence; `payload`, `agent`, `evidence`, `scope`, `glossary`, `occurrences`, `outline`, `section`, `plan`, `handoff`, `turns`, `first_version` — serialized data for the corresponding step. `previous` — the end of the accepted dialogue. The workflow calculates numeric variables. `task`, `word_instruction`, `correction_instruction`, `conversation_rule`, `translation`, `metalinguistic`, `header`, `prompt` connect the components explicitly listed below.
 
-### Общие правила
+### Shared rules
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [common/coverage](common/coverage.md) | Проверенные host сведения о полноте чтения; не evidence содержания | `verification` | `Схема автора материала`; Навигация с verification |
-| [common/evidence](common/evidence.md) | Присоединение сериализованных evidence к общим правилам Общие части: [common/materials](common/materials.md), [common/coverage](common/coverage.md). | `instructions`, `evidence` | `Схема автора материала`; Все версии обычных материалов |
-| [common/materials](common/materials.md) | Общие правила evidence, языка и пользовательского фокуса | `language`, `language_name`, `focus` | `Схема автора материала`; Все версии обычных материалов |
-| [common/runner](common/runner.md) | Общая граница Codex, Claude и Ollama; добавляется к каждому запросу | — | `Схема конкретной операции`; Все текстовые обращения |
+| [common/coverage](common/coverage.md) | Host-verified reading coverage, not content evidence | `verification` | `Material author's schema`; Navigation with verification |
+| [common/evidence](common/evidence.md) | Attach serialized evidence to shared rules Shared parts: [common/materials](common/materials.md), [common/coverage](common/coverage.md). | `instructions`, `evidence` | `Material author's schema`; All ordinary material versions |
+| [common/materials](common/materials.md) | Shared rules for evidence, language, and user focus | `language`, `language_name`, `focus` | `Material author's schema`; All ordinary material versions |
+| [common/runner](common/runner.md) | Shared Codex, Claude, and Ollama boundary, added to every request | — | `Operation-specific schema`; All text calls |
 
-### Навигация по оригиналам
+### Navigating originals
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [navigation/agent](navigation/agent.md) | Инструкции агента выбора и чтения оригинальных документов | — | `NavigationStep`; Каталоги документов |
-| [navigation/heading_hint](navigation/heading_hint.md) | Подсказка выбрать fragment offset при неоднозначном заголовке | — | `NavigationStep`; Каталоги документов; feedback |
-| [navigation/narrow_tool](navigation/narrow_tool.md) | Подсказка уменьшить область или limit слишком большого результата | — | `NavigationStep`; Каталоги документов; retry |
-| [navigation/read_candidates](navigation/read_candidates.md) | Подсказка повторить чтение после преждевременного finish по поиску | — | `NavigationStep`; Каталоги документов; retry |
-| [navigation/read_scope](navigation/read_scope.md) | Подсказка дочитать заданную полную область | — | `NavigationStep`; Каталоги документов; retry |
-| [navigation/retrieve](navigation/retrieve.md) | Описание инструмента для SDK; метаданные, не отдельное сообщение runner | — | `NavigationStep`; Каталоги документов |
-| [navigation/selection_hint](navigation/selection_hint.md) | Подсказка сузить запрос при переполнении выбранного контекста | — | `NavigationStep`; Каталоги документов; feedback |
-| [navigation/step](navigation/step.md) | Запрос одного типизированного шага через bounded runner Общие части: [navigation/agent](navigation/agent.md), [navigation/read_candidates](navigation/read_candidates.md), [navigation/read_scope](navigation/read_scope.md), [navigation/narrow_tool](navigation/narrow_tool.md), [navigation/heading_hint](navigation/heading_hint.md), [navigation/selection_hint](navigation/selection_hint.md). | `agent` | `NavigationStep`; Каталоги документов |
+| [navigation/agent](navigation/agent.md) | Instructions for the original-document selection and reading agent | — | `NavigationStep`; Document directories |
+| [navigation/heading_hint](navigation/heading_hint.md) | Hint to choose a fragment offset for an ambiguous heading | — | `NavigationStep`; Document directories; feedback |
+| [navigation/narrow_tool](navigation/narrow_tool.md) | Hint to reduce scope or limit for an oversized result | — | `NavigationStep`; Document directories; retry |
+| [navigation/read_candidates](navigation/read_candidates.md) | Hint to retry reading after premature finish based on search | — | `NavigationStep`; Document directories; retry |
+| [navigation/read_scope](navigation/read_scope.md) | Hint to finish reading the requested full scope | — | `NavigationStep`; Document directories; retry |
+| [navigation/retrieve](navigation/retrieve.md) | SDK tool description, metadata rather than a separate runner message | — | `NavigationStep`; Document directories |
+| [navigation/selection_hint](navigation/selection_hint.md) | Hint to narrow the query when selected context overflows | — | `NavigationStep`; Document directories; feedback |
+| [navigation/step](navigation/step.md) | Request one typed step through the bounded runner Shared parts: [navigation/agent](navigation/agent.md), [navigation/read_candidates](navigation/read_candidates.md), [navigation/read_scope](navigation/read_scope.md), [navigation/narrow_tool](navigation/narrow_tool.md), [navigation/heading_hint](navigation/heading_hint.md), [navigation/selection_hint](navigation/selection_hint.md). | `agent` | `NavigationStep`; Document directories |
 
-### Чтение и сжатие
+### Reading and compression
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [reading/fragments](reading/fragments.md) | Чтение каждого исходного фрагмента в отдельную заметку | `payload` | `ReadingBatch`; Текущее чтение |
-| [reading/reduce](reading/reduce.md) | Сжатие заметок с раздельными ссылками на каждый оригинал | `payload` | `SectionNotes`; Текущее чтение |
+| [reading/fragments](reading/fragments.md) | Read each source fragment into a separate note | `payload` | `ReadingBatch`; Current reading |
+| [reading/reduce](reading/reduce.md) | Compress notes with separate references to each original | `payload` | `SectionNotes`; Current reading |
 
-### Вопросы и поиск
+### Questions and search
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [questions/answer](questions/answer.md) | Ответ с точными оригинальными цитатами и статусом доказательств Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [questions/conversation](questions/conversation.md). | `base` | `Answer`; ask |
-| [questions/conversation](questions/conversation.md) | Ограничения использования прежних вопросов и ответов | `conversation` | `Answer`; Follow-up |
-| [questions/search](questions/search.md) | Варианты лексического поиска по большим наборам оригиналов Общие части: [questions/search_conversation](questions/search_conversation.md). | `conversation_rule`, `payload` | `SearchQueries`; Превышен прямой контекст |
-| [questions/search_conversation](questions/search_conversation.md) | Правило трактовки follow-up при поиске | — | `SearchQueries`; Поиск с conversation |
+| [questions/answer](questions/answer.md) | Answer with exact original quotes and evidence status Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [questions/conversation](questions/conversation.md). | `base` | `Answer`; ask |
+| [questions/conversation](questions/conversation.md) | Limits on using earlier questions and answers | `conversation` | `Answer`; Follow-up |
+| [questions/search](questions/search.md) | Lexical search variants over large original-source sets Shared parts: [questions/search_conversation](questions/search_conversation.md). | `conversation_rule`, `payload` | `SearchQueries`; Direct context exceeded |
+| [questions/search_conversation](questions/search_conversation.md) | Rule for interpreting follow-ups during search | — | `SearchQueries`; Search with conversation |
 
-### Письменные отчёты
+### Written reports
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [reports/arguments](reports/arguments.md) | Задача разбора аргументации | — | `Report`; template = arguments |
-| [reports/comparison](reports/comparison.md) | Задача сравнения источников | — | `Report`; template = comparison |
-| [reports/guide](reports/guide.md) | Задача практического руководства | — | `Report`; template = guide |
-| [reports/reference](reports/reference.md) | Задача тематического справочника | — | `Report`; template = reference |
-| [reports/scope](reports/scope.md) | Область отобранных оригиналов и ограничения полноты | `base`, `scope` | `Report`; Все четыре template |
-| [reports/terminology](reports/terminology.md) | Принятые термины конкретной редакции перевода | `glossary` | `Report`; report с terminology |
-| [reports/write](reports/write.md) | Общий формат отчёта, атрибуция, цитаты и статус доказательств Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [reports/scope](reports/scope.md), [reports/terminology](reports/terminology.md), [reports/comparison](reports/comparison.md), [reports/guide](reports/guide.md), [reports/reference](reports/reference.md), [reports/arguments](reports/arguments.md). | `base`, `task` | `Report`; Все четыре template |
+| [reports/arguments](reports/arguments.md) | Argument-analysis task | — | `Report`; template = arguments |
+| [reports/comparison](reports/comparison.md) | Source-comparison task | — | `Report`; template = comparison |
+| [reports/guide](reports/guide.md) | Practical-guide task | — | `Report`; template = guide |
+| [reports/reference](reports/reference.md) | Topic-reference task | — | `Report`; template = reference |
+| [reports/scope](reports/scope.md) | Selected-original scope and coverage limits | `base`, `scope` | `Report`; All four templates |
+| [reports/terminology](reports/terminology.md) | Accepted terms from a specific translation revision | `glossary` | `Report`; report with terminology |
+| [reports/write](reports/write.md) | Shared report format, attribution, quotes, and evidence status Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [reports/scope](reports/scope.md), [reports/terminology](reports/terminology.md), [reports/comparison](reports/comparison.md), [reports/guide](reports/guide.md), [reports/reference](reports/reference.md), [reports/arguments](reports/arguments.md). | `base`, `task` | `Report`; All four templates |
 
-### Презентации
+### Presentations
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [slides/create](slides/create.md) | Содержание слайдов, таблиц, последовательностей и speaker notes Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `slide_count` | `Slides`; slides |
+| [slides/create](slides/create.md) | Slide content, tables, sequences, and speaker notes Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `slide_count` | `Slides`; slides |
 
-### Подкасты и серии
+### Podcasts and series
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [podcasts/check](podcasts/check.md) | Инструкции предметной сверки реплик с оригиналами | `language` | `CheckBatch`; check_podcast |
-| [podcasts/check_packet](podcasts/check_packet.md) | Пакет реплик после правил сверки; префикс перед ORIGINALS Общие части: [podcasts/check](podcasts/check.md). | `header`, `turns` | `CheckBatch`; check_podcast |
-| [podcasts/correct_originals](podcasts/correct_originals.md) | Коррекция раздела по оригиналам и его handoff; суффикс Общие части: [podcasts/originals_section](podcasts/originals_section.md). | `target`, `low`, `high`, `first_version` | `WrittenSection`; writing_method = originals |
-| [podcasts/correct_section](podcasts/correct_section.md) | Одна коррекция длины и состава ведущих Общие части: [podcasts/section](podcasts/section.md), [podcasts/correction_range](podcasts/correction_range.md). | `prompt`, `count`, `target`, `correction_instruction`, `first_version` | `Podcast`; writing_method != originals |
-| [podcasts/correction_range](podcasts/correction_range.md) | Числовые границы корректировки длины | `lower`, `upper` | `Podcast`; writing_method != originals; minutes >= 20 |
-| [podcasts/originals_outline](podcasts/originals_outline.md) | Редакторский план с достаточностью источников и отношениями между ними Общие части: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `evidence`, `minutes`, `target_words`, `lower`, `upper` | `EpisodePlan`; writing_method = originals |
-| [podcasts/originals_section](podcasts/originals_section.md) | Раздел по оригиналам с редакторской памятью; префикс перед ORIGINALS Общие части: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `plan`, `handoff`, `previous`, `section_number`, `sections`, `section`, `target`, `low`, `high`, `target_words`, `written` | `WrittenSection`; writing_method = originals |
-| [podcasts/outline](podcasts/outline.md) | Равновесный план длинного выпуска Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `base`, `minutes`, `parts` | `Outline`; writing_method != originals; minutes >= 20 |
-| [podcasts/section](podcasts/section.md) | Раздел выпуска по плану и концу предыдущего раздела Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md), [podcasts/word_budget](podcasts/word_budget.md). | `base`, `outline`, `section_number`, `parts`, `section`, `word_instruction`, `previous` | `Podcast`; writing_method != originals; minutes >= 20 |
-| [podcasts/series](podcasts/series.md) | План серии с распределением тем и общими терминами Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `count`, `minutes` | `Series`; podcast_series |
-| [podcasts/series_context](podcasts/series_context.md) | Границы одного выпуска серии и общие термины | `series` | `Podcast`; Эпизод серии |
-| [podcasts/short](podcasts/short.md) | Короткий диалог с последовательным продолжением Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md). | `base`, `part_number`, `parts`, `target_words`, `last_part`, `previous` | `Podcast`; minutes < 20 |
-| [podcasts/voices](podcasts/voices.md) | Грамматический род ведущих и сохранение рода персонажей | — | `Podcast`; podcast |
-| [podcasts/word_budget](podcasts/word_budget.md) | Остаток общего бюджета слов и границы раздела | `target_words`, `written`, `target`, `lower`, `upper` | `Podcast`; writing_method != originals; minutes >= 20 |
+| [podcasts/check](podcasts/check.md) | Instructions for substantive turn checks against originals | `language` | `CheckBatch`; check_podcast |
+| [podcasts/check_packet](podcasts/check_packet.md) | Turn packet following check rules, prefix before ORIGINALS Shared parts: [podcasts/check](podcasts/check.md). | `header`, `turns` | `CheckBatch`; check_podcast |
+| [podcasts/correct_originals](podcasts/correct_originals.md) | Correction of a source-backed section and its handoff, suffix Shared parts: [podcasts/originals_section](podcasts/originals_section.md). | `target`, `low`, `high`, `first_version` | `WrittenSection`; writing_method = originals |
+| [podcasts/correct_section](podcasts/correct_section.md) | One correction of length and host composition Shared parts: [podcasts/section](podcasts/section.md), [podcasts/correction_range](podcasts/correction_range.md). | `prompt`, `count`, `target`, `correction_instruction`, `first_version` | `Podcast`; writing_method != originals |
+| [podcasts/correction_range](podcasts/correction_range.md) | Numeric bounds for length correction | `lower`, `upper` | `Podcast`; writing_method != originals; minutes >= 20 |
+| [podcasts/originals_outline](podcasts/originals_outline.md) | Editorial plan with source sufficiency and relationships Shared parts: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `evidence`, `minutes`, `target_words`, `lower`, `upper` | `EpisodePlan`; writing_method = originals |
+| [podcasts/originals_section](podcasts/originals_section.md) | Source-backed section with editorial memory, prefix before ORIGINALS Shared parts: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `plan`, `handoff`, `previous`, `section_number`, `sections`, `section`, `target`, `low`, `high`, `target_words`, `written` | `WrittenSection`; writing_method = originals |
+| [podcasts/outline](podcasts/outline.md) | Balanced outline for a long episode Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `base`, `minutes`, `parts` | `Outline`; writing_method != originals; minutes >= 20 |
+| [podcasts/section](podcasts/section.md) | Episode section based on the outline and previous section ending Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md), [podcasts/word_budget](podcasts/word_budget.md). | `base`, `outline`, `section_number`, `parts`, `section`, `word_instruction`, `previous` | `Podcast`; writing_method != originals; minutes >= 20 |
+| [podcasts/series](podcasts/series.md) | Series plan with topic allocation and shared terms Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `count`, `minutes` | `Series`; podcast_series |
+| [podcasts/series_context](podcasts/series_context.md) | One series episode scope and shared terms | `series` | `Podcast`; Series episode |
+| [podcasts/short](podcasts/short.md) | Short dialogue with sequential continuation Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md). | `base`, `part_number`, `parts`, `target_words`, `last_part`, `previous` | `Podcast`; minutes < 20 |
+| [podcasts/voices](podcasts/voices.md) | Hosts’ grammatical gender and preservation of character gender | — | `Podcast`; podcast |
+| [podcasts/word_budget](podcasts/word_budget.md) | Remaining overall word budget and section bounds | `target_words`, `written`, `target`, `lower`, `upper` | `Podcast`; writing_method != originals; minutes >= 20 |
 
-### Обучение
+### Learning
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [studies/create](studies/create.md) | Вопросы на понимание, эталон ответа и критерии Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `count` | `StudySet`; study |
-| [studies/review](studies/review.md) | Разбор сохранённых ответов ученика | `payload` | `FeedbackBatch`; review_study |
+| [studies/create](studies/create.md) | Understanding questions, reference answers, and criteria Shared parts: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `count` | `StudySet`; study |
+| [studies/review](studies/review.md) | Review of saved learner answers | `payload` | `FeedbackBatch`; review_study |
 
-### Перевод и терминология
+### Translation and terminology
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [books/align_translation](books/align_translation.md) | Перевод с привязкой каждого употребления термина к целевой фразе Общие части: [books/translate](books/translate.md), [books/metalinguistic](books/metalinguistic.md). | `translation`, `metalinguistic`, `occurrences` | `AlignedBatch`; translation_version = 4 |
-| [books/glossary](books/glossary.md) | Извлечение значений терминов и исходных употреблений | `language`, `payload` | `GlossaryBatch`; translation_version = 4 |
-| [books/metalinguistic](books/metalinguistic.md) | Сохранение исходного написания обсуждаемых слов | — | `AlignedBatch`; translation_version = 4 |
-| [books/repair_alignment](books/repair_alignment.md) | Одна коррекция только отклонённых привязок без правки перевода | `payload` | `AlignmentBatch`; Версии с протоколом исправления привязок |
-| [books/review_glossary](books/review_glossary.md) | Обзор пропущенных повторяющихся терминов | `payload` | `GlossaryReviewBatch`; translation_version = 4 |
-| [books/revise_term](books/revise_term.md) | Изменение только целевых терминологических фраз | `payload` | `Replacements`; terminology_update |
-| [books/translate](books/translate.md) | Полный перевод блоков с неизменяемыми inline-маркерами | `language`, `payload` | `TranslationBatch / AlignedBatch`; translation_version = 4; также локальная проба |
+| [books/align_translation](books/align_translation.md) | Translation aligning each term occurrence to a target phrase Shared parts: [books/translate](books/translate.md), [books/metalinguistic](books/metalinguistic.md). | `translation`, `metalinguistic`, `occurrences` | `AlignedBatch`; translation_version = 4 |
+| [books/glossary](books/glossary.md) | Extract term senses and original occurrences | `language`, `payload` | `GlossaryBatch`; translation_version = 4 |
+| [books/metalinguistic](books/metalinguistic.md) | Preserve original spelling of words under discussion | — | `AlignedBatch`; translation_version = 4 |
+| [books/repair_alignment](books/repair_alignment.md) | One correction of rejected alignments only, without editing the translation | `payload` | `AlignmentBatch`; Versions with the alignment-repair protocol |
+| [books/review_glossary](books/review_glossary.md) | Review missing recurring terms | `payload` | `GlossaryReviewBatch`; translation_version = 4 |
+| [books/revise_term](books/revise_term.md) | Change only target terminology phrases | `payload` | `Replacements`; terminology_update |
+| [books/translate](books/translate.md) | Full block translation with immutable inline markers | `language`, `payload` | `TranslationBatch / AlignedBatch`; translation_version = 4; also a local probe |
 
-### Явные developer-пробы
+### Explicit developer probes
 
-| Файл | Назначение и связи | Переменные | Выходная схема / условие |
+| File | Purpose and relationships | Variables | Output schema / condition |
 |---|---|---|---|
-| [experiments/episode_materials](experiments/episode_materials.md) | Общие инструкции пробы сравнения авторов подкаста | `focus` | `Podcast`; Только явная developer-проба, не workflow продукта |
-| [experiments/episode_outline](experiments/episode_outline.md) | План в пробе сравнения двух авторов Общие части: [experiments/episode_materials](experiments/episode_materials.md), [experiments/evidence](experiments/evidence.md). | `base` | `Outline`; Только явная developer-проба, не workflow продукта |
-| [experiments/evidence](experiments/evidence.md) | Присоединение evidence в пробе сравнения Общие части: [experiments/episode_materials](experiments/episode_materials.md). | `instructions`, `evidence` | `Outline / Podcast`; Только явная developer-проба, не workflow продукта |
-| [experiments/whole_xhtml](experiments/whole_xhtml.md) | Базовый опыт перевода XHTML целиком, без гарантий проекции | `payload` | `WholeDocuments`; Только явная developer-проба, не workflow продукта |
+| [experiments/episode_materials](experiments/episode_materials.md) | Shared instructions for the podcast-writer comparison probe | `focus` | `Podcast`; Explicit developer probe only, not a product workflow |
+| [experiments/episode_outline](experiments/episode_outline.md) | Outline for the two-writer comparison probe Shared parts: [experiments/episode_materials](experiments/episode_materials.md), [experiments/evidence](experiments/evidence.md). | `base` | `Outline`; Explicit developer probe only, not a product workflow |
+| [experiments/evidence](experiments/evidence.md) | Attach evidence in the comparison probe Shared parts: [experiments/episode_materials](experiments/episode_materials.md). | `instructions`, `evidence` | `Outline / Podcast`; Explicit developer probe only, not a product workflow |
+| [experiments/whole_xhtml](experiments/whole_xhtml.md) | Baseline whole-XHTML translation experiment without projection guarantees | `payload` | `WholeDocuments`; Explicit developer probe only, not a product workflow |
 
-### Где определены выходные схемы
+### Output schema definitions
 
 - [Answer, Podcast, Slides](../models.py).
 - [NavigationStep](../features/sources/navigation.py), [SearchQueries](../features/questions.py).
@@ -178,6 +178,6 @@ uv run --no-sync pytest tests/prompts -q
 - [Report](../features/reports.py), [StudySet, FeedbackBatch](../features/studies.py).
 - [Outline](../features/podcasts/writer.py), [EpisodePlan, WrittenSection](../features/podcasts/episode_writer.py), [Series](../features/podcasts/series.py), [CheckBatch](../features/podcasts/checks.py).
 - [TranslationBatch](../infrastructure/formats/epub.py), [GlossaryBatch, GlossaryReviewBatch, AlignedBatch, AlignmentBatch, Replacements](../features/books/terminology.py).
-- `WholeDocuments` — схема [локальной XHTML-пробы](../../../tools/probe_epub_translation.py) из checkout; developer tools в wheel не входят.
+- `WholeDocuments` — schema for the [local XHTML probe](../../../tools/probe_epub_translation.py) from the checkout. Developer tools are not included in the wheel.
 
-SDK и адаптеры по-прежнему получают эти схемы из Python. Codex/Claude дополнительно применяют прежнюю strict-schema адаптацию в runner. Условный выбор файлов и места вызова можно найти по `prompts.render` в исходниках и по полю `source` в `catalogue.json`.
+The SDK and adapters still receive these schemas from Python. Codex/Claude additionally apply the existing strict-schema adaptation in the runner. Find conditional file selection and call sites through `prompts.render` in the source and the `source` field in `catalogue.json`.

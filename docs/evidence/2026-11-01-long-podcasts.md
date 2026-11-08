@@ -1,172 +1,172 @@
-# Длинные подкасты: длительность и восстановление
+# Long podcasts: duration and recovery
 
-Исторический отчёт. Действующие требования и границы — в [спецификации](../specification.md); решения и отмены — в [Decision log](../decision-log.md). Упоминания следующих этапов описывают состояние на дату опыта.
+Historical report. Current requirements and boundaries are in the [specification](../specification.md), and decisions and cancellations are in the [Decision log](../decision-log.md). References to subsequent stages describe the state at the time of the experiment.
 
-Проверка 01–02.11.2026 на Apple M4, 32 GiB. Завершена матрица четырёх выпусков 25/60 минут RU/EN на одной книге. Это второй пункт M2; полная приёмка R06, качество всех голосов и серии этим отчётом не объявляются завершёнными.
+Checked 01–02.11.2026 on Apple M4, 32 GiB. The matrix of four 25/60-minute RU/EN episodes on one book was completed. This is the second M2 item. This report does not declare full R06 acceptance, quality of all voices, or series complete.
 
-## Реализация
+## Implementation
 
-Для 20–60 минут сохраняется план одного выпуска (`outline.json`), затем пишутся части примерно по пять минут. Их задачи и исходные ссылки задаются заранее. Проверяются число частей, уникальность заголовков, оба ведущих, язык, допустимые ID и объём каждой части с допуском 15%. Одна содержательная правка исправляет слишком короткую/длинную часть; неприемлемая правка не становится checkpoint и может быть повторена при продолжении.
+For 20–60 minutes, a single episode outline is saved (`outline.json`), then sections of about five minutes are written. Their purposes and source references are specified in advance. Checks cover section count, unique headings, both hosts, language, valid IDs, and each section's length with 15% tolerance. One substantive correction fixes an overly short/long section. An unacceptable correction does not become a checkpoint and can be retried on resume.
 
-Исходные ориентиры длинного сценария — 125 слов/мин для RU и 100 для EN. Английские измерения ниже получены из первоначальных черновиков с ориентиром 125 и последующей содержательной редактурой. Полный прогон показал темп около 90–100 слов/мин, поэтому начальная оценка пересмотрена. Новый ориентир 100 проверен контрактными тестами; отдельный полный нейропрогон с ним не повторялся. Он не гарантирует длительность: модели, голоса и содержание различаются. Русские числа и иностранные имена запрашиваются в форме для произнесения. Длинные реплики делятся без потери слов до 300 символов RU / 400 EN, с предпочтением границ предложений; слово используется как граница, если целое предложение не помещается. У коротких previews сохранены прежние prompts/checkpoints.
+Initial long-script estimates were 125 words/min for RU and 100 for EN. The English measurements below came from initial drafts estimated at 125 and subsequent substantive editing. The full run showed about 90–100 words/min, so the initial estimate was revised. The new 100 estimate was verified by contract tests; a separate full neural run with it was not repeated. It does not guarantee duration: models, voices, and content differ. Russian numbers and foreign names are requested in spoken form. Long turns are split without losing words to 300 characters RU / 400 EN, preferring sentence boundaries. A word becomes the boundary if a whole sentence does not fit. Short previews retain their earlier prompts/checkpoints.
 
-После синтеза общий расчёт возвращает измеренную длительность, отклонение от запроса, число слов, измеренный темп и ориентир для редактуры. Для полного выпуска одновременно требуются допуск 10% и диапазон 20–60 минут. CLI получает эти поля в metadata; UI показывает фактическую и целевую длительность, а при расхождении — подсказку по числу слов. Sidecar `podcast.audio.json` содержит те же итоговые metadata. Таблица покрытия свёрнута, чтобы не отодвигать плеер и готовый файл.
+After synthesis, the shared calculation returns measured duration, deviation from the request, word count, measured speaking rate, and an editing estimate. Full episodes must satisfy both 10% tolerance and the 20–60-minute range. CLI receives these fields in metadata. The UI shows actual and target duration and, on mismatch, a word-count suggestion. Sidecar `podcast.audio.json` contains the same final metadata. The coverage table is collapsed so it does not push the player and finished file away.
 
-## Источник и способ проверки
+## Source and verification method
 
-Полный EPUB [Mary Shelley — Frankenstein](https://www.gutenberg.org/ebooks/84), тот же SHA-256 и исходные 90 фрагментов, что в [проверке целой книги](2026-11-01-whole-book.md). 89 фрагментов читаемы, один пустой исключён. Для 25 минут выбран фокус на шести контрольных сюжетных вопросах; для часа — последовательный разбор всей истории, ответственности, одиночества и решений персонажей.
+Complete [Mary Shelley — Frankenstein](https://www.gutenberg.org/ebooks/84) EPUB, with the same SHA-256 and original 90 fragments as the [whole-book check](2026-11-01-whole-book.md). 89 fragments are readable, one empty fragment is excluded. The 25-minute focus covers six control plot questions. The hour-long focus is a sequential examination of the entire story, responsibility, loneliness, and character decisions.
 
-Текст пишет официальный стабильный Codex CLI с подпиской, аудио создаётся установленными локальными моделями при `HF_HUB_OFFLINE=1` и `TRANSFORMERS_OFFLINE=1`. Платного API или автоматического переключения провайдера нет. Точная серверная ревизия текстовой модели не записана; побитовая воспроизводимость не заявляется.
+The official stable subscription Codex CLI writes text. Installed local models create audio with `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1`. No paid API or automatic provider switch. The exact server-side text-model revision was not recorded. Bit-for-bit reproducibility is not claimed.
 
-Для ускорения тестового setup скопированы только ранее принятые результаты чтения с совпадающими полными fingerprints. Новый широкий фокус часового выпуска прошёл собственное чтение; английский вариант переиспользовал уже принятые заметки этого фокуса. Это подготовка эксперимента, а не реализованный общий кеш между заданиями.
+To speed up test setup, only previously accepted reading results with matching full fingerprints were copied. The new broad hour-long focus received its own reading, and the English version reused the accepted notes for that focus. This was experiment preparation, not an implemented general cross-job cache.
 
-Русский и английский прогоны находятся в отдельных тестовых проектах, у каждого один OS-locked worker. Русский использует CPU, английский — Metal; они работали параллельно. Времена ниже относятся к этим конкретным условиям, не к сравнению моделей в равных условиях.
+Russian and English runs used separate test projects, each with one OS-locked worker. Russian used CPU, English used Metal, and they ran in parallel. Times below apply to these particular conditions, not a model comparison under equal conditions.
 
-## Почему выбран другой русский TTS
+## Why a different Russian TTS was selected
 
-Короткие технические smoke tests не выявили дефекты длинного профиля Qwen. В настоящем прогоне Qwen3 0.6B остановился на 38-й реплике, достигнув лимита генерации. Некоторые принятые PCM-сегменты тоже были дефектными: например, 33 слова заняли 83,84 с, а выборочная ASR-сверка показала повторение слогов и пропуски. Снижение температуры до 0,1 не помогло на этой реплике.
+Short technical smoke tests did not expose defects in the long Qwen profile. In the real run, Qwen3 0.6B stopped at turn 38 after reaching the generation limit. Some accepted PCM segments were also defective: for example, 33 words took 83,84 s, and spot ASR checks showed repeated syllables and omissions. Lowering temperature to 0,1 did not help that turn.
 
-Qwen3 1.7B прошёл три короткие проблемные реплики, но в более длинном русском прогоне также появились пропуски и чрезмерные паузы; его остановили. Эти результаты относятся к закреплённым 4-bit пресетам, голосам Ryan/Vivian и текущему runtime, а не ко всем возможным конфигурациям upstream. В каталоге и README добавлено замечание; неуспешные результаты не выданы за годные длинные выпуски.
+Qwen3 1.7B passed three short problematic turns, but omissions and excessive pauses also appeared in a longer Russian run, which was stopped. These results apply to the pinned 4-bit presets, Ryan/Vivian voices, and current runtime, not all possible upstream configurations. A note was added to the catalogue and README. Failed results were not presented as usable long episodes.
 
-Контрольные русские реплики повторно созданы через уже подключённые Silero и ESpeech. Английский проверен отдельно:
+Control Russian turns were regenerated with the already integrated Silero and ESpeech. English was checked separately:
 
-| Профиль | Аудио, с | Рендер, с | Наблюдение |
+| Profile | Audio, s | Render, s | Observation |
 |---|---:|---:|---|
-| Silero CIS Base, RU | 45,79 | 2,20 | Смысл сохраняется в выборочной ASR-сверке; зацикливания не обнаружены |
-| ESpeech RL-V2, RU | 54,47 | 256,53 | Смысл сохраняется в выборочной сверке; этот профиль существенно медленнее реального времени |
-| Qwen3 1.7B, EN | 43,85 | 19,92 | Две реплики совпадают с текстом по смыслу, без обнаруженных пропусков |
+| Silero CIS Base, RU | 45,79 | 2,20 | Meaning retained in spot ASR checking; no looping found |
+| ESpeech RL-V2, RU | 54,47 | 256,53 | Meaning retained in spot checking; this profile is substantially slower than real time |
+| Qwen3 1.7B, EN | 43,85 | 19,92 | Two turns match the text semantically, with no omissions detected |
 
-Это короткие прогоны с загрузкой движков, не общий бенчмарк и не оценка качества произношения. Для длинного русского теста выбран Silero CIS Base с `ru_roman` / `ru_zhadyra`, для английского — Qwen3 1.7B с Ryan / Vivian. Точные ревизии весов и настройки сохранены в каждом render job. Выбор сделан явно; runtime не вводит fallback.
+These are short runs including engine loading, not a general benchmark or pronunciation-quality assessment. Silero CIS Base with `ru_roman` / `ru_zhadyra` was selected for the long Russian test, and Qwen3 1.7B with Ryan / Vivian for English. Exact weight revisions and settings are saved in each render job. The choice was explicit. The runtime introduces no fallback.
 
-## Готовые результаты
+## Finished results
 
-Четыре финальных варианта завершены. Метаданные содержат `duration_matches: true`, число слов и измеренный темп.
+Four final variants completed. Metadata contains `duration_matches: true`, word count, and measured speaking rate.
 
-| Язык / модель | Цель | Фактическая длительность | Слов / реплик | Финальная сборка, с |
+| Language / model | Target | Actual duration | Words / turns | Final assembly, s |
 |---|---:|---:|---:|---:|
-| RU / Silero CIS Base | 25 мин | 23:49 (1429,3375 с) | 3105 / 112 | 20,909 |
-| RU / Silero CIS Base | 60 мин | 57:52 (3471,5 с) | 7301 / 270 | 47,789 |
-| EN / Qwen3 1.7B | 25 мин | 24:50 (1490,05 с) | 2499 / 54 | 2,510, весь звук из кеша |
-| EN / Qwen3 1.7B | 60 мин | 59:17 (3557 с) | 5338 / 117 | 21,738, 114 из 117 сегментов из кеша |
+| RU / Silero CIS Base | 25 min | 23:49 (1429,3375 s) | 3105 / 112 | 20,909 |
+| RU / Silero CIS Base | 60 min | 57:52 (3471,5 s) | 7301 / 270 | 47,789 |
+| EN / Qwen3 1.7B | 25 min | 24:50 (1490,05 s) | 2499 / 54 | 2,510, all audio from cache |
+| EN / Qwen3 1.7B | 60 min | 59:17 (3557 s) | 5338 / 117 | 21,738, 114 of 117 segments from cache |
 
-У этих результатов соблюдены и допуск, и общий диапазон; все четыре MP3 полностью декодируются FFmpeg без ошибок. Английские финальные сборки в основном используют готовые сегменты, их время нельзя выдавать за скорость полного нейросинтеза. Первичная полная часовая английская озвучка заняла 1879,043 с; полный 25-минутный вариант после локального восстановления — 483,046 с с 18 сегментами из кеша, без учёта предшествовавшей неуспешной попытки. Загрузка весов и прогрев включены.
+These results satisfy both tolerance and the overall range. FFmpeg completely decodes all four MP3 files without errors. Final English assemblies mostly use finished segments, so their time cannot be presented as full neural-synthesis speed. Initial full hour-long English narration took 1879,043 s. The full 25-minute version after local recovery took 483,046 s with 18 cached segments, excluding the preceding failed attempt. Weight loading and warmup are included.
 
-### Содержательная правка английских выпусков
+### Substantive editing of English episodes
 
-Первый английский рендер остановился на реплике 19/62. Разделение только этой реплики на три сохранило все слова, роль и ссылки; новая редакция переиспользовала первые 18 готовых сегментов. Это позволило получить полный звук, но его 29:06 (1746,07 с) не попали в цель 25 минут.
+The first English render stopped at turn 19/62. Splitting only that turn into three retained every word, role, and reference. The new revision reused the first 18 finished segments. This produced complete audio, but its 29:06 (1746,07 s) missed the 25-minute target.
 
-По измеренному темпу сервис предложил около 2501 слова вместо 2911. В редакции 3 удалены десять избыточных реплик: повторные резюме и подробности проверки, уже объяснённые соседними репликами. Проверены связность переходов, сохранение всех шести ответов и исходных ссылок. Осталось 2499 слов. Изменялся сохранённый сценарий; скорость звука не менялась, PCM вручную не обрезался. Все 54 оставшихся сегмента были переиспользованы, а фактическая длительность новой сборки составила 24:50. Предыдущие редакции и render jobs сохранены.
+From measured speaking rate, the service suggested about 2501 words instead of 2911. Revision 3 removed ten redundant turns: repeated summaries and verification details already explained by neighboring turns. Transition coherence, retention of all six answers, and original references were checked. 2499 words remained. The saved script was changed; audio speed was not, and PCM was not manually trimmed. All 54 remaining segments were reused, and actual duration of the new assembly was 24:50. Earlier revisions and render jobs remain.
 
-Первый часовой английский вариант: 7108 слов, 155 реплик, 79:24 (4764,18 с). Он явно не прошёл цель. Измеренный темп дал ориентир 5371 слово. Редактура убрала 44 повторные интерпретации и второстепенные подробности, сохранив 5338 слов, все 12 разделов, хронологию и существенные оговорки. При проверке переходов возвращены объяснение предупреждения Виктора, контекст его учёбы, проявление сдержанности существа и трактовка угрозы в брачную ночь.
+The first hour-long English variant had 7108 words, 155 turns, and 79:24 (4764,18 s). It explicitly failed its target. Measured speaking rate suggested 5371 words. Editing removed 44 repeated interpretations and secondary details while preserving 5338 words, all 12 sections, chronology, and significant caveats. Transition checks restored the explanation of Victor's warning, context of his studies, an instance of the Creature's restraint, and interpretation of the wedding-night threat.
 
-Пять самых медленных английских реплик дополнительно сверены через ASR: одна пропускала фразу об уходе Клерваля за Виктором, другая имела чрезмерные паузы и сомнительное окончание. Обе поделены без изменения слов и озвучены заново. В редакции 2 готовы 116 сегментов, 109 из кеша, 59:14 за 36,082 с. Дополнительная редакция исправила границу `their / father`, заменив её целыми предложениями. В финальной редакции 3 — 117 сегментов, 114 из кеша, 59:17 за 21,738 с. Повторная ASR-сверка проверила новые части. По этому наблюдению автоматическое деление теперь предпочитает предложение даже после короткой вводной фразы.
+The five slowest English turns were additionally checked with ASR. One omitted the phrase about Clerval caring for Victor; another had excessive pauses and a questionable ending. Both were split without changing words and narrated again. Revision 2 had 116 finished segments, 109 from cache, and 59:14 in 36,082 s. An additional revision corrected the `their / father` boundary by replacing it with whole sentences. Final revision 3 has 117 segments, 114 from cache, and 59:17 in 21,738 s. Repeated ASR checking covered the new parts. Following this observation, automatic splitting now prefers a sentence even after a short introductory phrase.
 
-Ручная сверка часовых сценариев проверила приёмную историю Элизабет, обстоятельства смерти матери Виктора, вынужденное ложное признание Жюстины, алиби именно на момент обнаружения тела Клерваля и финальное намерение существа, не выданное за наблюдаемую смерть. План из 12 частей последовательно покрывает историю; интерпретации отношений и ответственности обозначены отдельно от сюжетных фактов. Способ оживления не подменён кинематографической сценой с молнией.
+Manual review of the hour-long scripts checked Elizabeth's adoption history, circumstances of Victor's mother's death, Justine's coerced false confession, the alibi specifically at the time Clerval's body was found, and the Creature's final intention without presenting it as an observed death. The 12-part plan covers the story sequentially. Interpretations of relationships and responsibility are labeled separately from plot facts. The animation method is not replaced with a cinematic lightning scene.
 
-## Контроль звука и границы
+## Audio checks and boundaries
 
-Для выборочной сверки используется [Whisper Base MLX](https://huggingface.co/mlx-community/whisper-base-mlx/tree/1e3e249fb8d01c655324bd6841b1deadffd6d04c), ревизия `1e3e249fb8d01c655324bd6841b1deadffd6d04c`, со штатным [tokenizer/config OpenAI Whisper Base](https://huggingface.co/openai/whisper-base/tree/e37978b90ca9030d5170a5c07aadb050351a65bb). Это вспомогательный QA на CPU через установленный MLX-Audio 0.6.3; новых зависимостей приложения или ASR-сервиса нет. Служебный `alignment_heads` старого NPZ не используется; tokenizer загружен явно и затем работает без сети.
+Spot checking uses [Whisper Base MLX](https://huggingface.co/mlx-community/whisper-base-mlx/tree/1e3e249fb8d01c655324bd6841b1deadffd6d04c), revision `1e3e249fb8d01c655324bd6841b1deadffd6d04c`, with the native [OpenAI Whisper Base tokenizer/config](https://huggingface.co/openai/whisper-base/tree/e37978b90ca9030d5170a5c07aadb050351a65bb). This is auxiliary CPU QA through installed MLX-Audio 0.6.3, without new application dependencies or an ASR service. The old NPZ's service `alignment_heads` is unused. The tokenizer was loaded explicitly and then operates without network access.
 
-Для каждого финального выпуска взяты начало, середина и конец реплик каждого голоса: 24 фрагмента. Дополнительно проверены медленные и исправленные английские части. В финальной выборке грубого зацикливания не обнаружено; остаются расхождения распознавания отдельных имён, слов и окончаний, поэтому дословная точность озвучки не объявляется подтверждённой. ASR сама ошибается, особенно в именах и русских окончаниях. Она не заменяет прослушивание, оценку тембра, ударений или измерение процента всех дефектных реплик. Полного прослушивания четырёх выпусков не было. Silero CIS Base не делает автоматическую расстановку ударений: имена и неоднозначные слова могут требовать ручной правки знаком `+`.
+The beginning, middle, and end of each voice's turns were taken from every final episode: 24 excerpts. Slow and corrected English parts were additionally checked. No obvious looping was found in the final sample. Differences in recognizing individual names, words, and endings remain, so verbatim narration accuracy is not declared established. ASR itself makes errors, particularly on names and Russian endings. It does not replace listening, evaluation of timbre/stress placement, or measurement of the percentage of all defective turns. The four episodes were not listened to in full. Silero CIS Base does not place stress automatically: names and ambiguous words may need manual `+` editing.
 
-## Артефакты и проверки приложения
+## Artifacts and application checks
 
-Локальные артефакты находятся в `outputs/long-podcasts/` (игнорируется Git): `final-matrix.json` с точными модельными снимками, `final-asr-checks.json`, исходные планы, сценарии, журналы и промежуточные неуспешные прогоны. Относительные пути к итоговым MP3:
+Local artifacts are in `outputs/long-podcasts/` (ignored by Git): `final-matrix.json` with exact model snapshots, `final-asr-checks.json`, original outlines, scripts, logs, and intermediate failed runs. Relative paths to final MP3 files:
 
-| Вариант | Сценарий / редакция | Аудио |
+| Variant | Script / revision | Audio |
 |---|---|---|
 | RU 25 | `8ed7fd510034451d` / 1 | `ru-workspace/jobs/e6612347d67d4ac8/podcast.mp3` |
 | RU 60 | `82bff4f1bc2845cc` / 1 | `ru-workspace/jobs/da3bad585a47454e/podcast.mp3` |
 | EN 25 | `b4895a717c1b4a01` / 3 | `en-workspace/jobs/7f68d9403a474e3e/podcast.mp3` |
 | EN 60 | `e475efa541784cde` / 3 | `en-workspace/jobs/4f4796c343ed401f/podcast.mp3` |
 
-Окружение: Python 3.12.13, MLX-Audio 0.6.3, MLX 0.32.4, Torch 2.15.0, Streamlit 1.66.1, SoundFile 0.14.0, imageio-ffmpeg 0.7.0. **257 offline-тестов**, Ruff lint/format и `git diff --check` проходят. Проверены сохранение плана, повтор только неудачной редакторской попытки, ограничения частей, сохранность слов при делении, совпадение sidecar/metadata, длительность и обе локализации UI/CLI, повторное использование аудио после удаления и перестановки реплик. Настоящий браузер показал предупреждение для 29:06 / цели 25:00 и готовые плееры 24:50 / 25:00 и 59:17 / 60:00. Снимки: `ui-duration-warning.jpg`, `ui-final-ru.jpg`, `ui-final-en.jpg`.
+Environment: Python 3.12.13, MLX-Audio 0.6.3, MLX 0.32.4, Torch 2.15.0, Streamlit 1.66.1, SoundFile 0.14.0, imageio-ffmpeg 0.7.0. **257 offline tests**, Ruff lint/format, and `git diff --check` pass. Checks cover outline saving, retrying only failed editorial attempts, section limits, word preservation during splitting, matching sidecar/metadata, duration and both UI/CLI locales, and audio reuse after deleting/reordering turns. A real browser showed the warning for 29:06 / target 25:00 and finished players 24:50 / 25:00 and 59:17 / 60:00. Screenshots: `ui-duration-warning.jpg`, `ui-final-ru.jpg`, `ui-final-en.jpg`.
 
-Серии, другие книги и полная субъективная приёмка качества остаются следующими проверками; эти четыре случая не доказывают универсальную устойчивость TTS.
+Series, other books, and full subjective quality acceptance remained subsequent checks. These four cases do not establish universal TTS robustness.
 
-## Содержательная проверка прежних выпусков
+## Content review of earlier episodes
 
-02.11.2026. Выполнена содержательная проверка существующих материалов до последующей отмены личной M4. Новых текстовых заданий и зависимостей не было. В первом проходе сделаны две редакции сценариев и два рендера с синтезом одной реплики. Продолжение ниже описывает ещё две редакции, шесть новых аудиосегментов и защиту от обнаруженного дефекта. **Этот RU/Silero-пилот не принят пользователем из-за качества речи и ударений. Полное прослушивание и приёмка английского профиля не завершены; личная M4 на дату опыта ещё не была выполнена и позднее отменена по D027.**
+02.11.2026. Existing materials were reviewed for content before later cancellation of personal M4. No new text jobs or dependencies. The first pass produced two script revisions and two renders, synthesizing one turn. The continuation below describes another two revisions, six new audio segments, and protection against the discovered defect. **The user did not accept this RU/Silero pilot because of speech and stress-placement quality. Full listening and acceptance of the English profile were unfinished. Personal M4 had not been completed at the time of the experiment and was later cancelled under D027.**
 
-### Область проверки
+### Review scope
 
-Использованы сохранённый полный EPUB «Франкенштейна» из [проверки книги](2026-11-01-whole-book.md), четыре [длинных выпуска](2026-11-01-long-podcasts.md), [русская серия](2026-11-02-podcast-series.md) и короткий синтетический материал из [приёмки исполнителей](2026-11-02-provider-acceptance.md). Источник книги имеет SHA-256 `bf04d57cf243314ab770df6fcea6a9cfb1e5a281426453e23c128c5a9c3eb662`; короткий источник — `tests/fixtures/chapter.md`.
+The saved complete Frankenstein EPUB from the [book check](2026-11-01-whole-book.md), four [long episodes](2026-11-01-long-podcasts.md), the [Russian series](2026-11-02-podcast-series.md), and short synthetic material from [runner acceptance](2026-11-02-provider-acceptance.md) were used. The book source has SHA-256 `bf04d57cf243314ab770df6fcea6a9cfb1e5a281426453e23c128c5a9c3eb662`; the short source is `tests/fixtures/chapter.md`.
 
-Два сценария с целью 25 минут и три сценария серии прочитаны целиком. В продолжении дочитаны оба часовых сценария; их события и оговорки сопоставлены с оригиналом выборочно. Это не независимая проверка каждого утверждения всех семи выпусков. Для 28 контрольных тезисов записаны исходные фрагменты, локаторы, затронутые сценарии и результат ручного сопоставления в `outputs/content-acceptance/content-checks.json`. Подсчёт строк этого файла не является метрикой общего качества.
+Two 25-minute-target scripts and three series scripts were read in full. Both hour-long scripts were finished in the continuation, with their events and caveats spot-checked against the original. This is not an independent check of every claim in all seven episodes. For 28 control claims, original fragments, locators, affected scripts, and manual-comparison outcomes are recorded in `outputs/content-acceptance/content-checks.json`. Its line count is not an overall quality metric.
 
-Ссылки ниже используют номера фрагментов сохранённого источника `bf04d57cf243314ab770`. Номер фрагмента и номер главы в тексте книги различаются.
+References below use fragment numbers of saved source `bf04d57cf243314ab770`. Fragment numbers differ from chapter numbers in the book text.
 
-| Проверяемое различие | Оригинальные фрагменты | Результат сопоставления |
+| Distinction checked | Original fragments | Comparison result |
 |---|---|---|
-| Адресат первого письма и место отправления | 4–5 | Маргарет Савилл — сестра; Санкт-Петербург — место письма, Архангельск — план следующей поездки. |
-| История Элизабет и смерть матери | 13, 17 | Сохранена история принятия Элизабет в семью из данной редакции; мать заражается при уходе за ней. Утрата не названа единственной доказанной причиной опыта. |
-| Оживление и первая встреча | 21, 23 | Рост около восьми футов, ноябрьская ночь около часа. Молния не добавлена как способ оживления. Протянутая рука не выдана за доказанное нападение. |
-| Забота Генри | 24–25 | Исправлены грамматика и неполная ссылка: зима в комнате больного описана во фрагменте 24, ответ об отплате — во фрагменте 25. |
-| Признание Жюстины | 34–35 | Ложное признание и угрозы духовника сохранены; нравственное самообвинение Виктора не выдано за собственноручное убийство. |
-| Обучение Существа | 48, 51 | Три найденные книги, дневник из одежды и чтение Вольнея Феликсом различаются. Неполное понимание Вертера не превращено в полное усвоение его взглядов. |
-| Разговор с Де Лейси | 53 | Сочувствие старика, реакции вернувшихся и сдержанность Существа переданы раздельно. Нет утверждения, что старик отказался слушать. |
-| Убийство Уильяма и подстава Жюстины | 56 | Сохранено признание Существа; объяснение отвержением не заменяет ответственности за действия. |
-| Самостоятельные цели Генри | 62 | Индийский замысел связан с колонизацией и торговлей; намерение не выдано за осуществлённый успех. |
-| Спутница и угроза | 65–66 | Будущая воля и характер Спутницы остаются допущениями. Угроза называет брачную ночь, а конкретную жертву предполагает Виктор. |
-| Клерваль и алиби | 69, 71 | Находка тела и показания о лодке не заменяют наблюдения убийства. Алиби относится к часу обнаружения тела. |
-| Свадьба и последующие смерти | 74, 77–78 | Тайну обещано раскрыть после свадьбы; Виктор видит тело Элизабет и бегство Существа, но не само убийство. Смерть отца и последующее заключение не объединены в одно событие. |
-| Передача рассказа | 83 | Участие Виктора в правке записей Уолтона отмечено; это не объявлено самостоятельным доказательством лжи. |
-| Возвращение и финал | 84–85, 87 | Согласие седьмого сентября отделено от открывшегося одиннадцатого прохода. Самосожжение Существа остаётся обещанием; наблюдаем только уход на плоту. |
+| First letter's recipient and place of writing | 4–5 | Margaret Saville is the sister. St Petersburg is the letter's location, Archangel the planned next journey. |
+| Elizabeth's history and the mother's death | 13, 17 | The account of Elizabeth joining the family in this edition is retained. The mother contracts illness while caring for her. The loss is not called the experiment's sole established cause. |
+| Animation and first encounter | 21, 23 | About eight feet tall, a November night at around one. Lightning is not added as the animation method. An outstretched hand is not presented as a proven attack. |
+| Henry's care | 24–25 | Grammar and an incomplete reference were corrected: the winter in the sickroom is described in fragment 24, the response about repayment in fragment 25. |
+| Justine's confession | 34–35 | The false confession and confessor's threats are retained. Victor's moral self-blame is not presented as murder by his own hand. |
+| The Creature's learning | 48, 51 | The three found books, journal from clothing, and Felix reading Volney are distinguished. Partial understanding of Werther is not turned into full adoption of his views. |
+| Conversation with De Lacey | 53 | The old man's sympathy, reactions of those returning, and the Creature's restraint are conveyed separately. There is no claim that the old man refused to listen. |
+| William's murder and framing Justine | 56 | The Creature's confession is retained. An explanation through rejection does not replace responsibility for actions. |
+| Henry's independent goals | 62 | The Indian project is linked to colonization and trade. An intention is not presented as accomplished success. |
+| Companion and threat | 65–66 | The Companion's future will and character remain assumptions. The threat names the wedding night, while Victor infers the specific victim. |
+| Clerval and the alibi | 69, 71 | Discovery of the body and testimony about the boat do not substitute for witnessing the murder. The alibi concerns the time the body was found. |
+| Wedding and subsequent deaths | 74, 77–78 | The secret is promised after the wedding. Victor sees Elizabeth's body and the Creature's escape, not the killing itself. His father's death and later imprisonment are not merged into one event. |
+| Transmission of the narrative | 83 | Victor's participation in editing Walton's notes is recorded, without treating it as independent evidence of lying. |
+| Return and ending | 84–85, 87 | Agreement on the seventh of September is separated from the passage opening on the eleventh. The Creature's self-immolation remains a promise. Only departure on a raft is observed. |
 
-В этих сопоставлениях новых сюжетных подмен не обнаружено. Обнаруженная неполная ссылка исправлена. Такое заключение относится к выбранным тезисам и редакциям, а не к произвольной книге или исполнителю.
+These comparisons found no new substitutions of plot facts. The discovered incomplete reference was corrected. That conclusion applies to the selected claims and revisions, not an arbitrary book or runner.
 
-### Исправления и объём редактуры
+### Corrections and editing scope
 
-**Первый выпуск серии:** сценарий `8f1b7edd58ab4fc4`, редакция 2 → 3. В реплике 60 «Генри остаётся его единственным сиделкой» заменено на «за ним ухаживает только Генри». Реплика 61 получила обе нужные ссылки, 24 и 25. Текст остальных реплик сохранён. Новый render `0397f144453f43e4` переиспользовал 96 из 97 сегментов; изменение одной лишь ссылки не вызвало повторного синтеза. Длительность — 1223,7625 с, около 20:24, прежний файл — 1224,55 с.
+**First series episode:** script `8f1b7edd58ab4fc4`, revision 2 → 3. In turn 60, “Генри остаётся его единственным сиделкой” (an ungrammatical “Henry remains his only nurse”) was replaced with “за ним ухаживает только Генри” (“only Henry cares for him”). Turn 61 received both required references, 24 and 25. Other turns' text was retained. New render `0397f144453f43e4` reused 96 of 97 segments. Changing a reference alone did not trigger resynthesis. Duration was 1223,7625 s, about 20:24; the previous file was 1224,55 s.
 
-**Русский выпуск с целью 25 минут:** сценарий `8ed7fd510034451d`, редакция 1 → 2. Удалены исходные реплики 2 и 16–18: вводная без нового содержания и повтор уже данного ответа о письме. Переход от ответа к вопросу о книгах остаётся связным; шесть ответов и существенные оговорки сохранены. Удалено 95 слов, осталось 3010 слов и 108 реплик. Новый render `ac91c97c4b794e29` использовал все 108 сегментов из кеша. Длительность уменьшилась на 46,625 с: с 23:49 до 23:03, оставаясь в допуске к цели 25 минут. Темп, паузы и форма звука не растягивались для достижения цели.
+**Russian episode with a 25-minute target:** script `8ed7fd510034451d`, revision 1 → 2. Original turns 2 and 16–18 were removed: an introduction without new content and repetition of an answer already given about the letter. The transition from that answer to the books question remains coherent, with all six answers and significant caveats retained. 95 words were removed, leaving 3010 words and 108 turns. New render `ac91c97c4b794e29` used all 108 segments from cache. Duration fell by 46,625 s, from 23:49 to 23:03, remaining within tolerance for the 25-minute target. Rate, pauses, and audio waveform were not stretched to meet the target.
 
-Правки сохранены через `service.edit_draft` с ожидаемой редакцией; рендеры созданы через общий сервис с явной моделью `silero-cis-base`. Прежние редакции, MP3 и сегменты сохранены. Оригинальные MP3 всех семи случаев сверены с хешами до изменений; новые файлы имеют собственные job IDs. Пользовательские настройки не менялись, использован отдельный `XDG_CONFIG_HOME`, установленные веса и `HF_HUB_OFFLINE=1`.
+Edits were saved through `service.edit_draft` with an expected revision. Renders were created through the shared service with explicit model `silero-cis-base`. Previous revisions, MP3 files, and segments were retained. Original MP3 files for all seven cases were checked against pre-change hashes. New files have their own job IDs. User settings were unchanged. A separate `XDG_CONFIG_HOME`, installed weights, and `HF_HUB_OFFLINE=1` were used.
 
-Короткие raw/final сценарии исполнителей сопоставлены повторно. У Codex из пяти исходных реплик четыре сохранились дословно, одна исправлена по грамматике, две добавлены ранее для содержания и длительности. У Claude из шести исходных реплик три переписаны: исправлялись название, язык и необоснованное сообщение об успешном проходе добровольцев. У Ollama две исходные большие реплики ранее переработаны в шесть; прямого соответствия реплика к реплике нет. Это описание фактической редакторской работы, **не процент ошибочных реплик**. Порог «не более 5%» по этим примерам не подтверждён.
+The runners' short raw/final scripts were compared again. Of Codex's five original turns, four remained verbatim, one was grammatically corrected, and two had been added earlier for substance and duration. Three of Claude's six original turns were rewritten to correct the title, language, and unsupported claim that volunteers had crossed successfully. Ollama's two original long turns had previously been reworked into six, without direct turn-to-turn correspondence. This describes actual editorial work, **not the percentage of erroneous turns**. The “no more than 5%” threshold is not established by these examples.
 
-### Продолжение: длинная пауза в английском аудио
+### Continuation: a long pause in English audio
 
-Для всех семи файлов выполнена акустическая проверка по сохранённым сегментам: RMS в окнах 20 мс, участки ниже −60 dBFS, начало и конец реплики, длительность относительно числа слов. Эти показатели использованы для отбора подозрительных мест, а не как автоматическая оценка качества голоса.
+An acoustic check of all seven files used saved segments: RMS in 20 ms windows, regions below −60 dBFS, turn beginnings/endings, and duration relative to word count. These measures selected suspect passages rather than automatically assessing voice quality.
 
-В EN 25, редакция 3, render `7f68d9403a474e3e`, реплика 37 из 46 слов занимала 90,96 с. Внутри неё обнаружены непрерывные участки почти полной тишины 36,56 с, 14,22 с и 10,62 с. В длинном участке амплитуда PCM16 составляла всего от −41 до 46. Дефект не был замечен прежней выборкой начала, середины и конца. Whisper на этом аудио давал повторы и неполную расшифровку; распознанные повторы на тишине не считаются доказательством зацикливания самой TTS.
+In EN 25, revision 3, render `7f68d9403a474e3e`, 46-word turn 37 lasted 90,96 s. It contained uninterrupted near-silent regions of 36,56 s, 14,22 s, and 10,62 s. PCM16 amplitude in the longest region was only −41 to 46. The earlier beginning/middle/end sample did not detect the defect. Whisper produced repetitions and an incomplete transcript on this audio. Recognized repetitions over silence are not evidence that TTS itself looped.
 
-Реплика разделена на три предложения **без изменения слов, роли или ссылок**. Сценарий `b4895a717c1b4a01` сохранён в редакции 4, новый render — `850e3c316bee480b`. Переиспользованы 53 из 56 сегментов. Новые части длятся 12,24 / 10,32 / 4,24 с; с двумя монтажными паузами весь фрагмент занимает 27,30 с. Максимальные участки почти полной тишины — 0,50 / 0,30 / 0,08 с. Повторная локальная ASR передаёт все три предложения, с расхождением написания имени Клерваля. Длительность выпуска — 1426,39 с, около 23:46, в пределах прежнего допуска к цели 25 минут. Никакой компенсации времени повторами или растягиванием звука не было.
+The turn was split into three sentences **without changing words, role, or references**. Script `b4895a717c1b4a01` was saved as revision 4, with new render `850e3c316bee480b`. 53 of 56 segments were reused. The new parts last 12,24 / 10,32 / 4,24 s. With two assembly pauses, the whole passage lasts 27,30 s. Maximum near-silent regions are 0,50 / 0,30 / 0,08 s. Repeated local ASR conveys all three sentences, with a different spelling of Clerval's name. Episode duration is 1426,39 s, about 23:46, within the earlier tolerance for a 25-minute target. Time was not compensated with repetitions or audio stretching.
 
-В RU 60 исправлены три формулировки: реплика 65 ошибочно подчиняла цель отдыху и отношениям вместо обратного; в реплике 76 повторилась ошибка «единственным сиделкой»; в реплике 237 пропущен предлог в «помощи, в которой Виктор нуждается». Реплика 257 получила дополнительную ссылку на фрагмент 85: просьба о мести находится во фрагменте 82, отказ требовать жертвы родиной и друзьями — во фрагменте 85. Сценарий `82bff4f1bc2845cc`, редакция 2, render `65d865115e0c4833`: 267 из 270 сегментов переиспользованы, длительность 3471,9375 с, около 57:52. Новые реплики также проверены локальной ASR; расхождения русских окончаний и имён остаются предметом слуховой проверки.
+Three wordings were corrected in RU 60: turn 65 incorrectly subordinated the goal to rest and relationships rather than the reverse; turn 76 repeated the “единственным сиделкой” grammatical error; turn 237 omitted a preposition in “помощи, в которой Виктор нуждается” (“the help Victor needs”). Turn 257 received an additional reference to fragment 85: the request for revenge is in fragment 82, while refusal to demand sacrificing country and friends is in fragment 85. Script `82bff4f1bc2845cc`, revision 2, render `65d865115e0c4833`: 267 of 270 segments reused, duration 3471,9375 s, about 57:52. New turns were also checked with local ASR. Differences in Russian endings and names remain subject to listening verification.
 
-Девять других английских реплик с медленным темпом или заметными паузами дополнительно сверены установленным Whisper Base MLX из предыдущего эксперимента. Новых подтверждённых дефектов в этой выборке не установлено; отдельные расхождения распознавания не исправлялись как доказанные ошибки TTS. Для MLX потребовался запуск вне ограниченного sandbox: библиотека инициализирует Metal даже при выборе CPU. Модель и processor загружены из прежних локальных закреплённых каталогов, `HF_HUB_OFFLINE=1`, без новых скачиваний и передачи аудио в облако.
+Nine other English turns with slow rates or noticeable pauses were additionally checked using installed Whisper Base MLX from the previous experiment. No further confirmed defects were established in this sample. Individual recognition differences were not corrected as proven TTS errors. MLX needed execution outside the restricted sandbox: it initializes Metal even when CPU is selected. Model and processor were loaded from earlier local pinned directories, with `HF_HUB_OFFLINE=1`, no new downloads, and no cloud transmission of audio.
 
-#### Защита в приложении и проверки
+#### Application protection and checks
 
-Общий `media._synthesize` теперь отклоняет **новый** сегмент с непрерывными десятью секундами RMS ниже −60 dBFS до записи WAV/checkpoint. Ошибка называет реплику и предлагает разделить или отредактировать её. Звук не обрезается и не озвучивается повторно автоматически. Это узкая защита от явного зависания, а не утверждённый пользователем порог комфортных пауз или проверка смысла произнесённых слов. Исторические кеши и готовые jobs не инвалидируются; для известного старого дефекта сохранена исправленная редакция.
+Shared `media._synthesize` now rejects a **new** segment with ten uninterrupted seconds of RMS below −60 dBFS before writing WAV/checkpoint. The error names the turn and suggests splitting or editing it. Audio is neither truncated nor automatically narrated again. This narrowly protects against an obvious stall. It is not a user-approved comfortable-pause threshold or a semantic check of spoken words. Historical caches and finished jobs are not invalidated. A corrected revision is retained for the known old defect.
 
-Регрессионный тест воспроизводит речь с длинным участком слабого ненулевого шума через настоящую проверку `_synthesize`: неудачный сегмент не принимается, прежний артефакт остаётся цел, а исправленный повтор использует завершённый первый сегмент. При временном повышении порога до тысячи секунд **только в памяти отдельного процесса** этот тест падает. Код на диске не подменялся.
+A regression test reproduces speech with a long interval of weak nonzero noise through the real `_synthesize` check: the failed segment is not accepted, the previous artifact stays intact, and a corrected retry uses the completed first segment. Temporarily raising the threshold to a thousand seconds **only in a separate process's memory** makes this test fail. Disk code was not substituted.
 
-На реальных сохранённых WAV проверка отклонила исходную реплику EN 25 и приняла девять других подозрительных реплик EN 60, сохранив число кадров и частоту дискретизации. Это не новый модельный вызов. Все прежние MP3 сверены по хешам, два новых полностью декодированы; неизменность слов английского сценария и ключей сохранённых сегментов проверена отдельно. Обновлены обе финальные матрицы, сценарии и материалы для прослушивания.
+On real saved WAV files, the check rejected the original EN 25 turn and accepted nine other suspect EN 60 turns, preserving frame count and sample rate. This is not a new model call. Every earlier MP3 was checked by hash, and both new ones were fully decoded. English script word preservation and saved segment keys were checked separately. Both final matrices, scripts, and listening materials were updated.
 
-Локальные свидетельства: `acoustic-scan.json`, `risk-asr.json`, `risk-repairs.json`, `repaired-asr.json`, `post-repair-acoustic.json`, `guard-replay.json`, `stall-mutation.json`. Исправленный английский фрагмент доступен отдельно как `clips/en-25-turn37-fixed.mp3`.
+Local evidence: `acoustic-scan.json`, `risk-asr.json`, `risk-repairs.json`, `repaired-asr.json`, `post-repair-acoustic.json`, `guard-replay.json`, `stall-mutation.json`. The corrected English excerpt is separately available as `clips/en-25-turn37-fixed.mp3`.
 
-### Текущие результаты
+### Current results
 
-| Вариант | Редакция | Render job | Длительность |
+| Variant | Revision | Render job | Duration |
 |---|---:|---|---:|
-| RU, цель 25 минут | 2 | `ac91c97c4b794e29` | 23:03 |
-| RU, цель 60 минут | 2 | `65d865115e0c4833` | 57:52 |
-| EN, цель 25 минут | 4 | `850e3c316bee480b` | 23:46 |
-| EN, цель 60 минут | 3 | `4f4796c343ed401f` | 59:17 |
-| Серия, выпуск 1 | 3 | `0397f144453f43e4` | 20:24 |
-| Серия, выпуск 2 | 1 | `71ba4c1fd8114ac1` | 20:10 |
-| Серия, выпуск 3 | 2 | `cdf5854a84294dcd` | 20:42 |
+| RU, 25-minute target | 2 | `ac91c97c4b794e29` | 23:03 |
+| RU, 60-minute target | 2 | `65d865115e0c4833` | 57:52 |
+| EN, 25-minute target | 4 | `850e3c316bee480b` | 23:46 |
+| EN, 60-minute target | 3 | `4f4796c343ed401f` | 59:17 |
+| Series, episode 1 | 3 | `0397f144453f43e4` | 20:24 |
+| Series, episode 2 | 1 | `71ba4c1fd8114ac1` | 20:10 |
+| Series, episode 3 | 2 | `cdf5854a84294dcd` | 20:42 |
 
-Все семь проходят прежнюю проверку длительности. Для существующих файлов проверены полное декодирование FFmpeg, хеш оригинала EPUB, соответствие каждой реплики сохранённому тексту аудиосегмента, голоса и языка, целостность сегментов по SHA-256 и сумма длительностей с монтажными паузами. Новые RU 25 и первый выпуск серии проверены после пересборки. Это проверка происхождения и технической целостности, **не доказательство отсутствия пропусков или ошибок произношения внутри синтезированной речи**.
+All seven pass the earlier duration check. Existing files were checked for complete FFmpeg decoding, EPUB original hash, each turn's match to saved audio-segment text, voice/language, segment SHA-256 integrity, and summed durations with assembly pauses. New RU 25 and the first series episode were checked after rebuilding. This checks provenance and technical integrity, **not absence of omissions or pronunciation errors within synthesized speech**.
 
-После изменения общего рендера проходят **356 offline-тестов**, Ruff check/format и `git diff --check`. Тесты не вызывают настоящие модели; результаты локальных рендеров и ASR описаны отдельно выше. Зависимости приложения не менялись. Тесты на конкретные литературные формулировки не добавлялись.
+After the shared-renderer change, **356 offline tests**, Ruff check/format, and `git diff --check` pass. Tests do not call real models. Local-render and ASR results are described separately above. Application dependencies were unchanged. No tests for specific literary wordings were added.
 
-### Что передано для прослушивания
+### Materials provided for listening
 
-В `outputs/content-acceptance/listening-guide.md` находятся плееры двух пилотов и ссылки на семь полных MP3 с соответствующими сценариями. Пилот RU/Silero — 1:45, EN/Qwen3 1.7B — 2:51. Каждый объединяет полные соседние реплики из начала, середины и конца часового выпуска; смысловые скачки между выбранными местами обозначены. Для всех семи выпусков сохранено по три отдельных фрагмента. `listening-manifest.json` содержит точные интервалы исходного MP3, номера реплик, ожидаемый текст, редакции и хеши. Это производные локальные QA-файлы, не новые результаты нейросинтеза; в Git они не входят.
+`outputs/content-acceptance/listening-guide.md` contains players for two pilots and links to seven complete MP3 files with their corresponding scripts. The RU/Silero pilot lasts 1:45, EN/Qwen3 1.7B 2:51. Each combines complete neighboring turns from the beginning, middle, and end of the hour-long episode, with semantic jumps between selected passages marked. Three individual excerpts were saved for each of the seven episodes. `listening-manifest.json` contains exact original-MP3 intervals, turn numbers, expected text, revisions, and hashes. These are derived local QA files, not new neural-synthesis results. They are not in Git.
 
-Получена оценка русского пилота: «Русский звучит очень плохо, ударения почти везде неверные». Пилот использует `silero-cis-base`, голоса `ru_roman` / `ru_zhadyra`; этот профиль пользовательскую слуховую приёмку не прошёл. Отзыв относится к предъявленному образцу и не задаёт измеренный процент дефектных реплик. Технические проверки и ASR выше не опровергают эту оценку. Следующий шаг по речи — выбрать и проверить короткий русский образец с приемлемым произношением перед новым длинным рендером; единичные ручные исправления не объявляются решением общей проблемы.
+Feedback on the Russian pilot was received: “Русский звучит очень плохо, ударения почти везде неверные” (“The Russian sounds very bad; stress placement is wrong almost everywhere”). The pilot uses `silero-cis-base`, `ru_roman` / `ru_zhadyra`, and this profile did not pass user listening acceptance. The feedback concerns the presented sample and does not establish a measured percentage of defective turns. The technical checks and ASR above do not refute this assessment. The next speech step was to select and verify a short Russian sample with acceptable pronunciation before another long render. Isolated manual corrections were not declared a solution to the overall problem.
 
-Оценка английского пилота пока не получена. Полное прослушивание примерно 3 часов 45 минут материала не завершено. Замечания нужно связывать с точной редакцией, временем и репликой, затем исправлять затронутый текст или сегмент и повторять соответствующую проверку. До этого полная слуховая приёмка остаётся незавершённой.
+Feedback on the English pilot had not yet been received. Full listening to about 3 hours 45 minutes of material was unfinished. Findings need to be tied to an exact revision, time, and turn, then the affected text or segment corrected and the appropriate check repeated. Until then, full listening acceptance remains unfinished.
