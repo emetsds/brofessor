@@ -317,10 +317,12 @@ def test_direct_audio_entry_point_uses_bundled_default(presets, tmp_path, monkey
 
 @pytest.fixture
 def qwen_ui_runtime(monkeypatch):
-    models = speech_models.list_models
-    monkeypatch.setattr(
-        speech_models, "list_models", lambda: [{**model, "compatible": True} for model in models()]
-    )
+    from brofessor.application import maintenance
+
+    # Both the model selector and settings inventory use the same simulated hardware.
+    supported_platform = SimpleNamespace(system=lambda: "Darwin", machine=lambda: "arm64")
+    monkeypatch.setattr(speech_models, "platform", supported_platform)
+    monkeypatch.setattr(maintenance, "platform", supported_platform)
     monkeypatch.setattr(speech_models, "qwen_runtime_available", lambda: True)
 
 
