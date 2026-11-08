@@ -1,7 +1,20 @@
+# Local configuration and credentials
 .DS_Store
 .env
 .env.*
 !.env.example
+.codex/
+.streamlit/secrets.toml
+.claude/settings.local.json
+
+# Editors and temporary files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python environments, caches and build output
 .venv/
 __pycache__/
 *.py[cod]
@@ -9,17 +22,25 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 build/
 dist/
 *.egg-info/
-.streamlit/secrets.toml
-.claude/settings.local.json
+.python/
+.cache/
+
+# Local projects, generated media and model downloads
 .brofessor/
 workspaces/
 outputs/
 models/
-*.log
-.python/
 .models-cache/
-.cache/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-*
+*.log

@@ -6,7 +6,7 @@ They provide reproducible Cyrillic/Latin PDF output without system fonts, networ
 downloads at render time, or an agent's bundled runtime.
 
 The upstream Bitstream Vera/DejaVu/Arev license permits embedding and distribution.
-Its complete text is in [LICENSES/DejaVu.txt](../../../LICENSES/DejaVu.txt).
+Its complete text is in [LICENSES/DejaVu.txt](../../../../../LICENSES/DejaVu.txt).
 The fonts retain their original names and have not been modified.
 
 Source archive: `dejavu-fonts-ttf-2.37.zip`.
