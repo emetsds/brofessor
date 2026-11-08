@@ -2,7 +2,7 @@
 
 Turn books and other source materials into answers and written reports with citations, practice questions, two-voice podcasts, chaptered audiobooks, and editable PowerPoint presentations. Work in a local web UI or use the same workspace from a terminal or coding agent.
 
-**Early working version.** Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/experiments/whole-book.md). Four earlier 25/60-minute cases passed duration checks with legacy voices. Fresh Qwen Base scripts now produce RU 20:43 for a 20-minute request and EN 55:24 for 60 minutes; [measurements and limits](docs/experiments/qwen-long-dialogues.md#свежие-сценарии-после-пересчёта-бюджета). Editable lists, tables, and sequences have passed [PPTX layout checks](docs/experiments/pptx-quality.md). [Content review and listening preparation](docs/experiments/content-and-listening.md) have progressed; full listening acceptance remains open.
+**Early working version.** Russian and English podcasts and PPTX generation work. Whole-book reading and citations have been checked on one complete EPUB; [results and limits](docs/evidence/2026-11-01-whole-book.md). Four earlier 25/60-minute cases passed duration checks with legacy voices. Fresh Qwen Base scripts now produce RU 20:43 for a 20-minute request and EN 55:24 for 60 minutes; [measurements and limits](docs/evidence/2026-11-03-qwen-long-dialogues.md#свежие-сценарии-после-пересчёта-бюджета). Editable lists, tables, and sequences have passed [PPTX layout checks](docs/evidence/2026-11-02-pptx.md). [Content review and listening preparation](docs/evidence/2026-11-01-long-podcasts.md#содержательная-проверка-прежних-выпусков) have progressed; full listening quality has not been established by these development checks.
 
 [Get started](#get-started) · [Web UI](#use-the-web-ui) · [CLI workflows](#use-the-cli) · [For agents](#for-agents) · [Troubleshooting](#troubleshooting)
 
@@ -59,7 +59,7 @@ no login, repeat the CLI sign-in even if Desktop works. See
 [Claude authentication](https://code.claude.com/docs/en/authentication) and
 [Desktop's CLI comparison](https://code.claude.com/docs/en/desktop#cli-flag-equivalents).
 Claude Code 2.1.317 has passed a real directory-navigation check with verified source quotes;
-see [the login and runner check](docs/experiments/claude-authentication.md).
+see [the login and runner check](docs/evidence/2026-11-06-claude-authentication.md).
 
 For Ollama, start the **server** with `OLLAMA_NO_CLOUD=1`. It must report cloud disabled through `/api/status` and have the named model installed. The default address is `127.0.0.1:11434`; you can also select another computer by IP:port. Setting the variable only in the brofessor terminal is insufficient. The [UI port and Ollama address](#ui-port-and-ollama-address) can be changed.
 
@@ -71,7 +71,7 @@ Check the chosen provider before generating anything:
 uv run --no-sync brofessor doctor --provider codex
 ```
 
-Look for `"available": true`. If false, follow `diagnostic`. This checks connection and setup without generating content. Real workflows have been checked with Codex CLI 0.162.1, Claude Code 2.1.185, and Ollama 0.40.6 with a local 27B model on this Mac. Generated drafts still needed editorial corrections; smaller local models had substantial failures. See [acceptance results and limits](docs/experiments/v1-acceptance.md).
+Look for `"available": true`. If false, follow `diagnostic`. This checks connection and setup without generating content. Real workflows have been checked with Codex CLI 0.162.1, Claude Code 2.1.185, and Ollama 0.40.6 with a local 27B model on this Mac. Generated drafts still needed editorial corrections; smaller local models had substantial failures. See [acceptance results and limits](docs/evidence/2026-11-02-provider-acceptance.md).
 
 For Ollama models that explicitly advertise support for `think: false`, brofessor disables thinking to keep these text transformations bounded. Other models keep their default. `doctor` reports the selected `think` value when applicable. The server also needs enough context for the request: the local acceptance profile used `OLLAMA_CONTEXT_LENGTH=32768` on a 32 GB Mac. This short-source check does not establish whole-book quality or memory requirements for every local model. See [Ollama context settings](https://docs.ollama.com/faq#how-can-i-specify-the-context-window-size).
 
@@ -248,7 +248,7 @@ Ask for “read all documents in Trials” for full folder coverage. Before acce
 
 Task details show selected paths, original quotes, coverage, and navigation history. File membership is captured at task start; each document's bytes are frozen at first inspection. Earlier answers and rendering retain those originals after edits, moves, or disconnection. New tasks inspect current files. Use `source disconnect DIRECTORY_ID` to detach a directory; saved tasks and evidence remain.
 
-Navigation is bounded to 24 model turns, 48,000 characters of context, and 80,000 characters of selected original evidence. Local search is limited to 32 MiB of text and a catalog to 100,000 supported documents. Narrow the task or connected directory when a limit is reached. [Real checks and limitations](docs/experiments/pydantic-navigation.md).
+Navigation is bounded to 24 model turns, 48,000 characters of context, and 80,000 characters of selected original evidence. Local search is limited to 32 MiB of text and a catalog to 100,000 supported documents. Narrow the task or connected directory when a limit is reached. [Real checks and limitations](docs/evidence/2026-11-05-source-navigation.md).
 
 ### Create a presentation
 
@@ -271,7 +271,7 @@ Use the focus to request a comparison table or a sequence of events/steps where 
 
 The UI offers fields for slide text, tables, steps, notes, and references. Its advanced JSON editor and CLI drafts use these slide fields: `title`, `bullets`, `notes`, `citations`, optional `table` (`headers` and `rows`), and optional `steps`. A table has 1–6 columns and 1–8 data rows; a sequence has 2–5 labels. Choose one visual per slide, with up to two short bullets alongside it. Keep unused `table` as `null` and `steps` as `[]`. Existing bullet-only drafts still work. See [Edit a draft](#edit-a-draft) to save a new revision before rendering.
 
-The renderer measures text using an installed font: Arial, then Liberation Sans, then DejaVu Sans, including bold. macOS normally supplies Arial; on Debian/Ubuntu, install `fonts-dejavu-core` if neither alternative is present. Titles stay at least 28 pt, bullets 20 pt, and table/diagram text 18 pt. Long sequence labels use a vertical layout. If the content still does not fit, the render job names the slide and fails: shorten it, move details to notes, or split it in the draft, save, then render again. Words are never silently dropped. Fonts are not embedded, so use the same font on the computer where you present. The UI currently offers a PPTX download; PDF/PNG previews in the [test report](docs/experiments/pptx-quality.md) are QA artifacts.
+The renderer measures text using an installed font: Arial, then Liberation Sans, then DejaVu Sans, including bold. macOS normally supplies Arial; on Debian/Ubuntu, install `fonts-dejavu-core` if neither alternative is present. Titles stay at least 28 pt, bullets 20 pt, and table/diagram text 18 pt. Long sequence labels use a vertical layout. If the content still does not fit, the render job names the slide and fails: shorten it, move details to notes, or split it in the draft, save, then render again. Words are never silently dropped. Fonts are not embedded, so use the same font on the computer where you present. The UI currently offers a PPTX download; PDF/PNG previews in the [test report](docs/evidence/2026-11-02-pptx.md) are QA artifacts.
 
 ### Translate a book
 
@@ -283,7 +283,7 @@ commands apply. The result offers **Download PDF** and **Build PDF**. Original
 page numbers and block coordinates accompany the source passages; each export
 also stores a local `layout-rN.json` map alongside the PDF.
 
-PDF translation has been checked on a [complete 31-page technical book](docs/experiments/pdf-whole-book.md):
+PDF translation has been checked on a [complete 31-page technical book](docs/evidence/2026-11-05-pdf-translation.md):
 all 262 translated blocks were reviewed, all pages rendered and inspected, and
 the actual PDF audited. Horizontal mixed-font paragraphs, columns, ordinary
 table cells and unique, untransformed text Form XObjects are supported. Original
@@ -298,7 +298,7 @@ page and region instead of publishing an incomplete file. Complex inline
 mathematics, arbitrary layouts and larger books remain unverified. Minor language
 issues remain in the checked book; this is not a guarantee of editorial quality.
 
-The current path supports unencrypted, reflowable EPUB 2.0 with NCX and EPUB 3.x with XHTML navigation, including additional NCX. Standard XHTML/NCX DOCTYPE declarations are handled locally; custom DTDs/entities, fixed layout, scripted content and media overlays are rejected. Code, mathematics and original illustrations are retained; text inside images is not translated. Marked copyright pages and Project Gutenberg license/header notices stay in their original language and are reported with the output. [Compatibility and reader checks](docs/experiments/epub-reader-compatibility.md), [terminology checks](docs/experiments/book-terminology.md).
+The current path supports unencrypted, reflowable EPUB 2.0 with NCX and EPUB 3.x with XHTML navigation, including additional NCX. Standard XHTML/NCX DOCTYPE declarations are handled locally; custom DTDs/entities, fixed layout, scripted content and media overlays are rejected. Code, mathematics and original illustrations are retained; text inside images is not translated. Marked copyright pages and Project Gutenberg license/header notices stay in their original language and are reported with the output. [Compatibility and reader checks](docs/evidence/2026-11-04-epub-reader.md), [terminology checks](docs/evidence/2026-11-04-book-terminology.md).
 
 CLI equivalents, after importing the EPUB with `source add`:
 
@@ -331,7 +331,7 @@ uv run --no-sync brofessor draft show ASK_ID
 
 Questions can be in Russian while sources are in English. Small source sets are passed through as originals. For larger sets, the chosen text provider first writes short RU/EN search variants; local BM25 selects original fragments and nearby context. This adds one text-model call. The answer uses those excerpts, with a visible record of what was selected. A missing match does not prove the answer is absent from the entire book. Use a podcast or presentation workflow for a whole-book overview; question retrieval is selective.
 
-Every new cited reference needs an original quote. The app rejects invented words, numbers, or punctuation and references outside the selected evidence. When only whitespace or line wrapping differs, it restores the original substring before saving. This checks quotation integrity; it does not automatically prove that the quote supports every claim. Old saved answers keep their references and remain editable, with a notice that they have no verified exact quotes. [Measured results and limitations](docs/experiments/source-questions.md).
+Every new cited reference needs an original quote. The app rejects invented words, numbers, or punctuation and references outside the selected evidence. When only whitespace or line wrapping differs, it restores the original substring before saving. This checks quotation integrity; it does not automatically prove that the quote supports every claim. Old saved answers keep their references and remain editable, with a notice that they have no verified exact quotes. [Measured results and limitations](docs/evidence/2026-11-02-source-questions.md).
 
 To restrict a question to particular sources, repeat `--source SOURCE_ID`. For a quick local word search without a model call:
 
@@ -372,7 +372,7 @@ All templates use the same providers and source selection flags as other content
 
 A topic reference can reuse **Accepted translation terminology** from a saved translation in the same output language. Both interfaces pin that translation revision. The saved glossary supplies editorial terminology preferences; original excerpts supply factual evidence. The export includes the accepted terms and meanings without creating another editable glossary.
 
-Each saved revision automatically includes a local `report-rN.md` file in its job artifacts. Download it from the task, or resolve its artifact path against the CLI workspace. **Edit task** provides ordinary section fields and ordering controls. `draft save` and the advanced JSON editor can also change citations and quotes together. Saving preserves earlier revisions and exports the new one without another model call. No separate `draft render` step is needed. [Verification and limits](docs/experiments/written-reports.md).
+Each saved revision automatically includes a local `report-rN.md` file in its job artifacts. Download it from the task, or resolve its artifact path against the CLI workspace. **Edit task** provides ordinary section fields and ordering controls. `draft save` and the advanced JSON editor can also change citations and quotes together. Saving preserves earlier revisions and exports the new one without another model call. No separate `draft render` step is needed. [Verification and limits](docs/evidence/2026-11-05-written-reports.md).
 
 ### Practise understanding
 
@@ -398,7 +398,7 @@ uv run --no-sync brofessor audiobook SOURCE_ID --language ru --translation-job T
 uv run --no-sync brofessor draft render AUDIOBOOK_ID --wait
 ```
 
-The existing local Qwen Base voice produces MP3 and M4B with embedded chapters; FFmpeg is required. The UI offers a chapter selector and downloads. EPUB spine entries, PDF pages, and Markdown headings define chapter boundaries. Footnotes and table cells are read in extracted source order, without invented descriptions or a summary; text inside images is not narrated. PDF extraction order can need correction for complex layouts. Inspect **Reading coverage** for empty/excluded units. Edit chapter titles or passages before rendering; changed narration is marked as edited. Earlier files remain available, and matching speech segments are reused after an edit, cancellation or interruption. [Checks and limits](docs/experiments/additional-formats.md).
+The existing local Qwen Base voice produces MP3 and M4B with embedded chapters; FFmpeg is required. The UI offers a chapter selector and downloads. EPUB spine entries, PDF pages, and Markdown headings define chapter boundaries. Footnotes and table cells are read in extracted source order, without invented descriptions or a summary; text inside images is not narrated. PDF extraction order can need correction for complex layouts. Inspect **Reading coverage** for empty/excluded units. Edit chapter titles or passages before rendering; changed narration is marked as edited. Earlier files remain available, and matching speech segments are reused after an edit, cancellation or interruption. [Checks and limits](docs/evidence/2026-11-06-learning-and-audiobook.md).
 
 ### Keep notes
 
@@ -422,7 +422,7 @@ uv run --no-sync brofessor note show NOTE_ID --revision 1
 uv run --no-sync brofessor note save NOTE_ID edited-note.json EXPECTED_REVISION
 ```
 
-Saving creates a revision and keeps the original answer link. Notes, original sources, answer history, and follow-up links travel together when you copy a closed project folder. [Verification and limits](docs/experiments/notes-and-followups.md).
+Saving creates a revision and keeps the original answer link. Notes, original sources, answer history, and follow-up links travel together when you copy a closed project folder. [Verification and limits](docs/evidence/2026-11-02-notes-and-followups.md).
 
 ### Check reading coverage
 
@@ -460,7 +460,7 @@ Use `--no-auto-audio` for a script-only request. `task audio TASK_ID --cancel` s
 After edits, `draft render` builds the saved revision and returns its paths in `artifacts`.
  The default `qwen3-base` profile runs Qwen3-TTS Base 1.7B 4-bit locally. It includes an ExNihilus male `host` and female `guest`, with native Russian and English samples downloaded alongside the weights. Each job saves the exact samples and transcripts inside its project. A new user can generate speech after the model download. Qwen code and weights are Apache-2.0, and the ExNihilus recordings are CC0. [Voice source and terms](https://huggingface.co/ExNihilus/qwen3-tts-reference-voices).
 
-The Russian five-minute Base listening sample was approved by the user. The [long-dialogue development check](docs/experiments/qwen-long-dialogues.md) records what has been verified for longer Russian and English episodes. Manual stress marks are unreliable with this model.
+The Russian five-minute Base listening sample was approved by the user. The [long-dialogue development check](docs/evidence/2026-11-03-qwen-long-dialogues.md) records what has been verified for longer Russian and English episodes. Manual stress marks are unreliable with this model.
 
 On first use, open **Settings → Models** or **Storage** to download Qwen and both language pairs (about 2.34 GB).
 Downloads continue after closing the window and can be resumed there. Missing files or runtime pause a new
@@ -483,11 +483,76 @@ For episodes of 20–60 minutes, brofessor saves an outline and writes distinct 
 
 `--minutes` is a target. CLI and UI report the measured duration and whether it is within 10% of the request. Full episodes also require the 20–60 minute range. When the result misses, edit the script and render again. Matching speech segments are reused. Generate separate drafts for Russian and English.
 
-Older TTS profiles are retained for reproducing historical projects. Their restore commands, optional dependencies and license limits are documented in [Restoring older speech profiles](docs/legacy-speech.md).
+### Restoring older speech profiles
+
+The supported speech profile is `qwen3-base` with ready-to-use ExNihilus voices.
+Older profiles are retained for reproducing existing projects and their saved
+model specifications. They are hidden from the regular model list and UI.
+Saved settings naming a retired or unknown profile resolve to the current default.
+
+#### Restore a historical job
+
+Open the original project. Its render job records the model revision, settings
+and, for reference-based engines, the project-relative voice samples and transcripts.
+Install the optional dependencies required by that engine and download its exact
+profile or saved model reference.
+
+| Historical ID | Install extra | Language | Weight license |
+|---|---|---|---|
+| `qwen3-0.6b` | `speech` | RU / EN | Apache-2.0 |
+| `qwen3-1.7b` | `speech` | RU / EN | Apache-2.0 |
+| `silero-cis-base` | `silero` | RU | MIT |
+| `silero-ru` | `silero` | RU | CC-BY-NC-SA-4.0 |
+| `kokoro-ru` | `russian-speech` | RU | OpenRAIL |
+| `f5-tts` | `f5` | EN | CC-BY-NC-4.0 |
+| `f5-tts-russian` | `f5` | RU | CC-BY-NC-4.0 |
+| `espeech-rl-v2` | `f5` | RU | Apache-2.0, declared upstream |
+
+For example, restore a failed or interrupted CustomVoice 1.7B job with its saved
+profile. Retain the extras needed by other engines in the environment when running
+`uv sync`.
+
+```sh
+uv sync --locked --python 3.12 --extra ui --extra speech
+uv run --no-sync brofessor -w /absolute/project tts download qwen3-1.7b --wait
+uv run --no-sync brofessor -w /absolute/project job resume RENDER_JOB_ID
+```
+
+An explicit legacy render is also available for rebuilding a saved draft.
+
+```sh
+uv run --no-sync brofessor -w /absolute/project draft render DRAFT_ID --tts-model qwen3-1.7b --wait
+```
+
+`tts use` accepts currently supported profiles. For historical jobs, use their
+recorded model and resume operation, or specify the model on an explicit render.
+
+#### Historical F5 voice settings
+
+Frozen render jobs use their own copies in `voice-samples/`. To explicitly rebuild
+an old draft with F5 or ESpeech, the corresponding local voice preferences can be
+restored through the compatibility command `tts voice`. It is hidden from the
+regular help. Supply PCM16 WAV, 2–20 seconds, with the exact spoken transcript and
+permission to use the recording.
+
+```sh
+uv sync --locked --python 3.12 --extra ui --extra speech --extra f5
+uv run --no-sync brofessor tts voice set host --language ru --audio host.wav --text "Exact words in host.wav."
+uv run --no-sync brofessor tts voice set guest --language ru --audio guest.wav --text "Exact words in guest.wav."
+uv run --no-sync brofessor -w /absolute/project tts download f5-tts-russian --wait
+uv run --no-sync brofessor -w /absolute/project draft render DRAFT_ID --tts-model f5-tts-russian --wait
+```
+
+The original Russian Silero CIS Base expects manual `+` stress and spelled-out
+numbers and Latin names. The later Silero RU and Kokoro RU profiles have their own
+text preparation. Preserve the job's saved text, model specification and cached
+segments when restoring it.
+
+Historical voice selection, source licenses and limitations are recorded in the [speech comparison history](docs/evidence/2026-11-03-speech-selection.md).
 
 ### Writing options and source review
 
-The regular writer remains the default. For long podcasts, **Writing options → Source-backed writing (experimental)** asks the writer to revisit original fragments for each section and carry a compact record of what was already said. Its plan records the listener's goal, source disagreements, relative section lengths, and insufficient material. The first controlled comparison found a small editorial preference and no demonstrated factual improvement, with larger inputs; see [results and limits](docs/experiments/episode-writing.md).
+The regular writer remains the default. For long podcasts, **Writing options → Source-backed writing (experimental)** asks the writer to revisit original fragments for each section and carry a compact record of what was already said. Its plan records the listener's goal, source disagreements, relative section lengths, and insufficient material. The first controlled comparison found a small editorial preference and no demonstrated factual improvement, with larger inputs; see [results and limits](docs/evidence/2026-11-04-episode-writing.md).
 
 ```sh
 uv run --no-sync brofessor podcast --writing-method originals --minutes 20 --focus "Compare the claims and their limits" --wait
@@ -526,7 +591,7 @@ The plan has a topic map and assigns each topic ID to exactly one episode. This 
 
 Each episode pins its plan revision. Later plan edits affect new episode requests. Existing scripts and audio keep their original inputs. Use `series episode SERIES_ID 1 --revision 1` to select an older saved plan explicitly. Repeating the same series/revision/episode request returns the same job; use `job resume` after a failure. After editing an episode script, create a new audio render as usual. The UI requires saving or loading the latest plan before preparing an episode.
 
-A [three-episode Russian series](docs/experiments/podcast-series.md) has been checked on Frankenstein: 20:25, 20:10 and 20:42 for 20-minute targets. The third script needed a substantive addition after its first audio render. English series, other books and full listening quality still need verification. Editing a plan reuses its existing reading notes; create a new plan for a substantially different focus.
+A [three-episode Russian series](docs/evidence/2026-11-02-podcast-series.md) has been checked on Frankenstein: 20:25, 20:10 and 20:42 for 20-minute targets. The third script needed a substantive addition after its first audio render. English series, other books and full listening quality still need verification. Editing a plan reuses its existing reading notes; create a new plan for a substantially different focus.
 
 ### Edit a draft
 
@@ -570,13 +635,13 @@ Resume is available for `failed`, `cancelled`, and `interrupted` jobs; fix the r
 
 Sources and outputs are stored in your workspace. Dependencies and model weights require downloads during setup or first use; the provider table above explains where text is processed.
 
-Reflowable EPUB 2/3 translation is available in both interfaces. Its [contextual glossary and correction path](docs/experiments/book-terminology.md) have been checked on a synthetic chapter. After an earlier run needed corrections, the updated workflow produced a [complete short technical book without manual edits](docs/experiments/epub-recurring-terms.md): all 213 blocks were reviewed against the source, and the EPUB passed structural and reader checks. Minor grammar issues remain. Recurring-term sampling and automatic occurrence assignment are not exhaustive. Text-layer PDF translation is available in both interfaces and has passed a [complete 31-page book check](docs/experiments/pdf-whole-book.md), following the earlier synthetic check. Larger books and arbitrary PDF layouts remain unverified.
+Reflowable EPUB 2/3 translation is available in both interfaces. Its [contextual glossary and correction path](docs/evidence/2026-11-04-book-terminology.md) have been checked on a synthetic chapter. After an earlier run needed corrections, the updated workflow produced a [complete short technical book without manual edits](docs/evidence/2026-11-04-epub-recurring-terms.md): all 213 blocks were reviewed against the source, and the EPUB passed structural and reader checks. Minor grammar issues remain. Recurring-term sampling and automatic occurrence assignment are not exhaustive. Text-layer PDF translation is available in both interfaces and has passed a [complete 31-page book check](docs/evidence/2026-11-05-pdf-translation.md), following the earlier synthetic check. Larger books and arbitrary PDF layouts remain unverified.
 
 Files are limited to 100 MiB each. Source search and individual questions have been checked on 20 synthetic questions plus three questions in a complete EPUB; this is a small control corpus, not a general retrieval-quality guarantee. Notes and bounded follow-ups are available in both interfaces. Slide-image previews and Google Slides export are not available yet. Audio pronunciation and voice quality need listening review.
 
 Workspace schema is now 6. Existing schemas 0-5 upgrade automatically when opened. Schema 4 adds directory registrations and separates task-cached originals from manually selected sources; schema 5 adds reversible task deletion; schema 6 adds task names, first-narration continuations, and durable workflow timing. Sources, jobs, revisions, and artifacts are retained. Older app versions cannot open schema 6.
 
-Measured results: [current acceptance and providers](docs/experiments/v1-acceptance.md), [first workflow](docs/experiments/first-slice.md), [local speech](docs/experiments/media.md), [PPTX layouts](docs/experiments/pptx-quality.md), [source questions](docs/experiments/source-questions.md), [notes and follow-ups](docs/experiments/notes-and-followups.md).
+Measured results: [provider checks](docs/evidence/2026-11-02-provider-acceptance.md), [speech selection](docs/evidence/2026-11-03-speech-selection.md), [PPTX layouts](docs/evidence/2026-11-02-pptx.md), [source questions](docs/evidence/2026-11-02-source-questions.md), [notes and follow-ups](docs/evidence/2026-11-02-notes-and-followups.md).
 
 ## Development
 
@@ -611,7 +676,7 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. For project work, read [AGENTS.md](AGENTS.md). The [implementation plan](docs/implementation-plan.md), [requirements](docs/requirements.md), [architecture](docs/architecture.md), and [technical research](docs/research.md) are in Russian.
+Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. For project work, read [AGENTS.md](AGENTS.md). Project documentation is in Russian: [specification](docs/specification.md) for current requirements and architecture, [Decision log](docs/decision-log.md) for decisions and their history, and [Plan](docs/plan.md) for unfinished work. Supporting reports in [docs/evidence](docs/evidence) describe checks at their recorded versions; they do not create a separate backlog.
 
 The Python package uses a `src` layout. Code is grouped by responsibility:
 
@@ -639,7 +704,7 @@ The CLI entry point is `brofessor.interfaces.cli.app:app`; Streamlit starts from
 `brofessor/interfaces/web/app.py`. The worker and runner guardian are separate Python
 modules under `application` and `infrastructure/text`. Bundled JS, fonts, and the speech
 catalogue are package resources and work from an installed wheel outside the checkout.
-See the [architecture](docs/architecture.md#структура-пакета) for module ownership.
+See the [package structure](docs/specification.md#структура-пакета) for module ownership.
 
 Run developer tools from the repository root as modules, for example:
 
