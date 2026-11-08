@@ -66,7 +66,7 @@ def render_draft(
         "--tts-model",
         "--model",
         hidden=True,
-        help="Pinned model override for legacy speech renders.",
+        help="Pinned speech model for this render.",
     ),
     request_key: str | None = None,
     revision: int | None = typer.Option(None, min=1, help="Pin this saved draft revision."),

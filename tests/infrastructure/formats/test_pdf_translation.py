@@ -61,7 +61,7 @@ def test_overflow_leaves_previous_output_and_original_untouched(tmp_path):
         book.render(identity(book), book.source, "en")
 
 
-@pytest.mark.parametrize("fault", ["rotation", "image", "form", "invisible", "clip"])
+@pytest.mark.parametrize("fault", ["rotation", "image", "invisible", "clip"])
 def test_unsupported_pages_are_named_before_translation(tmp_path, fault):
     source = make_pdf(tmp_path / "source.pdf", pages=1)
     writer = PdfWriter(clone_from=source)
@@ -75,11 +75,6 @@ def test_unsupported_pages_are_named_before_translation(tmp_path, fault):
             from reportlab.lib.utils import ImageReader
 
             canvas.drawImage(ImageReader(Image.new("RGB", (20, 20), "red")), 42, 42)
-        elif fault == "form":
-            canvas.beginForm("nested")
-            canvas.drawString(42, 700, "Nested text")
-            canvas.endForm()
-            canvas.doForm("nested")
         elif fault == "clip":
             path = canvas.beginPath()
             path.rect(42, 680, 50, 40)
@@ -95,7 +90,7 @@ def test_unsupported_pages_are_named_before_translation(tmp_path, fault):
         writer = PdfWriter(clone_from=stream)
     writer.write(source)
     with pytest.raises(ValueError, match="page 1"):
-        PdfBook(source, projection_version=1 if fault == "form" else 2)
+        PdfBook(source)
 
 
 def test_cancellation_before_publication_keeps_previous_pdf(tmp_path, monkeypatch):

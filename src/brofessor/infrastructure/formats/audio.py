@@ -6,7 +6,6 @@ import fcntl
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -17,7 +16,7 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import Final
 
-from brofessor.contracts.content import ContentLanguage, Speaker
+from brofessor.contracts.content import ContentLanguage
 from brofessor.contracts.jobs import StageId
 from brofessor.infrastructure.formats.contracts import AudioExtension
 from brofessor.infrastructure.speech import engines as speech
@@ -30,10 +29,7 @@ AUDIO_METADATA_SUFFIX: Final = ".audio.json"
 TEMPORARY_WAV_SUFFIX: Final = ".tmp.wav"
 
 DEFAULT_TTS_MODEL = DEFAULT_ID
-# Fallbacks for historical CustomVoice jobs without a full model snapshot.
-VOICES = {Speaker.HOST: "Ryan", Speaker.GUEST: "Vivian"}
 LANGUAGES = {ContentLanguage.RU: "Russian", ContentLanguage.EN: "English"}
-SPEECH_SETTINGS = {"temperature": 0.7, "max_tokens": 1500, "seed": 42}
 RENDERER_VERSION = "1"
 
 
@@ -53,73 +49,6 @@ def render_slides(plan: dict, output: Path, *, source_labels=None) -> Path:
     from brofessor.infrastructure.formats.slides import render
 
     return render(plan, output, source_labels=source_labels)
-
-
-def _model_identity(model: str | dict | None) -> dict:
-    from brofessor.infrastructure.speech.catalogue import get
-
-    model = model or DEFAULT_TTS_MODEL
-    try:
-        item = get(model)
-        if "repo" in item:
-            identity = {"repo": item["repo"], "revision": item["revision"]}
-            if item.get("model_config"):
-                identity["config"] = item["model_config"]
-            if item.get("dependencies"):
-                identity["dependencies"] = [
-                    {"repo": d["repo"], "revision": d["revision"]} for d in item["dependencies"]
-                ]
-            return identity
-        return {"id": item["id"], "revision": item["revision"]}
-    except ValueError:
-        pass
-    if "@" in model:
-        repo, revision = model.rsplit("@", 1)
-        if not re.fullmatch(r"[0-9a-f]{40}", revision):
-            raise ValueError("Use a complete 40-character model revision after @")
-        return {"repo": repo, "revision": revision}
-    local = Path(model).expanduser()
-    if local.is_dir() and (local / "config.json").is_file():
-        files = sorted(local.rglob("*"))
-        fingerprint = [
-            (str(p.relative_to(local)), p.stat().st_size, p.stat().st_mtime_ns)
-            for p in files
-            if p.is_file()
-        ]
-        return {"path": str(local.resolve()), "files": fingerprint}
-    raise ValueError("Use the default model, repo@commit-sha, or a local model directory")
-
-
-def _load_speech_model(spec: dict):
-    from brofessor.infrastructure.speech.catalogue import cache_directory, installed_path, snapshot
-
-    try:
-        if "download_bytes" in spec:
-            location = installed_path(spec)
-            if location is None:
-                raise MediaError(
-                    f"Download this voice model first: brofessor tts download {spec['id']} --wait"
-                )
-        else:
-            # Compatibility for saved jobs without a catalog snapshot.
-            location = Path(spec["path"]) if "path" in spec else snapshot(spec)
-            if not (location / "config.json").is_file():
-                from huggingface_hub import snapshot_download
-
-                location = Path(
-                    snapshot_download(
-                        spec["repo"],
-                        revision=spec["revision"],
-                        token=False,
-                        cache_dir=cache_directory(),
-                        allow_patterns=["*.json", "*.txt", "*.safetensors", "speech_tokenizer/*"],
-                    )
-                )
-        return speech.load(spec, location)
-    except MediaError:
-        raise
-    except Exception as error:
-        raise MediaError(f"Cannot load local speech model: {error}") from error
 
 
 def _synthesize(model, text, voice, language, output, cancelled) -> None:
@@ -159,15 +88,11 @@ def _wav_info(path: Path) -> dict:
         }
 
 
-def _segment_valid(path: Path, metadata: Path, key: str, *, prepared=False) -> bool:
+def _segment_valid(path: Path, metadata: Path, key: str) -> bool:
     try:
         saved = json.loads(metadata.read_text(encoding="utf-8"))
         return (
             saved["key"] == key
-            and (
-                not prepared
-                or (isinstance(saved.get("synthesis_text"), str) and bool(saved["synthesis_text"]))
-            )
             and saved["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
             and _wav_info(path)["frames"] > 0
         )
@@ -220,7 +145,7 @@ def _render_segments(
     turns, segment_dir, spec, language, identity, runtime, cancelled, progress, resources
 ):
     loaded_model = None
-    needs_lock = spec["engine"] in (SpeechEngine.QWEN_BASE, SpeechEngine.QWEN_CUSTOM)
+    needs_lock = spec["engine"] == SpeechEngine.QWEN_BASE
     needs_model_guard = True
     segments = []
     for index, turn in enumerate(turns):
@@ -237,12 +162,9 @@ def _render_segments(
         if spec.get("references"):
             ref = spec["references"][turn["speaker"]]
             settings["reference"] = {key: ref[key] for key in ("sha256", "text")}
-        if spec.get("text_preparation"):
-            settings["text_preparation"] = spec["text_preparation"]
         key = hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()
         target, metadata = segment_dir / f"{key}.wav", segment_dir / f"{key}.json"
-        prepared = bool(spec.get("text_preparation"))
-        reused = _segment_valid(target, metadata, key, prepared=prepared)
+        reused = _segment_valid(target, metadata, key)
         if not reused and needs_model_guard:
             from brofessor.infrastructure.storage.locks import models_lock
 
@@ -252,7 +174,7 @@ def _render_segments(
             resources.enter_context(_qwen_lock(cancelled, progress, index, len(turns)))
             needs_lock = False
             # The holder may just have finished this segment while we waited.
-            reused = _segment_valid(target, metadata, key, prepared=prepared)
+            reused = _segment_valid(target, metadata, key)
         if not reused:
             if progress:
                 progress(
@@ -269,15 +191,9 @@ def _render_segments(
             temporary = target.with_suffix(TEMPORARY_WAV_SUFFIX)
             try:
                 try:
-                    synthesis_text = turn["text"]
-                    if spec.get("text_preparation"):
-                        synthesis_text = loaded_model.prepare_text(
-                            synthesis_text, language, cancelled
-                        )
-                        _check_cancelled(cancelled)
                     _synthesize(
                         loaded_model,
-                        synthesis_text,
+                        turn["text"],
                         settings["voice"],
                         language,
                         temporary,
@@ -298,11 +214,6 @@ def _render_segments(
                     {
                         "key": key,
                         **settings,
-                        **(
-                            {"synthesis_text": synthesis_text}
-                            if spec.get("text_preparation")
-                            else {}
-                        ),
                         **info,
                         "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
                     },
@@ -317,11 +228,6 @@ def _render_segments(
                 "speaker": turn["speaker"],
                 "voice": settings["voice"],
                 "reused": reused,
-                **(
-                    {"synthesis_text": json.loads(metadata.read_text())["synthesis_text"]}
-                    if spec.get("text_preparation")
-                    else {}
-                ),
                 **_wav_info(target),
             }
         )
@@ -382,17 +288,8 @@ def _render_audio(
     """
     from brofessor.infrastructure.speech.catalogue import get
 
-    try:
-        spec = get(model_spec or model or DEFAULT_TTS_MODEL)
-    except ValueError:
-        spec = _model_identity(model)
-    spec.setdefault("engine", SpeechEngine.QWEN_CUSTOM)
-    spec.setdefault("settings", dict(SPEECH_SETTINGS))
-    spec.setdefault("voices", dict(VOICES))
-    spec.setdefault("languages", list(LANGUAGES))
+    spec = get(model_spec or model or DEFAULT_TTS_MODEL)
     voices = spec["voices"]
-    if spec.get("requires_reference") and not spec.get("references"):
-        raise ValueError("Provide saved voice samples and transcripts before rendering")
     language = plan.get("language", ContentLanguage.RU)
     if language not in LANGUAGES:
         raise ValueError("Speech language must be ru or en")
@@ -412,11 +309,10 @@ def _render_audio(
             raise ValueError("Each turn needs nonempty text")
         if len(turn["text"]) > 1000:
             raise ValueError("Split speech turns longer than 1000 characters before rendering")
-        speech.validate_text(spec, turn["text"])
     output = Path(output).resolve()
     if output.suffix.lower() not in {AudioExtension.WAV, AudioExtension.MP3}:
         raise ValueError("Audio output must have a .wav or .mp3 suffix")
-    identity = _model_identity(spec) if "id" in spec else _model_identity(model)
+    identity = _model_identity(spec)
     segment_dir = Path(segment_dir).resolve()
     segment_dir.mkdir(parents=True, exist_ok=True)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -502,3 +398,21 @@ def _render_audio(
     }
     _atomic_json(output.with_suffix(AUDIO_METADATA_SUFFIX), result)
     return result
+
+
+def _model_identity(model: str | dict | None) -> dict:
+    from brofessor.infrastructure.speech.catalogue import get
+
+    item = get(model or DEFAULT_TTS_MODEL)
+    return {"repo": item["repo"], "revision": item["revision"]}
+
+
+def _load_speech_model(spec: dict):
+    from brofessor.infrastructure.speech.catalogue import installed_path
+
+    location = installed_path(spec)
+    if location is None:
+        raise MediaError(
+            f"Download this voice model first: brofessor tts download {spec['id']} --wait"
+        )
+    return speech.load(spec, location)

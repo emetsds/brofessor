@@ -123,8 +123,6 @@ def test_nested_diagram_text_is_removed_from_form_before_translated_overlay(tmp_
     assert "Nested diagram label" not in text
     assert text.count("Переведённая подпись схемы") == 1
     assert hashlib.sha256(source.read_bytes()).digest() == hashlib.sha256(before).digest()
-    with pytest.raises(ValueError, match="Form XObjects"):
-        PdfBook(source, projection_version=1)
 
 
 def test_removing_one_show_keeps_the_cursor_of_following_original_text(tmp_path):

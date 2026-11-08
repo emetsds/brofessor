@@ -1,85 +1,15 @@
-"""Local WAV voice samples and transcripts; immutable files, editable preferences."""
+"""Bundled voice recordings and immutable project copies."""
 
 import copy
 import hashlib
-import io
 import tempfile
-import wave
 from pathlib import Path
 from typing import Final
 
-from brofessor.contracts.content import ContentLanguage, Speaker
 from brofessor.infrastructure.formats.contracts import AudioExtension
 from brofessor.infrastructure.speech.contracts import SpeechModelSpec, VoiceReference
-from brofessor.infrastructure.storage import preferences
 
 VOICE_SAMPLES_DIRECTORY: Final = "voice-samples"
-
-
-def list_references(language: str) -> dict[str, VoiceReference]:
-    if language not in (ContentLanguage.RU, ContentLanguage.EN):
-        raise ValueError("Choose ru or en")
-    return copy.deepcopy(preferences.read().get("speech_references", {}).get(language, {}))
-
-
-def save(role: str, language: str, audio: bytes, text: str) -> VoiceReference:
-    if role not in (Speaker.HOST, Speaker.GUEST) or language not in (
-        ContentLanguage.RU,
-        ContentLanguage.EN,
-    ):
-        raise ValueError("Choose host/guest and ru/en")
-    if not text.strip() or len(text) > 2000 or len(audio) > 10 * 1024 * 1024:
-        raise ValueError("Provide a transcript (1–2000 characters) and WAV up to 10 MiB")
-    try:
-        with wave.open(io.BytesIO(audio), "rb") as stream:
-            duration = stream.getnframes() / stream.getframerate()
-            if (
-                stream.getsampwidth() != 2
-                or stream.getnchannels() not in (1, 2)
-                or not 2 <= duration <= 20
-            ):
-                raise ValueError("Voice samples must be PCM16 WAV, mono/stereo, 2–20 seconds")
-            frames = stream.readframes(stream.getnframes())
-            if len(frames) != stream.getnframes() * stream.getnchannels() * 2:
-                raise ValueError("Voice sample is truncated")
-            if not any(frames):
-                raise ValueError("Voice samples must contain audible speech")
-    except (wave.Error, EOFError) as error:
-        raise ValueError("Provide a valid PCM16 WAV voice sample") from error
-    digest = hashlib.sha256(audio).hexdigest()
-    directory = preferences.data_directory() / "voices"
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / (digest + AudioExtension.WAV)
-    # Content-addressed bytes are never replaced when a voice profile changes.
-    with tempfile.NamedTemporaryFile(dir=directory, delete=False) as output:
-        temporary = Path(output.name)
-        try:
-            output.write(audio)
-            output.flush()
-            temporary.replace(path)
-        finally:
-            temporary.unlink(missing_ok=True)
-    result: VoiceReference = {
-        "path": str(path),
-        "sha256": digest,
-        "text": text.strip(),
-        "duration_seconds": duration,
-    }
-    with preferences.edit() as values:
-        values.setdefault("speech_references", {}).setdefault(language, {})[role] = result
-    return result
-
-
-def selected(language: str) -> dict[str, VoiceReference]:
-    refs = list_references(language)
-    for role in (Speaker.HOST, Speaker.GUEST):
-        if role not in refs:
-            raise ValueError(f"Set a {language} WAV voice sample and transcript for {role} first")
-        item = refs[role]
-        path = Path(item["path"])
-        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
-            raise ValueError(f"Voice sample for {role} is missing or damaged")
-    return refs
 
 
 class MissingVoicePack(ValueError):

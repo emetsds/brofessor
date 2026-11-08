@@ -49,15 +49,21 @@ class Workspace:
         self.path.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in range(WORKSPACE_SCHEMA_VERSION + 1):
-                raise ValueError(f"Unsupported workspace schema {version}")
             if version == WORKSPACE_SCHEMA_VERSION:
                 return
-            db.executescript("""
-                BEGIN IMMEDIATE;
+            db.execute("BEGIN IMMEDIATE")
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version == WORKSPACE_SCHEMA_VERSION:
+                return
+            existing = db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1"
+            ).fetchone()
+            if version != 0 or existing:
+                raise ValueError(f"Unsupported workspace schema {version}; create a new project")
+            schema = """
                 CREATE TABLE IF NOT EXISTS sources (
                     id TEXT PRIMARY KEY, name TEXT NOT NULL, hash TEXT UNIQUE NOT NULL,
-                    original TEXT NOT NULL, created REAL NOT NULL);
+                    original TEXT NOT NULL, created REAL NOT NULL, hidden INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS units (
                     id TEXT PRIMARY KEY, source_id TEXT NOT NULL REFERENCES sources(id),
                     locator TEXT NOT NULL, text TEXT NOT NULL, status TEXT NOT NULL);
@@ -81,9 +87,10 @@ class Workspace:
                 CREATE TABLE IF NOT EXISTS task_models (
                     task_id TEXT PRIMARY KEY REFERENCES jobs(id),
                     revision INTEGER NOT NULL, data TEXT NOT NULL);
-            """)
-            if "hidden" not in {r[1] for r in db.execute("PRAGMA table_info(sources)")}:
-                db.execute("ALTER TABLE sources ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+            """
+            for statement in schema.split(";"):
+                if statement.strip():
+                    db.execute(statement)
             db.execute(
                 "CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, root TEXT UNIQUE NOT NULL, created REAL NOT NULL)"
             )

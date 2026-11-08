@@ -23,7 +23,6 @@ SETTINGS_SPEECH_KEY: Final = "ui:settings-speech"
 PROJECT_INPUT_RESET_KEY: Final = "ui:project-input-reset"
 CHOOSE_TASK_PROJECT_KEY: Final = "ui:choose-task-project"
 WORKSPACE_ARGUMENT_OPENED_KEY: Final = "ui:workspace-argument-opened"
-COMPOSER_MIGRATED_KEY: Final = "ui:composer-migrated"
 MAINTENANCE_STATUS_KEY: Final = "ui:maintenance-status"
 GLOBAL_TASK_QUERY_KEY: Final = "ui:global-task-query"
 

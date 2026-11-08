@@ -157,19 +157,6 @@ def test_failed_recent_write_does_not_fail_saved_job(workspace, monkeypatch):
     assert "recent" in job["notice"]
 
 
-def test_old_schema_migrates_without_changing_jobs_or_drafts(workspace):
-    parent = answer(workspace)
-    original = workspace.draft(parent["id"])
-    with workspace.connect() as db:
-        db.execute("DROP TABLE task_models")
-        db.execute("PRAGMA user_version=2")
-    reopened = Workspace(workspace.path)
-    assert reopened.job(parent["id"])["params"] == parent["params"]
-    assert reopened.draft(parent["id"]) == original
-    assert tasks.models(reopened, parent["id"])["revision"] == 0
-    assert tasks.models(reopened, parent["id"])["data"]["model"] == "first"
-
-
 def test_prefix_filter_finds_related_briefs_without_splitting_or_reopening_tasks(workspace):
     parent = answer(workspace)
     child = service.follow_up(
@@ -252,22 +239,6 @@ def test_delete_blocks_active_descendants_and_new_work_until_restore(workspace):
         service.follow_up(workspace, parent["id"], "Another question?", start_worker=False)
     tasks.restore(workspace, parent["id"])
     assert workspace.resume(child["id"])["status"] == "queued"
-
-
-def test_schema_four_upgrade_is_concurrent_and_retains_task_data(workspace):
-    from concurrent.futures import ThreadPoolExecutor
-
-    parent = answer(workspace)
-    original = workspace.draft(parent["id"])
-    with workspace.connect() as db:
-        db.execute("DROP TABLE deleted_tasks")
-        db.execute("PRAGMA user_version=4")
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        opened = list(pool.map(Workspace, [workspace.path] * 3))
-    for target in opened:
-        assert target.draft(parent["id"]) == original
-        assert tasks.list_tasks(target)[0]["root_id"] == parent["id"]
-        assert tasks.deleted_roots(target) == set()
 
 
 def test_speech_choice_is_copied_and_render_override_does_not_change_default(

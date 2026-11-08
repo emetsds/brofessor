@@ -16,9 +16,7 @@ from brofessor.prompts import examples
 app = typer.Typer(no_args_is_help=True, help="Read and preview prompts without model calls.")
 
 
-def _scope(ctx, job, legacy):
-    if job and legacy:
-        raise CommandError("Choose --job or --legacy")
+def _scope(ctx, job):
     if job:
         if ctx.obj is None:
             raise CommandError("Use --workspace PATH before prompts to inspect a saved job")
@@ -29,7 +27,7 @@ def _scope(ctx, job, legacy):
         if saved["kind"] not in TEXT_JOB_KINDS:
             raise CommandError("Choose a text-generation job")
         return prompts.use_snapshot(saved["params"].get(prompts.SNAPSHOT_KEY))
-    return prompts.use_snapshot(None) if legacy else nullcontext()
+    return nullcontext()
 
 
 @app.command("list")
@@ -44,10 +42,10 @@ def list_prompts():
 
 
 @app.command("show")
-def show_prompt(ctx: typer.Context, identifier: str, job: str | None = None, legacy: bool = False):
-    """Print exact template text; --job reads frozen inputs, --legacy the migration set."""
+def show_prompt(ctx: typer.Context, identifier: str, job: str | None = None):
+    """Print template text; --job reads the selected run's frozen inputs."""
     try:
-        with _scope(ctx, job, legacy):
+        with _scope(ctx, job):
             # Populate each named variable with its own literal marker to show the template.
             spec = prompts.catalogue().get(identifier)
             if spec is None:
@@ -73,7 +71,6 @@ def preview_prompt(
         None,
         help="Use a saved job's templates with the preview inputs; does not replay its sources.",
     ),
-    legacy: bool = False,
 ):
     """Show composed messages, including runner instructions; no model, shell or network call."""
     if bool(identifier) == all_templates:
@@ -82,7 +79,7 @@ def preview_prompt(
         raise CommandError("Use --variables with one prompt ID")
     try:
         inputs = json.loads(variables.read_text(encoding="utf-8")) if variables else None
-        with _scope(ctx, job, legacy):
+        with _scope(ctx, job):
             if all_templates:
                 result = [
                     examples.preview(key, provider=provider) for key in sorted(prompts.available())

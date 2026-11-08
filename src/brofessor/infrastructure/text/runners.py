@@ -34,7 +34,6 @@ import httpx2 as httpx
 from brofessor import prompts
 from brofessor.contracts.text import (
     DEFAULT_OLLAMA_ADDRESS,
-    DEFAULT_OLLAMA_PORT,
     TEXT_PROVIDERS,
     TextProvider,
 )
@@ -91,13 +90,8 @@ def ollama_url(address: str) -> str:
 
 
 def ollama_address_for_job(params: dict) -> str:
-    """Keep saved port-only jobs on their original loopback server."""
-    if "ollama_address" in params:
-        return normalize_ollama_address(params["ollama_address"])
-    port = params.get("ollama_port", DEFAULT_OLLAMA_PORT)
-    if type(port) is not int:
-        raise ValueError("Saved Ollama port must be an integer")
-    return normalize_ollama_address(f"127.0.0.1:{port}")
+    """Resolve a current task's selected server or the local default."""
+    return normalize_ollama_address(params.get("ollama_address", DEFAULT_OLLAMA_ADDRESS))
 
 
 def _check_cancel(cancelled: Callable[[], bool] | None) -> None:

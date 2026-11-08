@@ -20,6 +20,9 @@ from tests.helpers.books import translated_book
 from tests.helpers.ui import UI_APP, create, new_key
 
 
+pytestmark = pytest.mark.usefixtures("preset_voices")
+
+
 def original(tmp_path):
     path = tmp_path / "book.md"
     path.write_text(
@@ -36,7 +39,7 @@ def prepare(workspace, source):
         workspace,
         source["id"],
         language=ContentLanguage.EN,
-        speech_model="qwen3-0.6b",
+        speech_model="qwen3-base",
         start_worker=False,
     )
     worker.run(workspace, once=True)
@@ -87,7 +90,9 @@ def test_original_narration_preserves_all_words_in_order_without_text_inference(
     assert set(tasks.models(workspace, job["id"])["data"]) == {"speech_model", "origin"}
 
 
-def test_m4b_has_real_chapters_and_editing_one_passage_reuses_other_audio(tmp_path, speech):
+def test_m4b_has_real_chapters_and_editing_one_passage_reuses_other_audio(
+    preset_voices, tmp_path, speech
+):
     workspace, source = original(tmp_path)
     job = prepare(workspace, source)
     render = service.render(workspace, job["id"], start_worker=False)
@@ -117,7 +122,7 @@ def test_m4b_has_real_chapters_and_editing_one_passage_reuses_other_audio(tmp_pa
     assert len(speech) == calls + 1
     assert first.read_bytes() == content
     assert workspace.draft(job["id"])["data"]["user_edited"]
-    assert service.uses_current_voice(workspace.job(second["id"]), "en", model="qwen3-0.6b")
+    assert service.uses_current_voice(workspace.job(second["id"]), "en", model="qwen3-base")
 
 
 def test_translation_narration_pins_the_saved_text_and_hides_its_derived_source(

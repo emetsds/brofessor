@@ -75,7 +75,7 @@ def test_exact_quotes_conflicts_and_edit_history(tmp_path, monkeypatch):
     assert w.draft(job["id"], 1)["data"] == saved["data"]
 
 
-def test_legacy_answer_can_still_be_edited_without_claiming_verified_quotes(tmp_path):
+def test_answer_without_verified_quotes_cannot_be_saved_as_a_current_revision(tmp_path):
     w = Workspace(tmp_path / "workspace")
     path = tmp_path / "source.txt"
     path.write_text("An exact fact.")
@@ -83,7 +83,8 @@ def test_legacy_answer_can_still_be_edited_without_claiming_verified_quotes(tmp_
     job = service.submit(w, JobKind.ASK, focus="Fact?", start_worker=False)
     old = {"answer": "Old answer", "citations": [w.units()[0]["id"]]}
     w.save_draft(job["id"], old)
-    service.edit_draft(w, job["id"], {**old, "answer": "Edited old answer"}, 1)
+    with pytest.raises(ValueError, match="quote"):
+        service.edit_draft(w, job["id"], {**old, "answer": "Edited old answer"}, 1)
     assert "quotes" not in w.draft(job["id"])["data"]
     assert service.answer_evidence(w, job["id"])[0]["quotes"] == []
 

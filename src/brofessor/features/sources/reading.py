@@ -44,11 +44,6 @@ class ReadingBatch(Output):
     notes: list[FragmentNote] = Field(min_length=1)
 
 
-class SectionNote(Output):
-    summary: str = Field(min_length=1, max_length=4000)
-    citations: list[str] = Field(min_length=1)
-
-
 class SectionNotes(Output):
     notes: list[FragmentNote] = Field(min_length=1)
 
@@ -81,7 +76,7 @@ def validate_batch(value, expected):
 
 
 def with_metadata(evidence, units, names):
-    """Resolve provenance locally, including notes reused from historical series."""
+    """Resolve provenance locally, including reused series notes."""
     by_id = {unit["id"]: unit for unit in units}
     result = []
     for item in evidence:
@@ -100,15 +95,16 @@ def with_metadata(evidence, units, names):
     return result
 
 
-def prepare(units, focus, generate, check, progress, folder, *, version=1, names=None):
-    if version >= 3:
+def prepare(units, focus, generate, check, progress, folder, *, names=None):
+    include_origins = names is not None
+    if include_origins:
         names = names or {}
         units = [
             {**unit, "source": names.get(unit["source_id"], unit["source_id"])} for unit in units
         ]
 
     def provenance(evidence):
-        return with_metadata(evidence, units, names) if version >= 3 else evidence
+        return with_metadata(evidence, units, names) if include_origins else evidence
 
     ready = [unit for unit in units if unit["status"] == UnitStatus.READY]
     report = {
@@ -171,27 +167,15 @@ def prepare(units, focus, generate, check, progress, folder, *, version=1, names
             check()
             progress({"stage": StageId.CONSOLIDATING, "completed": index, "total": len(groups)})
             ids = {citation for item in group for citation in item["citations"]}
-            if version >= 2:
-                result = generate(
-                    prompts.render(
-                        "reading/reduce", payload=encoded({"focus": focus, "notes": group})
-                    ),
-                    SectionNotes,
-                    citation_scope=ids,
-                )
-                reduced.extend(
-                    {"text": note["summary"], "citations": note["citations"]}
-                    for note in result["notes"]
-                )
-                continue
-            note = generate(
-                prompts.render(
-                    "reading/reduce_v1", payload=encoded({"focus": focus, "notes": group})
-                ),
-                SectionNote,
+            result = generate(
+                prompts.render("reading/reduce", payload=encoded({"focus": focus, "notes": group})),
+                SectionNotes,
                 citation_scope=ids,
             )
-            reduced.append({"text": note["summary"], "citations": note["citations"]})
+            reduced.extend(
+                {"text": note["summary"], "citations": note["citations"]}
+                for note in result["notes"]
+            )
         reduced = provenance(reduced)
         if len(encoded(reduced)) >= previous_size:
             raise ValueError("Reading notes could not be reduced within the synthesis budget")

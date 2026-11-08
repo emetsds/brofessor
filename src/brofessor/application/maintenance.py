@@ -23,7 +23,6 @@ from brofessor.contracts.jobs import (
 from brofessor.contracts.text import TextProvider
 from brofessor.infrastructure.speech import catalogue as speech_models
 from brofessor.infrastructure.speech.contracts import (
-    DOWNLOAD_LOCK_FILENAME,
     QWEN_SPEECH_LOCK_FILENAME,
     SpeechEngine,
 )
@@ -225,7 +224,7 @@ def _usage(path, *, logical=False):
 
 
 def _partial_files(item, target):
-    folder = target if "url" in item else target.parent.parent
+    folder = target.parent.parent
     return [
         file
         for file in _files(folder)
@@ -236,7 +235,7 @@ def _partial_files(item, target):
 
 def _resource_folders(item):
     target = _owned(speech_models.snapshot(item), speech_models.cache_directory().parent)
-    found = {target if "url" in item else target.parent.parent}
+    found = {target.parent.parent}
     for dependency in item.get("dependencies", []):
         found.update(_resource_folders(dependency))
     return found
@@ -254,7 +253,7 @@ def _live_job(job):
 
 def _pending_speech(item):
     target = speech_models.snapshot(item)
-    requested = {target if "url" in item else target.parent.parent}
+    requested = {target.parent.parent}
     for job in jobs():
         if job["kind"] != JobKind.DOWNLOAD_MODEL or job["status"] not in ACTIVE_JOB_STATUSES:
             continue
@@ -272,14 +271,11 @@ def _pending_speech(item):
 
 @contextmanager
 def _native_model_locks(item, target):
-    if "url" in item:
-        paths = [target / DOWNLOAD_LOCK_FILENAME] if target.is_dir() else []
-    else:
-        paths = sorted(
-            (speech_models.cache_directory() / ".locks" / target.parent.parent.name).glob("*.lock")
-        )
+    paths = sorted(
+        (speech_models.cache_directory() / ".locks" / target.parent.parent.name).glob("*.lock")
+    )
     with ExitStack() as stack:
-        if item.get("engine") in {SpeechEngine.QWEN_BASE, SpeechEngine.QWEN_CUSTOM}:
+        if item.get("engine") == SpeechEngine.QWEN_BASE:
             stack.enter_context(
                 _lock(
                     preferences.data_directory() / QWEN_SPEECH_LOCK_FILENAME,
@@ -309,14 +305,9 @@ def speech_inventory(model=None):
                     "id": item["id"],
                     "reference": speech_models.reference(item),
                     "name": item["name"],
-                    "legacy": bool(item.get("legacy")),
-                    "selectable": not item.get("legacy", False),
+                    "selectable": True,
                     "installed": speech_models.installed_path(item) is not None,
-                    "compatible": apple
-                    or (
-                        item.get("engine") in {SpeechEngine.SILERO, SpeechEngine.KOKORO_RU}
-                        and platform.system() in {"Darwin", "Linux"}
-                    ),
+                    "compatible": apple,
                     "download_bytes": speech_models.total_bytes(item),
                     "path": str(target),
                     "stored_bytes": _usage(target, logical=True)["bytes"],
@@ -359,46 +350,37 @@ def _remove_speech(item, target):
     result = {"path": str(target), "removed_bytes": 0, "removed_files": 0}
     if not target.exists():
         return result
-    if "url" in item:
-        # Keep the native lock inode stable for old project workers.
-        for child in target.iterdir():
-            if child.name == DOWNLOAD_LOCK_FILENAME:
-                continue
-            child.unlink() if child.is_symlink() or child.is_file() else shutil.rmtree(child)
-    else:
-        from huggingface_hub import scan_cache_dir
+    from huggingface_hub import scan_cache_dir
 
-        hub = speech_models.cache_directory()
-        info = scan_cache_dir(hub)
-        repo = next((r for r in info.repos if r.repo_path == target.parent.parent), None)
-        revision = (
-            next((r for r in repo.revisions if r.snapshot_path == target), None) if repo else None
-        )
-        if revision is None:
-            # An incomplete/corrupt snapshot cannot justify deleting any shared blob.
-            shutil.rmtree(target)
-            result["warning"] = "Only the incomplete snapshot was removed; shared blobs remain"
-        else:
-            strategy = replace(info, repos=frozenset({repo})).delete_revisions(item["revision"])
-            if strategy.repos:
-                # HF's whole-repo shortcut would also discard unrelated partial downloads.
-                # Keep the repo and remove only this snapshot and its unshared blob entries.
-                strategy = replace(
-                    strategy,
-                    repos=frozenset(),
-                    snapshots=frozenset({target}),
-                    refs=frozenset(repo.repo_path / "refs" / ref for ref in revision.refs),
-                    blobs=frozenset(
-                        f.blob_path
-                        for f in revision.files
-                        if not f.blob_path.is_relative_to(target)
-                    ),
-                )
-            for path in [*strategy.blobs, *strategy.refs, *strategy.snapshots]:
-                if not path.resolve().is_relative_to(hub.resolve()):
-                    raise ValueError("A cached model points outside managed model storage")
-            strategy.execute()
-            result["estimated_freed_bytes"] = strategy.expected_freed_size
+    hub = speech_models.cache_directory()
+    info = scan_cache_dir(hub)
+    repo = next((r for r in info.repos if r.repo_path == target.parent.parent), None)
+    revision = (
+        next((r for r in repo.revisions if r.snapshot_path == target), None) if repo else None
+    )
+    if revision is None:
+        # An incomplete/corrupt snapshot cannot justify deleting any shared blob.
+        shutil.rmtree(target)
+        result["warning"] = "Only the incomplete snapshot was removed; shared blobs remain"
+    else:
+        strategy = replace(info, repos=frozenset({repo})).delete_revisions(item["revision"])
+        if strategy.repos:
+            # HF's whole-repo shortcut would also discard unrelated partial downloads.
+            # Keep the repo and remove only this snapshot and its unshared blob entries.
+            strategy = replace(
+                strategy,
+                repos=frozenset(),
+                snapshots=frozenset({target}),
+                refs=frozenset(repo.repo_path / "refs" / ref for ref in revision.refs),
+                blobs=frozenset(
+                    f.blob_path for f in revision.files if not f.blob_path.is_relative_to(target)
+                ),
+            )
+        for path in [*strategy.blobs, *strategy.refs, *strategy.snapshots]:
+            if not path.resolve().is_relative_to(hub.resolve()):
+                raise ValueError("A cached model points outside managed model storage")
+        strategy.execute()
+        result["estimated_freed_bytes"] = strategy.expected_freed_size
     result.update(removed_bytes=before["bytes"], removed_files=before["files"])
     return result
 

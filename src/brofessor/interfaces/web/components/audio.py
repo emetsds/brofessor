@@ -32,7 +32,7 @@ def prepare_voice(context, voice):
         return False
     runtime_ready = True
     if (
-        spec.get("engine", SpeechEngine.QWEN_CUSTOM).startswith(QWEN_ENGINE_PREFIX)
+        spec.get("engine", SpeechEngine.QWEN_BASE).startswith(QWEN_ENGINE_PREFIX)
         and not speech_models.qwen_runtime_available()
     ):
         st.info(t("Install local speech support in the project environment, then restart the UI."))

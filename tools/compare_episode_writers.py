@@ -321,9 +321,7 @@ def run(folder):
     if evidence_file.exists():
         evidence = json.loads(evidence_file.read_text())
     else:
-        evidence, _ = reading.prepare(
-            units, focus, calls, lambda: None, lambda _: None, folder, version=2
-        )
+        evidence, _ = reading.prepare(units, focus, calls, lambda: None, lambda _: None, folder)
         atomic_json(evidence_file, evidence)
     instructions = prompts.render(prompt_ids.EXPERIMENTS_EPISODE_MATERIALS, focus=focus)
     base = prompts.render(
@@ -377,7 +375,6 @@ def run(folder):
                 lambda _: None,
                 lambda _: None,
                 target_words=2415,
-                dialogue_version=3,
             )
         else:
             ordered_units = (

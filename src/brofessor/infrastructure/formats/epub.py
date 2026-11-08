@@ -120,20 +120,20 @@ def _local(element):
     return element.tag.rsplit("}", 1)[-1]
 
 
-def _preserved_notice(element, version):
-    return version >= 2 and (
+def _preserved_notice(element):
+    return (
         "copyright-page" in element.get("{" + OPS + "}type", "").split()
         or element.get("id") in {"pg-header", "pg-footer"}
         and "pg-boilerplate" in element.get("class", "").split()
     )
 
 
-def _frozen(element, version=1):
+def _frozen(element):
     return (
         not element.tag.startswith("{" + XHTML + "}")
         or _local(element) in _FROZEN
         or element.get("translate") == "no"
-        or _preserved_notice(element, version)
+        or _preserved_notice(element)
         or "noteref" in element.get("{" + OPS + "}type", "").split()
     )
 
@@ -190,7 +190,7 @@ def translation_prompt(blocks, language, glossary=None):
     )
 
 
-def _project(roots, package_path, version=1):
+def _project(roots, package_path):
     blocks, bindings = [], {}
 
     def add(document, path, text, slots, protected=None):
@@ -209,7 +209,7 @@ def _project(roots, package_path, version=1):
                 add(document, path + "@" + name, element.get(name), [_Slot(element, name, True)])
 
     def walk(element, document, path):
-        if _frozen(element, version):
+        if _frozen(element):
             return
         attributes(element, document, path)
         slots, parts, protected = [], [], {}
@@ -219,7 +219,7 @@ def _project(roots, package_path, version=1):
             nonlocal serial
             binding = _Slot(node, field)
             text = binding.read()
-            fragments = _PLAIN_MATH.split(text) if version >= 3 else [text]
+            fragments = _PLAIN_MATH.split(text)
             if len(fragments) == 1:
                 slots.append(binding)
                 parts.append(text)
@@ -238,9 +238,9 @@ def _project(roots, package_path, version=1):
             nonlocal serial
             serial += 1
             number = serial
-            if _local(child) == "img" or not _frozen(child, version):
+            if _local(child) == "img" or not _frozen(child):
                 attributes(child, document, child_path)
-            if _frozen(child, version):
+            if _frozen(child):
                 token = f"⟦keep:{number}⟧"
                 parts.append(token)
                 protected[token] = "".join(child.itertext())
@@ -264,14 +264,13 @@ def _project(roots, package_path, version=1):
             # Older books sometimes encode whole chapters in <big> with <br>
             # paragraphs. Project those paragraphs separately without flattening
             # or rewriting their original inline container.
-            break_flow = version >= 2 and sum(_local(c) == "br" for c in child) >= 2
-            if (_local(child) in _BLOCKS or break_flow) and not _frozen(child, version):
+            break_flow = sum(_local(c) == "br" for c in child) >= 2
+            if (_local(child) in _BLOCKS or break_flow) and not _frozen(child):
                 flush()
                 walk(child, document, child_path)
             else:
                 if (
-                    version >= 2
-                    and _local(child) == "br"
+                    _local(child) == "br"
                     and index > 0
                     and _local(element[index - 1]) == "br"
                     and not (element[index - 1].tail or "").strip()
@@ -290,7 +289,7 @@ def _project(roots, package_path, version=1):
                     f"{{{DC}}}{name}" for name in ("title", "description", "subject")
                 }:
                     add(document, f"metadata:{index}", element.text or "", [_Slot(element, "text")])
-                elif version >= 2 and element.tag == f"{{{OPF}}}reference" and element.get("title"):
+                elif element.tag == f"{{{OPF}}}reference" and element.get("title"):
                     add(
                         document,
                         f"guide:{index}@title",
@@ -316,10 +315,9 @@ def _project(roots, package_path, version=1):
 class EpubBook:
     """Snapshot a supported reflowable EPUB; rebuilding never modifies the original."""
 
-    def __init__(self, source, *, projection_version=3):
-        if projection_version not in (1, 2, 3):
-            raise ValueError("Unsupported EPUB text projection version")
-        self.projection_version = projection_version
+    projection_version = 3
+
+    def __init__(self, source):
         self.source = Path(source).resolve()
         if self.source.stat().st_size > MAX_SOURCE_BYTES:
             raise ValueError("EPUB exceeds the source size limit")
@@ -424,9 +422,9 @@ class EpubBook:
             }
             for path in self.document_paths
             for element in roots[path].iter()
-            if _preserved_notice(element, self.projection_version)
+            if _preserved_notice(element)
         ]
-        self.blocks, _ = _project(roots, self.package_path, self.projection_version)
+        self.blocks, _ = _project(roots, self.package_path)
         if not self.blocks:
             raise ValueError("EPUB has no translatable text")
 
@@ -451,7 +449,7 @@ class EpubBook:
             raise ValueError("Translation must not overwrite the original EPUB")
         translations = validate_batch(value, self.blocks)
         roots = self._roots()
-        _, bindings = _project(roots, self.package_path, self.projection_version)
+        _, bindings = _project(roots, self.package_path)
         for identifier, text in translations.items():
             for slot, part in zip(bindings[identifier], MARKER.split(text), strict=True):
                 slot.write(part)
@@ -481,7 +479,7 @@ class EpubBook:
             root = roots[path]
 
             def update_language(element):
-                if _preserved_notice(element, self.projection_version):
+                if _preserved_notice(element):
                     if not element.get(XML_LANG) and not element.get("lang"):
                         element.set(XML_LANG, self.language)
                     return

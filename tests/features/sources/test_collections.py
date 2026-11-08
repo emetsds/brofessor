@@ -1,6 +1,5 @@
 import json
 import shutil
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from typer.testing import CliRunner
@@ -187,21 +186,6 @@ def test_cli_adds_directory_and_starts_prompt_task_with_no_file_selection(tmp_pa
     workspace = Workspace(path)
     pipeline.execute(workspace, job)
     assert "7 ms" in workspace.draft(job["id"])["data"]["answer"]
-
-
-def test_migration_from_schema_three_is_concurrent_and_preserves_sources(tmp_path):
-    w = Workspace(tmp_path / "workspace")
-    f = tmp_path / "file.md"
-    f.write_text("Original data.")
-    original = w.add_source(f)
-    with w.connect() as db:
-        db.execute("DROP TABLE collections")
-        db.execute("ALTER TABLE sources DROP COLUMN hidden")
-        db.execute("PRAGMA user_version=3")
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        copies = list(pool.map(lambda _: Workspace(w.path), range(4)))
-    assert all(copy.sources()[0] == original for copy in copies)
-    assert all(copy.units([original["id"]]) for copy in copies)
 
 
 def test_full_reading_cannot_finish_with_unread_originals(tmp_path, monkeypatch):

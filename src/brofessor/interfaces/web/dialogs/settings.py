@@ -140,7 +140,6 @@ def speech_field(prefix, t, language=None):
     ]
     known = {item["id"] for item in catalog}
     if current not in known:
-        # An old task keeps its saved profile; do not offer every legacy profile to new tasks.
         try:
             old = speech_models.get(current)
             if language is None or language in old["languages"]:
@@ -297,7 +296,6 @@ def task_models(workspace, job, t):
             tasks.ModelOrigin.APPLICATION: "Copied from application defaults",
             tasks.ModelOrigin.CUSTOM: "Chosen for this task",
             tasks.ModelOrigin.PARENT: "Copied from the parent task",
-            tasks.ModelOrigin.LEGACY: "Kept from the saved operation",
         }.get(data.get("origin"), "Kept from the saved operation")
         st.caption(t(origin))
         save, defaults = st.columns(2)
@@ -514,10 +512,6 @@ def storage(t, *, models_only=False, selected=None):
             focused = bool(focus and item.get("reference") == speech_models.reference(focus))
             if models_only and not focused:
                 continue
-            if item.get("legacy") and not (
-                focused or item.get("stored_bytes") or item.get("partial_bytes")
-            ):
-                continue
             with st.container(border=not models_only):
                 spec = speech_models.get(item.get("reference", item["id"]))
                 if not models_only:
@@ -526,12 +520,9 @@ def storage(t, *, models_only=False, selected=None):
                     t("Installed" if item["installed"] else "Not installed")
                     + f" · {item.get('stored_bytes', 0) / 1e9:.2f} GB"
                 )
-                if item.get("legacy"):
-                    st.caption(t("Kept for older tasks"))
-                else:
-                    st.caption(
-                        t("Download size: {size} GB", size=f"{item['download_bytes'] / 1e9:.2f}")
-                    )
+                st.caption(
+                    t("Download size: {size} GB", size=f"{item['download_bytes'] / 1e9:.2f}")
+                )
                 if not models_only:
                     st.caption(
                         t(
@@ -558,7 +549,6 @@ def storage(t, *, models_only=False, selected=None):
                 if (
                     not item["installed"]
                     and item["compatible"]
-                    and (not item.get("legacy") or focused)
                     and not unfinished
                     and st.button(
                         t("Download model"), key=(SETTINGS_PREFIX + f"download:{item['id']}")

@@ -36,7 +36,7 @@ def wav(value):
 def presets(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    monkeypatch.setattr(speech_models, "_legacy_caches", lambda: [])
+    monkeypatch.setattr(speech_models, "_external_caches", lambda: [])
     spec = speech_models.get("qwen3-base")
     spec["files"], spec["download_bytes"] = {"config.json": 2}, 2
     pack = spec["dependencies"][0]
@@ -137,7 +137,6 @@ def test_default_download_and_cli_render_freeze_native_preset_voices(presets, tm
         assert (
             hashlib.sha256((workspace.path / ref["path"]).read_bytes()).hexdigest() == ref["sha256"]
         )
-    assert speech_references.list_references(language) == {}
 
 
 def test_frozen_preset_render_survives_missing_pack_and_project_move(

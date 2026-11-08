@@ -36,17 +36,16 @@ def workspace(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "language,minutes,historical",
+    "language,minutes",
     [
-        ("ru", 20, False),
-        ("en", 20, False),
-        ("ru", 60, False),
-        ("en", 60, False),
-        ("en", 60, True),
+        ("ru", 20),
+        ("en", 20),
+        ("ru", 60),
+        ("en", 60),
     ],
 )
 def test_long_episode_has_plan_bounded_sections_and_reusable_checkpoints(
-    workspace, monkeypatch, language, minutes, historical
+    workspace, monkeypatch, language, minutes
 ):
     citation = workspace.units()[0]["id"]
     calls = []
@@ -66,7 +65,7 @@ def test_long_episode_has_plan_bounded_sections_and_reusable_checkpoints(
                     for i in range(parts)
                 ],
             }
-        assert ("DIALOGUE VOICES" in prompt) is (not historical)
+        assert "DIALOGUE VOICES" in prompt
         assert "EPISODE OUTLINE" in prompt
         assert f"Write section {len(calls) - 1} of {parts}" in prompt
         return dialogue(citation, int(re.search(r"Write (\d+) spoken words", prompt)[1]), language)
@@ -75,35 +74,13 @@ def test_long_episode_has_plan_bounded_sections_and_reusable_checkpoints(
     job = service.submit(
         workspace, JobKind.PODCAST, language=language, minutes=minutes, start_worker=False
     )
-    if historical:
-        previous = {
-            key: value
-            for key, value in job["params"].items()
-            if key not in ("target_words", "dialogue_version")
-        }
-        previous["slide_count"] = 8
-        job = workspace.submit(JobKind.PODCAST, previous, "old-episode")
-        retry = service.submit(
-            workspace,
-            JobKind.PODCAST,
-            language=language,
-            minutes=minutes,
-            request_key="old-episode",
-            start_worker=False,
-        )
-        assert retry["id"] == job["id"] and retry["params"] == previous
     pipeline.execute(workspace, job)
     draft = workspace.draft(job["id"])
     actual_words = podcasts.word_count(draft["data"]["turns"])
-    if historical:
-        assert actual_words == minutes * 100
-    else:
-        assert abs(actual_words - job["params"]["target_words"]) <= parts / 2
-        # Measured Qwen rates from the long controls. Exact section budgets must
-        # leave room inside the accepted episode interval, including its edges.
-        observed_pace = 117.92 if language == "ru" else 151.56
-        estimated_minutes = actual_words / observed_pace
-        assert max(20, minutes * 0.9) <= estimated_minutes <= min(60, minutes * 1.1)
+    assert abs(actual_words - job["params"]["target_words"]) <= parts / 2
+    observed_pace = 117.92 if language == "ru" else 151.56
+    estimated_minutes = actual_words / observed_pace
+    assert max(20, minutes * 0.9) <= estimated_minutes <= min(60, minutes * 1.1)
     assert max(len(t["text"]) for t in draft["data"]["turns"]) <= (300 if language == "ru" else 400)
     artifacts = workspace.artifacts(job["id"])
     outline = next(a for a in artifacts if a["metadata"].get("role") == "episode_outline")
@@ -217,11 +194,11 @@ def test_duration_feedback_uses_actual_audio_and_episode_range(minutes, seconds,
     assert result["suggested_word_count"] == round(100 * minutes * 60 / seconds)
 
 
-def test_audio_sidecar_and_registered_metadata_agree(workspace, monkeypatch):
+def test_audio_sidecar_and_registered_metadata_agree(preset_voices, workspace, monkeypatch):
     citation = workspace.units()[0]["id"]
     job = service.submit(workspace, JobKind.PODCAST, minutes=25, start_worker=False)
     workspace.save_draft(job["id"], dialogue(citation, 80, "en"))
-    render = service.render(workspace, job["id"], model="qwen3-1.7b", start_worker=False)
+    render = service.render(workspace, job["id"], model="qwen3-base", start_worker=False)
 
     def fake_render(plan, output, **kwargs):
         # Metadata boundary only; these bytes do not represent real speech.
@@ -237,14 +214,12 @@ def test_audio_sidecar_and_registered_metadata_agree(workspace, monkeypatch):
     assert saved["script_words"] == 80
 
 
-@pytest.mark.parametrize("version", [2, 3])
 def test_episode_budget_compensates_underruns_and_preserves_prior_checkpoints(
-    workspace, monkeypatch, version
+    workspace, monkeypatch
 ):
     citation = workspace.units()[0]["id"]
-    created = service.submit(workspace, JobKind.PODCAST, minutes=20, start_worker=False)
-    job = workspace.submit(
-        JobKind.PODCAST, {**created["params"], "dialogue_version": version}, f"budget-v{version}"
+    job = service.submit(
+        workspace, JobKind.PODCAST, minutes=20, request_key="budget", start_worker=False
     )
     calls = []
 
@@ -271,14 +246,10 @@ def test_episode_budget_compensates_underruns_and_preserves_prior_checkpoints(
     pipeline.execute(workspace, job)
     value = workspace.draft(job["id"])["data"]
     written = podcasts.word_count(value["turns"])
-    if version == 3:
-        assert abs(written - job["params"]["target_words"]) <= job["params"]["target_words"] * 0.02
-        assert sum("First version:" in prompt for prompt in calls) == 1
-    else:
-        assert written < 0.92 * job["params"]["target_words"]
-        assert not any("whole episode budget" in prompt for prompt in calls)
+    assert abs(written - job["params"]["target_words"]) <= job["params"]["target_words"] * 0.02
+    assert sum("First version:" in prompt for prompt in calls) == 1
     frozen = service.submit(
-        workspace, JobKind.PODCAST, minutes=20, request_key=f"budget-v{version}", start_worker=False
+        workspace, JobKind.PODCAST, minutes=20, request_key="budget", start_worker=False
     )
     assert frozen["id"] == job["id"] and frozen["params"] == job["params"]
     monkeypatch.setattr(

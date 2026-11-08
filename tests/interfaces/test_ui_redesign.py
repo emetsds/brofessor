@@ -1,6 +1,5 @@
 """User workflows introduced by the project workspace UI."""
 
-import hashlib
 import json
 
 import pytest
@@ -242,10 +241,13 @@ def test_related_navigation_and_search_reach_followups(workspace, monkeypatch):
 def test_search_and_filter_include_series_episodes(workspace, monkeypatch):
     parent = service.submit(workspace, JobKind.PODCAST_SERIES, start_worker=False)
     episode = saved(workspace, "podcast")
+    from brofessor.application.tasks import initial_models
+
     # Episode submission pins its series relationship through the normal job contract.
     linked = workspace.submit(
         JobKind.PODCAST,
         {**episode["params"], "series": {"job_id": parent["id"], "revision": 1, "episode": 1}},
+        task_models=initial_models(JobKind.PODCAST, episode["params"]),
     )
     service.edit_draft(workspace, linked["id"], workspace.draft(episode["id"])["data"], 0)
     workspace.update_job(linked["id"], status=JobStatus.SUCCEEDED)
@@ -610,12 +612,11 @@ def test_model_status_after_removal_reopening_and_new_session(workspace, monkeyp
     spec = {
         "id": speech_models.DEFAULT_ID,
         "name": "Tiny test speech",
-        "engine": "silero",
-        "url": "https://example.invalid/weights",
-        "revision": "pinned-test",
+        "engine": "qwen3-base-mlx",
+        "repo": "example/weights",
+        "revision": "c" * 40,
         "files": {"model.pt": len(weights)},
         "download_bytes": len(weights),
-        "sha256": hashlib.sha256(weights).hexdigest(),
         "languages": ["ru", "en"],
     }
     monkeypatch.setattr(speech_models, "CATALOG", [spec])
@@ -650,6 +651,7 @@ def test_model_status_after_removal_reopening_and_new_session(workspace, monkeyp
     fresh.button(key="maintenance:resume:" + operation).click().run()
     assert not fresh.exception and queue.job(job["id"])["status"] == "queued"
     assert len(queue.jobs()) == 1
+    target.mkdir(parents=True, exist_ok=True)
     (target / "model.pt").write_bytes(weights)
     queue.update_job(job["id"], status=JobStatus.SUCCEEDED)
     fresh.radio(key="settings:section").set_value("models").run()
@@ -685,11 +687,11 @@ def test_installed_base_still_requires_speech_runtime_for_new_audio(workspace, m
 
 
 def test_task_operation_details_can_cancel_and_resume_a_historical_turn_preview(
-    workspace, monkeypatch
+    preset_voices, workspace, monkeypatch
 ):
     job = saved(workspace, "podcast")
     preview = service.render(
-        workspace, job["id"], model="qwen3-0.6b", turn=1, revision=1, start_worker=False
+        workspace, job["id"], model="qwen3-base", turn=1, revision=1, start_worker=False
     )
     params = workspace.job(preview["id"])["params"]
     ui = open_ui(workspace, monkeypatch)
@@ -777,7 +779,7 @@ def test_experimental_writer_can_be_selected_for_a_new_long_podcast(workspace, m
     ui.button(key="prepare").click().run()
     assert not ui.exception
     job = workspace.jobs()[0]
-    assert job["params"]["writing_method"] == "originals" and job["params"]["dialogue_version"] == 4
+    assert job["params"]["writing_method"] == "originals"
 
 
 def test_delete_task_cancel_and_restore_keep_unsaved_editor_and_saved_revisions(

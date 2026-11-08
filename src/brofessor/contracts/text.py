@@ -24,7 +24,6 @@ class TextConnection(TypedDict):
     provider: str | None
     model: str | None
     ollama_address: NotRequired[str]
-    ollama_port: NotRequired[int]
 
 
 class SettingsSnapshot(TextConnection):

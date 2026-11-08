@@ -1,6 +1,5 @@
-"""A prompt edit belongs to a new run; accepted legacy checkpoints stay reusable."""
+"""A prompt edit belongs to a new run; accepted checkpoints and user edits stay reusable."""
 
-import hashlib
 import json
 
 import pytest
@@ -136,19 +135,10 @@ def test_runner_instructions_participate_in_new_checkpoint_identity(
     assert fingerprint(first) != fingerprint(second)
 
 
-def test_legacy_checkpoint_and_user_revision_survive_current_template_edits(
+def test_checkpoint_and_user_revision_survive_publication_failure_and_template_edits(
     workspace, model, editable_prompts, monkeypatch
 ):
-    legacy = workspace.submit(
-        JobKind.ASK,
-        {
-            "source_ids": [s["id"] for s in workspace.sources()],
-            "focus": "What was tested?",
-            "language": "en",
-            "provider": "codex",
-            "model": None,
-        },
-    )
+    job = ask(workspace)
     original_write = pipeline.atomic_json
 
     def fail_publication(path, value):
@@ -158,21 +148,21 @@ def test_legacy_checkpoint_and_user_revision_survive_current_template_edits(
 
     monkeypatch.setattr(pipeline, "atomic_json", fail_publication)
     with pytest.raises(OSError, match="Controlled"):
-        pipeline.execute(workspace, legacy)
-    # Exact historical identity, before runner messages were added to new runs.
-    identity = {key: model[0][key] for key in ("prompt", "schema", "provider", "model")}
-    digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    checkpoint = workspace.path / "jobs" / legacy["id"] / "checkpoints" / (digest + ".json")
+        pipeline.execute(workspace, job)
+    checkpoint = next((workspace.path / "jobs" / job["id"] / "checkpoints").glob("*.json"))
     accepted = checkpoint.read_bytes()
-    current = workspace.draft(legacy["id"])
-    workspace.save_draft(legacy["id"], {**current["data"], "answer": "My saved revision"}, 1)
+    current = workspace.draft(job["id"])
+    workspace.save_draft(job["id"], {**current["data"], "answer": "My saved revision"}, 1)
     for name in ["questions/answer", "common/materials", "common/runner"]:
         (editable_prompts / (name + ".md")).write_text("{{invalid_current_template}}")
     monkeypatch.setattr(pipeline, "atomic_json", original_write)
-    pipeline.execute(workspace, legacy)
+    pipeline.execute(workspace, job)
     assert len(model) == 1 and checkpoint.read_bytes() == accepted
-    assert workspace.draft(legacy["id"])["data"]["answer"] == "My saved revision"
-    assert prompts.SNAPSHOT_KEY not in workspace.job(legacy["id"])["params"]
+    assert workspace.draft(job["id"])["data"]["answer"] == "My saved revision"
+    assert (
+        workspace.job(job["id"])["params"][prompts.SNAPSHOT_KEY]
+        == job["params"][prompts.SNAPSHOT_KEY]
+    )
 
 
 def test_invalid_template_prevents_new_job_and_inference(workspace, model, editable_prompts):
@@ -190,9 +180,15 @@ def test_changed_snapshot_is_rejected_before_inference(workspace, model):
     assert model == [] and workspace.draft(job["id"]) is None
 
 
-def test_job_preview_reads_frozen_templates_and_legacy_without_inference(
-    workspace, model, editable_prompts
-):
+def test_job_without_prompt_snapshot_is_rejected_before_inference(workspace, model):
+    job = ask(workspace)
+    job["params"].pop(prompts.SNAPSHOT_KEY)
+    with pytest.raises(prompts.PromptError, match="Unsupported prompt snapshot"):
+        pipeline.execute(workspace, job)
+    assert model == [] and workspace.draft(job["id"]) is None
+
+
+def test_job_preview_reads_frozen_templates_without_inference(workspace, model, editable_prompts):
     job = ask(workspace)
     path = editable_prompts / "questions/answer.md"
     path.write_text("New wording\n" + path.read_text())

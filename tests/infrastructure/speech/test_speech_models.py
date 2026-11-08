@@ -19,21 +19,22 @@ from brofessor.interfaces.cli.app import app
 def models(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    monkeypatch.setattr(speech_models, "_legacy_caches", lambda: [])
-    entries = []
-    for index, original in enumerate(speech_models.CATALOG):
-        if original.get("engine") != "qwen3-mlx":
-            continue
-        entries.append(
-            {
-                **original,
-                "legacy": False,
-                "repo": f"test/voice-{index}",
-                "revision": str(index) * 40,
-                "files": {"config.json": 2, "model.safetensors": 7},
-                "download_bytes": 9,
-            }
-        )
+    monkeypatch.setattr(speech_models, "_external_caches", lambda: [])
+    entries = [
+        {
+            "id": f"test-{index}",
+            "name": f"Test voice {index}",
+            "engine": "qwen3-base-mlx",
+            "repo": f"test/voice-{index}",
+            "revision": str(index) * 40,
+            "files": {"config.json": 2, "model.safetensors": 7},
+            "download_bytes": 9,
+            "voices": {"host": "Ryan", "guest": "Vivian"},
+            "languages": ["ru", "en"],
+            "settings": {"seed": 42},
+        }
+        for index in range(2)
+    ]
     monkeypatch.setattr(speech_models, "CATALOG", entries)
     preferences.update(tts_model=entries[0]["id"])
     return entries
@@ -85,11 +86,11 @@ def test_incomplete_or_damaged_weights_are_not_installed(models):
     assert speech_models.installed_path(models[0]["id"]) is None
 
 
-def test_complete_legacy_weights_are_imported_without_network(models, tmp_path, monkeypatch):
+def test_external_pinned_weights_are_imported_without_network(models, tmp_path, monkeypatch):
     legacy_cache = tmp_path / "legacy"
     legacy = speech_models.snapshot(models[0], legacy_cache)
     write_weights(legacy)
-    monkeypatch.setattr(speech_models, "_legacy_caches", lambda: [legacy_cache])
+    monkeypatch.setattr(speech_models, "_external_caches", lambda: [legacy_cache])
     monkeypatch.setattr(
         speech_models, "_snapshot_download", lambda **kwargs: pytest.fail("Unexpected network")
     )
@@ -149,7 +150,7 @@ def test_render_pins_selected_model_before_preferences_change(models, tmp_path):
     source.write_text("A measured result")
     workspace.add_source(source)
     citation = workspace.units()[0]["id"]
-    speech_models.use(models[0]["id"])
+    preferences.update(tts_model=models[0]["id"])
     draft = service.submit(workspace, JobKind.PODCAST, start_worker=False)
     workspace.save_draft(
         draft["id"],
@@ -163,35 +164,11 @@ def test_render_pins_selected_model_before_preferences_change(models, tmp_path):
         },
     )
     render = service.render(workspace, draft["id"], start_worker=False)
-    speech_models.use(models[1]["id"])
+    preferences.update(tts_model=models[1]["id"])
     assert render["params"]["model"] == f"{models[0]['repo']}@{models[0]['revision']}"
     models[0]["voices"] = {"host": "Changed", "guest": "Changed"}
     assert render["params"]["model_spec"]["voices"] == {"host": "Ryan", "guest": "Vivian"}
     assert media._model_identity(models[0]["id"])["revision"] == models[0]["revision"]
-
-
-def test_retired_qwen_reference_uses_shared_installed_snapshot(models, monkeypatch):
-    import copy
-
-    from brofessor.infrastructure.speech import engines as speech
-
-    old = copy.deepcopy(models[0])
-    write_weights(speech_models.snapshot(old))
-    models[0]["revision"] = "e" * 40
-    calls = []
-    marker = object()
-
-    def load(spec, location):
-        calls.append(location)
-        return marker
-
-    monkeypatch.setattr(speech, "load", load)
-    monkeypatch.setattr(
-        "huggingface_hub.snapshot_download", lambda *a, **kw: pytest.fail("Unexpected network")
-    )
-    identity = media._model_identity(f"{old['repo']}@{old['revision']}")
-    assert media._load_speech_model(identity) is marker
-    assert calls == [speech_models.snapshot(old)]
 
 
 @pytest.mark.parametrize("choice", ["unknown/repository@" + "a" * 40, "local-folder"])
@@ -232,10 +209,7 @@ def test_new_render_rejects_models_outside_catalog_before_queueing(
     assert len(workspace.jobs()) == 1
 
 
-@pytest.mark.parametrize("legacy", [True, False])
-def test_explicit_render_retry_preserves_snapshot_and_rejects_a_different_model(
-    models, tmp_path, legacy
-):
+def test_explicit_render_retry_preserves_snapshot_and_rejects_a_different_model(models, tmp_path):
     workspace = Workspace(tmp_path / "workspace")
     source = tmp_path / "source.txt"
     source.write_text("Synthetic evidence")
@@ -254,23 +228,10 @@ def test_explicit_render_retry_preserves_snapshot_and_rejects_a_different_model(
         },
     )
     choice = models[0]["id"]
-    if legacy:
-        key = f"render:{draft['id']}:1:{choice}"
-        original = workspace.submit(
-            JobKind.RENDER_PODCAST,
-            {
-                "draft_job_id": draft["id"],
-                "revision": 1,
-                "model": speech_models.reference(choice),
-                "minutes": 20,
-            },
-            key,
-        )
-    else:
-        key = "explicit-render-retry"
-        original = service.render(
-            workspace, draft["id"], model=choice, request_key=key, start_worker=False
-        )
+    key = "explicit-render-retry"
+    original = service.render(
+        workspace, draft["id"], model=choice, request_key=key, start_worker=False
+    )
     models[0]["notes"] = "Updated description, same requested model"
     repeated = service.render(
         workspace, draft["id"], model=choice, request_key=key, start_worker=False
@@ -333,8 +294,8 @@ def test_download_keeps_submitted_revision_when_catalog_changes(
 
 def test_public_catalog_contains_only_the_chosen_speech_method():
     assert [m["id"] for m in speech_models.list_models()] == ["qwen3-base"]
-    # Compatibility lookup remains independent of public discovery.
-    assert speech_models.get("f5-tts")["engine"] == "f5"
+    with pytest.raises(ValueError, match="Unknown TTS model"):
+        speech_models.get("f5-tts")
 
 
 @pytest.mark.parametrize("saved", ["f5-tts", "retired-or-unknown"])
@@ -346,37 +307,5 @@ def test_retired_preference_falls_back_without_changing_saved_values(tmp_path, m
     assert speech_models.selected() == "qwen3-base"
     assert preferences.read() == {"tts_model": saved, "ui_language": "en"}
     with pytest.raises(ValueError):
-        speech_models.use(saved)
+        preferences.save_settings("codex", language="en", speech_model=saved)
     assert preferences.read()["tts_model"] == saved
-
-
-def test_retirement_does_not_change_saved_render_or_audio_identity():
-    import copy
-
-    spec = speech_models.get("qwen3-1.7b")
-    old = copy.deepcopy(spec)
-    old.pop("legacy")
-    params = {"model": speech_models.reference(spec), "revision": 1, "model_spec": old}
-    assert service._render_key(params) == service._render_key({**params, "model_spec": spec})
-    assert media._model_identity(old) == media._model_identity(spec)
-
-
-def test_cached_old_spec_without_retirement_flag_cannot_become_default(tmp_path, monkeypatch):
-    import json
-
-    from brofessor.infrastructure.storage import preferences
-
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    old = speech_models.get("qwen3-1.7b")
-    old.pop("legacy")
-    old["revision"] = "a" * 40
-    reference = speech_models.reference(old)
-    saved = speech_models._saved_spec(reference)
-    saved.parent.mkdir(parents=True, exist_ok=True)
-    saved.write_text(json.dumps(old))
-    assert speech_models.get(reference) == old
-    with pytest.raises(ValueError, match="older projects"):
-        speech_models.use(reference)
-    assert speech_models.selected() == "qwen3-base"
-    assert preferences.read() == {}

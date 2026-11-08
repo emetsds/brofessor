@@ -69,7 +69,7 @@ def test_stage_timing_survives_fault_resume_and_dynamic_work_counts(tmp_path, mo
     )
 
 
-def test_legacy_jobs_do_not_invent_durations_and_cancelled_queue_is_closed(tmp_path):
+def test_unmeasured_jobs_do_not_invent_durations_and_cancelled_queue_is_closed(tmp_path):
     w = Workspace(tmp_path / "workspace")
     job = w.submit(JobKind.SLIDES, {})
     w.cancel(job["id"])

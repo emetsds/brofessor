@@ -41,17 +41,3 @@ revision `5103f8988ee936525fbfb6dc10061bbabd1d584e`, under CC0 1.0.
 The catalog includes the publisher's exact reference transcripts and SHA-256 hashes.
 The voice-pack download includes its CC0 legal text and NOTICE.
 Audio and weights are stored separately in the user's application data.
-
-`src/brofessor/infrastructure/speech/_kokoro_ru_g2p.py` adapts the Russian v2 phoneme frontend from
-[zaakirio/kokoro-ru](https://huggingface.co/zaakirio/kokoro-ru), revision
-`d649c57b239b18c4c384378127cbf01dba039bc1`. Its model card declares the code
-Apache-2.0 and the weights OpenRAIL. The adaptation separates offline resource
-loading and RUAccent preparation from phoneme conversion. The original phonetic
-normalization and attribution are retained. Apache-2.0 license:
-[LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
-
-Model weights, espeak data and RUAccent resources are downloaded separately,
-under their upstream licenses; they are not distributed in this repository.
-Silero RU v5.6 weights are CC-BY-NC-SA-4.0. RUAccent 1.5.8.3's package metadata
-declares Apache Software License; its current repository declares MIT. These
-are separate upstream releases; the package and resource revisions are pinned.

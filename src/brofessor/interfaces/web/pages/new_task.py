@@ -23,7 +23,6 @@ from brofessor.interfaces.web.components import language as ui_language
 from brofessor.interfaces.web.components import layout as ui_layout
 from brofessor.interfaces.web.dialogs import settings as ui_settings
 from brofessor.interfaces.web.state_keys import (
-    COMPOSER_MIGRATED_KEY,
     NAVIGATE_KEY,
     Page,
     ProjectKey,
@@ -38,22 +37,6 @@ def create_result(context):
     t = context.t
     ui_layout.heading(t("New task"), level=2)
     prefix = project_key(workspace.path, ProjectKey.NEW, "")
-    if not st.session_state.get(COMPOSER_MIGRATED_KEY):
-        for name in (
-            "focus",
-            "kind",
-            "source_ids",
-            "output_language",
-            "minutes",
-            "slide_count",
-            "series_minutes",
-            "episode_count",
-            "request_key",
-            "request_fingerprint",
-        ):
-            if name in st.session_state and prefix + name not in st.session_state:
-                st.session_state[prefix + name] = st.session_state.pop(name)
-        st.session_state[COMPOSER_MIGRATED_KEY] = True
     if st.session_state.pop(prefix + "reset", False):
         st.session_state[prefix + "focus"] = ""
         st.session_state[prefix + "title"] = ""

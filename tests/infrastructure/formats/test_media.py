@@ -20,12 +20,19 @@ def plan(language="en"):
 
 
 @pytest.fixture
-def speech(monkeypatch):
+def speech_catalog(monkeypatch):
+    from brofessor.infrastructure.speech import catalogue as speech_models
+
+    spec = speech_models.get("qwen3-base")
+    for key in ("preset_references", "voice_pack", "dependencies"):
+        spec.pop(key)
+    spec["voices"] = {"host": "Ryan", "guest": "Vivian"}
+    monkeypatch.setattr(speech_models, "CATALOG", [spec])
+
+
+@pytest.fixture
+def speech(monkeypatch, speech_catalog):
     calls = []
-    # These cache/recovery cases also retain coverage of historical preset jobs.
-    monkeypatch.setattr(
-        media, "DEFAULT_TTS_MODEL", "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit"
-    )
     monkeypatch.setattr(media, "_load_speech_model", lambda identity: object())
     monkeypatch.setattr(media, "_ffmpeg", lambda: None)
 
@@ -44,7 +51,7 @@ def isolate_render_lock(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "user-data"))
 
 
-def test_cross_project_qwen_wait_skips_cpu_and_cache_hits_and_can_be_cancelled(tmp_path, speech):
+def test_cross_project_qwen_wait_skips_cache_hits_and_can_be_cancelled(tmp_path, speech):
     import subprocess
     import sys
 
@@ -60,9 +67,14 @@ def loading(spec):
     ready, _, _ = select.select([sys.stdin], [], [], 12)
     os._exit(0 if ready else 1)
 media._load_speech_model = loading
+from brofessor.infrastructure.speech import catalogue
+spec = catalogue.get("qwen3-base")
+for key in ("preset_references", "voice_pack", "dependencies"):
+    spec.pop(key)
+catalogue.CATALOG = [spec]
 root = Path(sys.argv[1])
 media.render_audio({"turns": [{"speaker": "host", "text": "Первый"}]},
-                   root / "audio.wav", segment_dir=root / "segments", model="qwen3-1.7b")
+                   root / "audio.wav", segment_dir=root / "segments", model="qwen3-base")
 """
     with subprocess.Popen(
         [sys.executable, "-c", holder, str(tmp_path / "first")],
@@ -80,13 +92,6 @@ media.render_audio({"turns": [{"speaker": "host", "text": "Первый"}]},
                 plan(), warm / "again.wav", segment_dir=warm / "segments", progress=must_not_wait
             )
             assert all(segment["reused"] for segment in cached["segments"])
-            media.render_audio(
-                {"language": "ru", "turns": [{"speaker": "host", "text": "Факт."}]},
-                tmp_path / "cpu.wav",
-                segment_dir=tmp_path / "cpu",
-                model="silero-cis-base",
-                progress=must_not_wait,
-            )
             before = list(speech)
             second = tmp_path / "second"
             events = []
@@ -130,10 +135,9 @@ def test_segments_resume_validate_and_measure_duration(tmp_path, speech, monkeyp
     assert len(speech) == 2
 
 
-def test_stalled_speech_preserves_accepted_segments_and_previous_output(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        media, "DEFAULT_TTS_MODEL", "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-4bit"
-    )
+def test_stalled_speech_preserves_accepted_segments_and_previous_output(
+    tmp_path, monkeypatch, speech_catalog
+):
     np = pytest.importorskip("numpy")
     original_synthesize = media._synthesize
     stalled = True
@@ -215,12 +219,12 @@ def test_model_and_voice_changes_invalidate_cache(tmp_path, speech, monkeypatch)
 
     directory = tmp_path / "segments"
     media.render_audio(plan(), tmp_path / "a.wav", segment_dir=directory)
-    revision = "mlx-community/another-CustomVoice@" + "a" * 40
-    result = media.render_audio(plan(), tmp_path / "b.wav", segment_dir=directory, model=revision)
-    assert all(not item["reused"] for item in result["segments"])
     models = [dict(item) for item in speech_models.CATALOG]
-    models[0]["voices"] = {"host": "Aiden", "guest": "Vivian"}
+    models[0]["revision"] = "a" * 40
     monkeypatch.setattr(speech_models, "CATALOG", models)
+    result = media.render_audio(plan(), tmp_path / "b.wav", segment_dir=directory)
+    assert all(not item["reused"] for item in result["segments"])
+    models[0]["voices"] = {"host": "Aiden", "guest": "Vivian"}
     result = media.render_audio(plan(), tmp_path / "c.wav", segment_dir=directory)
     assert [item["reused"] for item in result["segments"]] == [False, True]
 
@@ -332,7 +336,7 @@ def test_failed_mp3_publication_preserves_existing_file_and_reuses_completed_aud
 
 
 def test_rejects_unpinned_model_and_bad_plans(tmp_path, speech):
-    with pytest.raises(ValueError, match="repo@commit"):
+    with pytest.raises(ValueError, match="Unknown TTS model"):
         media.render_audio(plan(), tmp_path / "a.wav", segment_dir=tmp_path, model="some/model")
     with pytest.raises(ValueError, match="language"):
         media.render_audio(plan("unknown"), tmp_path / "a.wav", segment_dir=tmp_path)

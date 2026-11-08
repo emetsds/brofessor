@@ -20,7 +20,7 @@ from brofessor.contracts.jobs import (
 from brofessor.contracts.text import DEFAULT_OLLAMA_ADDRESS, TEXT_PROVIDERS, TextProvider
 from brofessor.features.podcasts.writer import WritingMethod
 from brofessor.features.reports import ReportTemplate
-from brofessor.features.sources.reading import COVERAGE_FILENAME, ReadingStatus
+from brofessor.features.sources.reading import COVERAGE_FILENAME
 from brofessor.infrastructure.storage.workspace import JOBS_DIRECTORY, Workspace, atomic_json
 from brofessor.infrastructure.text.runners import normalize_ollama_address, validate_ollama_model
 from brofessor.models import Answer, Output, Podcast, Slides, validate_citations
@@ -39,11 +39,10 @@ _RESULT_OPTIONS: dict[str, dict[str, str | int]] = {
 
 def _draft_params(kind, params):
     # Compare requested inputs independently of the writer's frozen settings.
-    # Older jobs also stored durations and slide counts for unrelated operations.
     return {
         key: value
         for key, value in params.items()
-        if key not in ("target_words", "dialogue_version", "reading_version", prompts.SNAPSHOT_KEY)
+        if key not in ("target_words", prompts.SNAPSHOT_KEY)
         and (key not in ("minutes", "slide_count", "episode_count") or key in _RESULT_OPTIONS[kind])
     }
 
@@ -65,11 +64,7 @@ def _with_models(params, choices):
         same = ollama_address_for_job(params) == choices["ollama_address"]
     if same:
         return params.copy()
-    result = {
-        k: v
-        for k, v in params.items()
-        if k not in ("provider", "model", "ollama_address", "ollama_port")
-    }
+    result = {k: v for k, v in params.items() if k not in ("provider", "model", "ollama_address")}
     result.update(provider=choices["provider"], model=choices["model"])
     if (
         choices["provider"] == TextProvider.OLLAMA
@@ -109,19 +104,6 @@ def _submit_draft(workspace, kind, params, request_key, *, model_choices=None):
     )
     requested = _draft_params(kind, params)
     params = requested.copy()
-    originals = (
-        kind in PODCAST_JOB_KINDS and params.get("writing_method") == WritingMethod.ORIGINALS
-    )
-    if kind not in (
-        JobKind.ASK,
-        JobKind.REPORT,
-        JobKind.STUDY,
-        JobKind.TRANSLATE_EPUB,
-        JobKind.TRANSLATE_PDF,
-    ):
-        params["reading_version"] = 3 if originals else 2
-    if kind == JobKind.PODCAST:
-        params["dialogue_version"] = 4 if originals else 3
     if kind == JobKind.PODCAST and params["minutes"] >= 20:
         # Qwen Base with the bundled ExNihilus voices. Frozen at submission so a
         # later calibration cannot change the prompts of a queued or resumed job.
@@ -407,13 +389,7 @@ def edit_draft(
     if job["kind"] == JobKind.ASK:
         from brofessor.features.questions import validate_answer
 
-        previous = workspace.draft(job_id)
-        require_quotes = "quotes" in data or (previous is not None and "quotes" in previous["data"])
-        validate_answer(
-            value, source_navigation.units(workspace, job), require_quotes=require_quotes
-        )
-        if not require_quotes and "quotes" not in data:
-            value.pop("quotes")  # Preserve legacy answers without claiming quote verification.
+        validate_answer(value, source_navigation.units(workspace, job))
     elif job["kind"] == JobKind.REPORT:
         from brofessor.features.reports import accepted_terminology, validate
 
@@ -543,7 +519,7 @@ def follow_up(
     choices = {**models(workspace, job_id)["data"], "origin": ModelOrigin.PARENT}
     # A retry keeps the first model snapshot even after the task's preferences change.
     previous = workspace.job_by_request_key(request_key) if request_key else None
-    ignore = {"provider", "model", "ollama_address", "ollama_port"}
+    ignore = {"provider", "model", "ollama_address"}
     if (
         previous
         and previous["kind"] == JobKind.ASK
@@ -689,7 +665,7 @@ def _speech_inputs(spec):
     return {
         key: value
         for key, value in spec.items()
-        if key not in ("name", "notes", "requirements", "license", "legacy")
+        if key not in ("name", "notes", "requirements", "license")
     }
 
 
@@ -800,16 +776,7 @@ def render(
     elif spec is not None:
         if draft["data"]["language"] not in spec["languages"]:
             raise ValueError(f"Selected speech model does not support {draft['data']['language']}")
-        from brofessor.infrastructure.speech.engines import validate_text
 
-        if original["kind"] == JobKind.AUDIOBOOK:
-            from brofessor.features.books.audiobooks import turns as narration_turns
-
-            turns = narration_turns(draft["data"])
-        else:
-            turns = draft["data"]["turns"]
-        for item in turns if turn is None else [turns[turn - 1]]:
-            validate_text(spec, item["text"])
         if spec.get("preset_references"):
             from brofessor.infrastructure.speech.references import MissingVoicePack, preset_snapshot
 
@@ -831,14 +798,10 @@ def render(
                             return previous
                         previous = workspace.job_by_request_key(f"replace-missing:{previous['id']}")
                 raise
-        if spec.get("requires_reference") or spec.get("references"):
+        if spec.get("references"):
             from brofessor.infrastructure.speech.references import freeze
-            from brofessor.infrastructure.speech.references import selected as selected_references
 
-            spec["references"] = freeze(
-                workspace.path,
-                spec.get("references") or selected_references(draft["data"]["language"]),
-            )
+            spec["references"] = freeze(workspace.path, spec["references"])
         params["model_spec"] = spec
     if not explicit_key:
         # Manual and automatic narration share the identity of frozen inputs.
@@ -990,22 +953,6 @@ def coverage(workspace: Workspace, job_id: str) -> dict | None:
     if not path.exists():
         return None
     report = json.loads(path.read_text())
-    if "units" not in report:
-        source_job = workspace.job(job_id)
-        report["units"] = [
-            {
-                "id": unit["id"],
-                "source_id": unit["source_id"],
-                "locator": unit["locator"],
-                "status": ReadingStatus.READ
-                if unit["id"] in report["read"]
-                else ReadingStatus.EXCLUDED
-                if unit["status"] != UnitStatus.READY
-                else ReadingStatus.PENDING,
-                "reason": "" if unit["status"] == UnitStatus.READY else unit["status"],
-            }
-            for unit in workspace.units(source_job["params"]["source_ids"])
-        ]
     cited = set()
 
     def visit(node):

@@ -47,7 +47,6 @@ def catalog(monkeypatch):
         "id": "second",
         "name": "Second",
         "revision": "b" * 40,
-        "legacy": True,
         "files": {"shared.bin": 6},
         "download_bytes": 6,
     }
@@ -180,7 +179,7 @@ def test_remove_pinned_model_preserves_shared_blobs_dependencies_specs_and_parti
     os.link(repo / "blobs" / "own", legacy_copy)
     inventory = {row["id"]: row for row in maintenance.speech_inventory()}
     assert inventory["first"]["installed"] and inventory["first"]["selectable"]
-    assert inventory["second"]["installed"] and not inventory["second"]["selectable"]
+    assert inventory["second"]["installed"] and inventory["second"]["selectable"]
     maintenance.remove_speech("first")
     assert not speech_models.snapshot(first).exists()
     assert (speech_models.snapshot(second) / "shared.bin").read_bytes() == b"shared"
@@ -294,10 +293,9 @@ def test_native_hf_download_lock_blocks_cleanup_even_for_unregistered_workspace(
     assert speech_models.installed_path(first) is not None
 
 
-@pytest.mark.parametrize("engine", ["qwen3-base-mlx", "qwen3-mlx"])
-def test_legacy_qwen_synthesis_lock_blocks_model_cleanup(catalog, monkeypatch, engine):
+def test_qwen_synthesis_lock_blocks_model_cleanup(catalog, monkeypatch):
     first, second, _ = catalog
-    monkeypatch.setattr(speech_models, "CATALOG", [{**first, "engine": engine}, second])
+    monkeypatch.setattr(speech_models, "CATALOG", [first, second])
     lock = preferences.data_directory() / "qwen-speech.lock"
     with lock.open("a") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -308,36 +306,6 @@ def test_legacy_qwen_synthesis_lock_blocks_model_cleanup(catalog, monkeypatch, e
     assert speech_models.installed_path(first) is not None
     maintenance.remove_speech("first")
     assert not speech_models.snapshot(first).exists()
-
-
-def test_url_cache_remove_and_partial_clear_keep_download_lock(monkeypatch):
-    item = {
-        "id": "url-model",
-        "name": "URL model",
-        "url": "https://example.invalid/model.pt",
-        "revision": "pinned",
-        "files": {"model.pt": 5},
-        "download_bytes": 5,
-        "engine": "silero",
-    }
-    monkeypatch.setattr(speech_models, "CATALOG", [item])
-    target = speech_models.snapshot(item)
-    target.mkdir(parents=True)
-    (target / "model.pt").write_bytes(b"model")
-    partial = target / "model.pt.part"
-    partial.write_bytes(b"partial")
-    lock = target / ".download.lock"
-    with lock.open("a") as handle:
-        inode = lock.stat().st_ino
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with pytest.raises(ResourceBusy):
-            maintenance.clear_partial("url-model")
-    with (preferences.data_directory() / "qwen-speech.lock").open("a") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        maintenance.clear_partial("url-model")
-        assert not partial.exists() and (target / "model.pt").read_bytes() == b"model"
-        maintenance.remove_speech("url-model")
-    assert not (target / "model.pt").exists() and lock.stat().st_ino == inode
 
 
 def test_audio_clear_preserves_outputs_originals_recovery_and_checkpoints(tmp_path):
@@ -380,7 +348,7 @@ def test_symlink_cache_folder_cannot_delete_external_data(tmp_path):
 
 
 @pytest.mark.parametrize("kind", ["render_podcast", "preview_turn"])
-def test_legacy_render_blocks_only_its_live_workspace_audio_cache(tmp_path, kind):
+def test_live_render_blocks_only_its_live_workspace_audio_cache(tmp_path, kind):
     from brofessor.application.worker import worker_lock
 
     project = Workspace(tmp_path / "unregistered-project")

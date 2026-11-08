@@ -116,7 +116,7 @@ def test_episode_pins_plan_revision_provider_sources_and_shared_notes(workspace,
     assert second["id"] != first["id"] and second["params"]["series"]["revision"] == 2
     bases = []
 
-    def write(base, *args, target_words, dialogue_version):
+    def write(base, *args, target_words):
         bases.append(base)
         citation = workspace.units()[0]["id"]
         return {

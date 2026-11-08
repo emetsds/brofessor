@@ -1,7 +1,6 @@
 """Pinned local speech models and a shared user cache; no inference during setup."""
 
 import copy
-import fcntl
 import hashlib
 import io
 import json
@@ -10,19 +9,15 @@ import platform
 import shutil
 import threading
 import time
-from functools import lru_cache
 from importlib.resources import files
 from importlib.util import find_spec
 from pathlib import Path
 from typing import cast
 
-import httpx
 
 from brofessor.contracts.jobs import StageId
 from brofessor.infrastructure.speech.contracts import (
-    DOWNLOAD_LOCK_FILENAME,
     MODEL_CATALOGUE_FILENAME,
-    SpeechEngine,
     SpeechModelSpec,
 )
 from brofessor.infrastructure.storage import preferences
@@ -58,8 +53,6 @@ def cache_directory() -> Path:
 
 
 def snapshot(model: SpeechModelSpec, cache: Path | None = None) -> Path:
-    if "url" in model:
-        return cache_directory().parent / "files" / model["id"] / model["revision"]
     return (
         (cache or cache_directory())
         / ("models--" + model["repo"].replace("/", "--"))
@@ -87,24 +80,7 @@ def installed_path(model: str | dict | SpeechModelSpec) -> Path | None:
     path = snapshot(item)
     if _valid_bytes(item, path) != item["download_bytes"]:
         return None
-    if any((path / name).is_symlink() for name in item.get("local_code", [])):
-        return None
-    if "sha256" in item:
-        file = path / next(iter(item["files"]))
-        try:
-            stat = file.stat()
-            digest = _file_digest(file, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
-        except OSError:
-            return None
-        if digest != item["sha256"]:
-            return None
     return path
-
-
-@lru_cache(maxsize=16)
-def _file_digest(path, size, mtime_ns, ctime_ns):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def qwen_runtime_available() -> bool:
@@ -119,30 +95,16 @@ def list_models() -> list[dict]:
             **{key: value for key, value in item.items() if key != "files"},
             "download_bytes": total_bytes(item),
             "installed": installed_path(item["id"]) is not None,
-            "compatible": apple_silicon
-            or (
-                item.get("engine") in {SpeechEngine.SILERO, SpeechEngine.KOKORO_RU}
-                and platform.system() in {"Darwin", "Linux"}
-            ),
+            "compatible": apple_silicon,
         }
         for item in CATALOG
-        if not item.get("legacy")
     ]
 
 
 def selected() -> str:
     choice = preferences.read().get("tts_model", DEFAULT_ID)
-    supported = {item["id"] for item in CATALOG if not item.get("legacy")}
+    supported = {item["id"] for item in CATALOG}
     return choice if choice in supported else DEFAULT_ID
-
-
-def use(model: str) -> SpeechModelSpec:
-    item = get(model)
-    supported = {entry["id"] for entry in CATALOG if not entry.get("legacy")}
-    if item["id"] not in supported:
-        raise ValueError("This profile is kept for older projects. Choose qwen3-base.")
-    preferences.update(tts_model=item["id"])
-    return item
 
 
 def reference(model: str | dict | SpeechModelSpec | None = None) -> str:
@@ -153,7 +115,7 @@ def _reference(item: SpeechModelSpec) -> str:
     return f"{item.get('repo', item['id'])}@{item['revision']}"
 
 
-def _legacy_caches() -> list[Path]:
+def _external_caches() -> list[Path]:
     paths = [Path.home() / ".cache" / "huggingface" / "hub"]
     if value := os.environ.get("HF_HOME"):
         paths.insert(0, Path(value).expanduser() / "hub")
@@ -170,63 +132,6 @@ def _snapshot_download(**kwargs):
             "Install speech support first: uv sync --extra ui --extra speech"
         ) from error
     return snapshot_download(**kwargs)
-
-
-def _download_file(item, target, check, report):
-    """One checksummed upstream file; Range resumes when the server supports it."""
-    filename = next(iter(item["files"]))
-    target.mkdir(parents=True, exist_ok=True)
-    with (target / DOWNLOAD_LOCK_FILENAME).open("a") as lock:
-        while True:
-            check()
-            try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                time.sleep(0.1)
-        if installed_path(item) is not None:
-            return
-        output = target / filename
-        partial = output.with_suffix(output.suffix + ".part")
-        offset = partial.stat().st_size if partial.exists() else 0
-        if offset == item["download_bytes"]:
-            with partial.open("rb") as stream:
-                digest = hashlib.file_digest(stream, "sha256").hexdigest()
-            if digest == item["sha256"]:
-                check()
-                partial.replace(output)
-                report(offset)
-                return
-        if offset >= item["download_bytes"]:
-            partial.unlink()
-            offset = 0
-        headers = {"Range": f"bytes={offset}-"} if offset else {}
-        with httpx.stream(
-            "GET", item["url"], headers=headers, follow_redirects=True, timeout=30
-        ) as response:
-            response.raise_for_status()
-            resumed = offset and response.status_code == 206
-            if response.status_code == 206 and not response.headers.get(
-                "content-range", ""
-            ).startswith(f"bytes {offset}-"):
-                raise RuntimeError("Model server returned an invalid resume range")
-            completed = offset if resumed else 0
-            report(completed)
-            with partial.open("ab" if resumed else "wb") as stream:
-                for chunk in response.iter_bytes(1024 * 1024):
-                    check()
-                    completed += len(chunk)
-                    if completed > item["download_bytes"]:
-                        raise RuntimeError("Model download exceeds its pinned size")
-                    stream.write(chunk)
-                    report(completed)
-        with partial.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
-        if completed != item["download_bytes"] or digest != item["sha256"]:
-            partial.unlink()
-            raise RuntimeError("Model download does not match its pinned size and SHA-256")
-        check()
-        partial.replace(output)
 
 
 def download(
@@ -274,29 +179,13 @@ def _download_one(
     item = get(model)
     target = snapshot(item)
 
-    def localize_code():
-        # Koziev resolves __file__ before opening adjacent data. HF blob symlinks
-        # lose that directory; materialize only its small pinned Python files.
-        for name in item.get("local_code", []):
-            check()
-            file = target / name
-            if file.is_symlink() and file.is_file():
-                temporary = file.with_name(
-                    f"{file.name}.{os.getpid()}.{threading.get_ident()}.localizing"
-                )
-                try:
-                    shutil.copyfile(file, temporary)
-                    temporary.replace(file)
-                finally:
-                    temporary.unlink(missing_ok=True)
-
     def check():
         if cancelled():
             raise CancelledError("TTS model download cancelled; completed files are preserved")
 
     def report(completed):
         check()
-        if not completed and "url" not in item:
+        if not completed:
             return  # Keep saved progress while the Hub discovers its resume offset.
         progress(
             {
@@ -308,20 +197,12 @@ def _download_one(
         )
 
     cached = _valid_bytes(item, target)
-    if "url" in item and not cached:
-        partial = target / next(iter(item["files"]))
-        partial = partial.with_suffix(partial.suffix + ".part")
-        if partial.is_file():
-            cached = min(partial.stat().st_size, item["download_bytes"])
     report(cached)
-    localize_code()
-    if "url" in item and installed_path(item) is None:
-        _download_file(item, target, check, report)
     if installed_path(item) is None:
-        # Reuse the user's complete legacy snapshots without another download.
-        for cache in _legacy_caches():
-            legacy = snapshot(item, cache)
-            if legacy == target or _valid_bytes(item, legacy) != item["download_bytes"]:
+        # Reuse exact pinned weights from external Hugging Face caches.
+        for cache in _external_caches():
+            external = snapshot(item, cache)
+            if external == target or _valid_bytes(item, external) != item["download_bytes"]:
                 continue
             for name, size in item["files"].items():
                 check()
@@ -332,9 +213,9 @@ def _download_one(
                 temporary = output.with_name(output.name + ".importing")
                 try:
                     try:
-                        os.link((legacy / name).resolve(), temporary)
+                        os.link((external / name).resolve(), temporary)
                     except OSError:
-                        shutil.copyfile(legacy / name, temporary)
+                        shutil.copyfile(external / name, temporary)
                     temporary.replace(output)
                 finally:
                     temporary.unlink(missing_ok=True)
@@ -379,7 +260,6 @@ def _download_one(
             allow_patterns=list(item["files"]),
             tqdm_class=DownloadProgress,
         )
-    localize_code()
     check()
     if installed_path(item) is None:
         raise RuntimeError("TTS model download is incomplete; retry the download to continue")
@@ -387,7 +267,7 @@ def _download_one(
     atomic_json(_saved_spec(_reference(item)), item)
     return {
         "id": item["id"],
-        **({"repo": item["repo"]} if "repo" in item else {"url": item["url"]}),
+        "repo": item["repo"],
         "revision": item["revision"],
         "path": str(target),
     }

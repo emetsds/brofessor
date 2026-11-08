@@ -32,7 +32,6 @@ class ModelOrigin(StrEnum):
     APPLICATION = "application"
     PARENT = "parent"
     CUSTOM = "custom"
-    LEGACY = "legacy"
 
 
 def root_job(job: JobRecord, by_id: Mapping[str, JobRecord]) -> str:
@@ -380,7 +379,6 @@ def validate_models(kind, data):
             ModelOrigin.APPLICATION,
             ModelOrigin.PARENT,
             ModelOrigin.CUSTOM,
-            ModelOrigin.LEGACY,
         ):
             raise ValueError("Invalid task model origin")
         return {"speech_model": speech, "origin": origin}
@@ -405,7 +403,6 @@ def validate_models(kind, data):
         ModelOrigin.APPLICATION,
         ModelOrigin.PARENT,
         ModelOrigin.CUSTOM,
-        ModelOrigin.LEGACY,
     ):
         raise ValueError("Invalid task model origin")
     if provider == TextProvider.OLLAMA:
@@ -454,29 +451,7 @@ def models(workspace, job_id):
     saved = workspace.task_models(task["id"])
     if saved is not None:
         return saved
-    # Old projects keep their actual text model and most recent voice, not today's defaults.
-    from brofessor.infrastructure.speech.catalogue import DEFAULT_ID
-    from brofessor.infrastructure.text.runners import ollama_address_for_job
-
-    data = {
-        "provider": task["params"].get("provider", TextProvider.CODEX),
-        "model": task["params"].get("model"),
-        "origin": ModelOrigin.LEGACY,
-    }
-    if data["provider"] == TextProvider.OLLAMA:
-        data["ollama_address"] = ollama_address_for_job(task["params"])
-    if task["kind"] in PODCAST_JOB_KINDS:
-        render = next(
-            (
-                j
-                for j in workspace.jobs()
-                if j["kind"] == JobKind.RENDER_PODCAST
-                and j["params"].get("draft_job_id") == task["id"]
-            ),
-            None,
-        )
-        data["speech_model"] = render["params"].get("model", DEFAULT_ID) if render else DEFAULT_ID
-    return {"task_id": task["id"], "revision": 0, "data": data}
+    raise ValueError("Task model settings are missing; create a new task")
 
 
 def save_models(workspace, job_id, data, expected_revision):
@@ -519,7 +494,7 @@ def regenerate(workspace, job_id, *, revision=None, request_key=None, start_work
     params = {
         key: value
         for key, value in job["params"].items()
-        if key not in ("provider", "model", "ollama_address", "ollama_port", "regeneration")
+        if key not in ("provider", "model", "ollama_address", "regeneration")
     }
     params = service._with_models(params, choices)
     if job["kind"] in TRANSLATION_JOB_KINDS:
@@ -536,7 +511,7 @@ def regenerate(workspace, job_id, *, revision=None, request_key=None, start_work
 
         params["auto_audio"] = speech_models.get(choices["speech_model"])
     previous = workspace.job_by_request_key(request_key) if request_key else None
-    ignore = {"provider", "model", "ollama_address", "ollama_port"}
+    ignore = {"provider", "model", "ollama_address"}
     if (
         previous
         and previous["kind"] == job["kind"]

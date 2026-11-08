@@ -1,7 +1,6 @@
-"""Versioned text-layer PDF projection and local, measured reconstruction.
+"""Text-layer PDF projection and local, measured reconstruction.
 
-PDFium decodes objects; v2 edits text streams with pypdf, preserving resources.
-The original v1 PDFium renderer remains available for saved snapshots.
+PDFium decodes objects; pypdf edits text streams while preserving resources.
 ReportLab writes embedded Unicode text.
 Original graphics are never rasterized or covered with white rectangles. Layout
 that cannot be handled without losing text is rejected before publication.
@@ -24,7 +23,7 @@ from threading import RLock
 from xml.sax.saxutils import escape
 
 import pypdfium2 as pdfium
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader
 from pypdfium2 import raw
 from reportlab.lib.colors import Color
 from reportlab.lib.styles import ParagraphStyle
@@ -93,37 +92,13 @@ class _Span:
     form: bool = False
 
 
-@dataclass
-class _Region:
-    page: int
-    spans: list
-    bbox: tuple
-    box: tuple | None = None
-
-    @property
-    def text(self):
-        text = ""
-        previous = None
-        for span in self.spans:
-            if previous is not None:
-                new_line = previous.bbox[1] > span.bbox[3] - 1
-                if new_line and text.endswith("-") and span.text[:1].islower():
-                    text = text[:-1]
-                elif new_line or span.bbox[0] - previous.bbox[2] > span.size * 0.15:
-                    text += " "
-            text += span.text.strip()
-            previous = span
-        return text
-
-
-def _segments(obj, *, rules_only=False):
+def _segments(obj):
     """Straight path boundaries cap cells/columns without interpreting tables."""
-    if rules_only:
-        fill, stroke = ctypes.c_int(), ctypes.c_int()
-        raw.FPDFPath_GetDrawMode(obj, fill, stroke)
-        left, bottom, right, top = obj.get_bounds()
-        if not stroke.value and min(right - left, top - bottom) > 2:
-            return []
+    fill, stroke = ctypes.c_int(), ctypes.c_int()
+    raw.FPDFPath_GetDrawMode(obj, fill, stroke)
+    left, bottom, right, top = obj.get_bounds()
+    if not stroke.value and min(right - left, top - bottom) > 2:
+        return []
     matrix = obj.get_matrix()
     previous = start = None
     result = []
@@ -158,62 +133,6 @@ def _frozen(text, font):
     if not any(c.isalpha() for c in text):
         return "numeric/symbol"
     return None
-
-
-def _regions(spans, page, boundaries):
-    lines = []
-    for span in sorted(spans, key=lambda s: (-round(s.bbox[3], 1), s.bbox[0])):
-        candidate = None
-        for line in reversed(lines):
-            last = line.spans[-1]
-            if line.bbox[3] - span.bbox[3] > span.size:
-                break
-            if (
-                last.frozen == span.frozen
-                and last.style == span.style
-                and last.color == span.color
-                and abs(last.size - span.size) < 0.2
-                and abs(line.bbox[1] - span.bbox[1]) < span.size * 0.25
-                and -0.3 <= span.bbox[0] - line.bbox[2] < span.size
-            ):
-                candidate = line
-                break
-        if candidate is None:
-            lines.append(_Region(page, [span], span.bbox))
-        else:
-            candidate.spans.append(span)
-            candidate.bbox = _union([candidate.bbox, span.bbox])
-    result = []
-    for line in lines:
-        first = line.spans[0]
-        candidate = None
-        if not first.frozen:
-            for region in reversed(result):
-                last = region.spans[-1]
-                gap = region.bbox[1] - line.bbox[3]
-                if (
-                    not last.frozen
-                    and last.style == first.style
-                    and last.color == first.color
-                    and abs(last.size - first.size) < 0.2
-                    and abs(region.bbox[0] - line.bbox[0]) < 2
-                    and 0 <= gap <= first.size * 0.75
-                    and not any(
-                        abs(y0 - y1) < 0.2
-                        and line.bbox[3] <= y0 <= region.bbox[1]
-                        and min(x0, x1) < line.bbox[2]
-                        and max(x0, x1) > line.bbox[0]
-                        for x0, y0, x1, y1 in boundaries
-                    )
-                ):
-                    candidate = region
-                    break
-        if candidate is None:
-            result.append(line)
-        else:
-            candidate.spans.extend(line.spans)
-            candidate.bbox = _union([candidate.bbox, line.bbox])
-    return sorted(result, key=lambda region: (-region.bbox[3], region.bbox[0]))
 
 
 def _available(region, regions, boundaries, obstacles, width, height, *, tolerance=0.5):
@@ -317,12 +236,9 @@ def _hyphenated(markup, language, width, font, size):
 
 class PdfBook:
     format = DocumentFormat.PDF
-    projection_version = 1
+    projection_version = 2
 
-    def __init__(self, source, *, projection_version=2, check=lambda: None):
-        if projection_version not in (1, 2):
-            raise ValueError("Unsupported PDF projection version")
-        self.projection_version = projection_version
+    def __init__(self, source, *, check=lambda: None):
         self.source = Path(source).resolve()
         if self.source.stat().st_size > MAX_SOURCE_BYTES:
             raise ValueError("PDF exceeds source size limit")
@@ -348,15 +264,11 @@ class PdfBook:
         self.title = self.source.stem
         from brofessor.infrastructure.formats import pdf_layout
 
-        self._aliases = (
-            [pdf_layout.font_aliases(p) for p in reader.pages] if projection_version >= 2 else []
-        )
-        self._text_keys = []
-        if projection_version >= 2:
-            from brofessor.infrastructure.formats.pdf_background import text_keys
+        self._aliases = [pdf_layout.font_aliases(p) for p in reader.pages]
+        from brofessor.infrastructure.formats.pdf_background import text_keys
 
-            seen_forms = set()
-            self._text_keys = [text_keys(p, reader, seen_forms, check=check) for p in reader.pages]
+        seen_forms = set()
+        self._text_keys = [text_keys(p, reader, seen_forms, check=check) for p in reader.pages]
         self.blocks, self._regions, self._pages, self.preserved = [], {}, [], []
         self._moving_numbers = {}
         self._moving_code = {}
@@ -371,11 +283,7 @@ class PdfBook:
         number = page_number + 1
         with closing(document[page_number]) as page, closing(page.get_textpage()) as textpage:
             width, height = page.get_size()
-            objects = list(
-                page.get_objects(
-                    max_depth=15 if self.projection_version >= 2 else 1, textpage=textpage
-                )
-            )
+            objects = list(page.get_objects(max_depth=15, textpage=textpage))
             if len(objects) > 100000:
                 raise ValueError(f"PDF page {number}: too many objects")
             spans, boundaries, obstacles = [], [], []
@@ -384,59 +292,45 @@ class PdfBook:
                 if not all(math.isfinite(v) for v in bbox):
                     raise ValueError(f"PDF page {number}: invalid object bounds")
                 if obj.type == raw.FPDF_PAGEOBJ_FORM:
-                    if self.projection_version >= 2:
-                        if any(
-                            abs(a - b) > 0.001
-                            for a, b in zip(obj.get_matrix().get(), (1, 0, 0, 1, 0, 0))
-                        ):
-                            raise ValueError(
-                                f"PDF page {number}: transformed Form XObject is unsupported"
-                            )
-                        continue
                     if any(
-                        child.type == raw.FPDF_PAGEOBJ_TEXT for child in page.get_objects(form=obj)
+                        abs(a - b) > 0.001
+                        for a, b in zip(obj.get_matrix().get(), (1, 0, 0, 1, 0, 0))
                     ):
                         raise ValueError(
-                            f"PDF page {number}: text inside Form XObjects is unsupported"
+                            f"PDF page {number}: transformed Form XObject is unsupported"
                         )
-                    obstacles.append(bbox)
+                    continue
                 elif obj.type == raw.FPDF_PAGEOBJ_IMAGE:
                     shadow = False
-                    if self.projection_version >= 2:
-                        bitmap = obj.get_bitmap(render=True)
-                        try:
-                            pixels = bitmap.to_pil()
-                            extrema = pixels.getextrema()
-                            shadow = (
-                                pixels.mode == "RGBA"
-                                and all(v[1] == 0 for v in extrema[:3])
-                                and extrema[3][1] <= 160
-                            )
-                        finally:
-                            del bitmap  # Borrowed image bitmaps are owned by the page.
+                    bitmap = obj.get_bitmap(render=True)
+                    try:
+                        pixels = bitmap.to_pil()
+                        extrema = pixels.getextrema()
+                        shadow = (
+                            pixels.mode == "RGBA"
+                            and all(v[1] == 0 for v in extrema[:3])
+                            and extrema[3][1] <= 160
+                        )
+                    finally:
+                        del bitmap  # Borrowed image bitmaps are owned by the page.
                     if not shadow:
                         obstacles.append(bbox)
                 elif obj.type == raw.FPDF_PAGEOBJ_PATH:
-                    boundaries.extend(_segments(obj, rules_only=self.projection_version >= 2))
+                    boundaries.extend(_segments(obj))
                 elif obj.type == raw.FPDF_PAGEOBJ_TEXT:
                     extracted = obj.extract()
                     text = extracted.strip()
                     if not text:
                         continue
-                    original_text = extracted if self.projection_version >= 2 else text
+                    original_text = extracted
                     font = obj.get_font().get_base_name()
-                    if self.projection_version >= 2:
-                        from brofessor.infrastructure.formats.pdf_layout import decode
+                    from brofessor.infrastructure.formats.pdf_layout import decode
 
-                        text = decode(original_text, self._aliases[page_number].get(font, {}))
+                    text = decode(original_text, self._aliases[page_number].get(font, {}))
                     if any(ord(c) < 32 or c == "\ufffd" for c in text):
                         raise ValueError(f"PDF page {number}: text cannot be decoded reliably")
                     matrix = obj.get_matrix()
-                    angle_tolerance = (
-                        max(abs(matrix.a), abs(matrix.d)) * 0.002
-                        if self.projection_version >= 2
-                        else 0.001
-                    )
+                    angle_tolerance = max(abs(matrix.a), abs(matrix.d)) * 0.002
                     if (
                         abs(matrix.b) > angle_tolerance
                         or abs(matrix.c) > angle_tolerance
@@ -488,36 +382,30 @@ class PdfBook:
                 return "".join(text.replace("\x02", "").replace("\ufffe", "").split())
 
             if Counter(covered(textpage.get_text_range())) != Counter(
-                covered(
-                    "".join(s.raw_text if self.projection_version >= 2 else s.text for s in spans)
-                )
+                covered("".join(s.raw_text for s in spans))
             ):
                 raise ValueError(f"PDF page {number}: incomplete text-object coverage")
             if not spans and obstacles:
                 raise ValueError(f"PDF page {number}: image-only page; OCR is not supported")
-            if self.projection_version >= 2:
-                from brofessor.infrastructure.formats.pdf_layout import regions as project_regions
+            from brofessor.infrastructure.formats.pdf_layout import regions as project_regions
 
-                regions = project_regions(spans, number, boundaries, width, height)
-            else:
-                regions = _regions(spans, number, boundaries)
+            regions = project_regions(spans, number, boundaries, width, height)
             self._pages.append({"width": width, "height": height})
-            if self.projection_version >= 2:
-                text_objects = [i for i, o in enumerate(objects) if o.type == raw.FPDF_PAGEOBJ_TEXT]
-                if len(text_objects) != len(self._text_keys[page_number]):
-                    raise ValueError(f"PDF page {number}: ambiguous text-show mapping")
-                ordinal = {index: n for n, index in enumerate(text_objects)}
-                for region in regions:
-                    region.text_ordinals = [ordinal[s.index] for s in region.spans]
-                    for number_region in getattr(region, "numbers", []):
-                        key = f"pdf:p{number}:o{number_region.spans[0].index}"
-                        self._moving_numbers[key] = number_region
-                    for code_region in getattr(region, "following_code", []):
-                        key = f"pdf:p{number}:o{code_region.spans[0].index}"
-                        self._moving_code[key] = code_region
+            text_objects = [i for i, o in enumerate(objects) if o.type == raw.FPDF_PAGEOBJ_TEXT]
+            if len(text_objects) != len(self._text_keys[page_number]):
+                raise ValueError(f"PDF page {number}: ambiguous text-show mapping")
+            ordinal = {index: n for n, index in enumerate(text_objects)}
+            for region in regions:
+                region.text_ordinals = [ordinal[s.index] for s in region.spans]
+                for number_region in getattr(region, "numbers", []):
+                    key = f"pdf:p{number}:o{number_region.spans[0].index}"
+                    self._moving_numbers[key] = number_region
+                for code_region in getattr(region, "following_code", []):
+                    key = f"pdf:p{number}:o{code_region.spans[0].index}"
+                    self._moving_code[key] = code_region
             for region in regions:
                 identifier = f"pdf:p{number}:o{region.spans[0].index}"
-                frozen = region.frozen if self.projection_version >= 2 else region.spans[0].frozen
+                frozen = region.frozen
                 if frozen:
                     self.preserved.append(
                         {
@@ -526,11 +414,7 @@ class PdfBook:
                             "bbox": region.bbox,
                             "text": region.text,
                             "reason": frozen,
-                            **(
-                                {"raw_text": "".join(s.raw_text for s in region.spans)}
-                                if self.projection_version >= 2
-                                else {}
-                            ),
+                            "raw_text": "".join(s.raw_text for s in region.spans),
                         }
                     )
                     continue
@@ -544,18 +428,17 @@ class PdfBook:
                     obstacles,
                     width,
                     height,
-                    tolerance=4 if self.projection_version >= 2 else 0.5,
+                    tolerance=4,
                 )
-                if self.projection_version >= 2:
-                    region.limit_box = _available(
-                        region,
-                        [region] + [r for r in flowing_regions if r.frozen],
-                        boundaries,
-                        obstacles,
-                        width,
-                        height,
-                        tolerance=4,
-                    )
+                region.limit_box = _available(
+                    region,
+                    [region] + [r for r in flowing_regions if r.frozen],
+                    boundaries,
+                    obstacles,
+                    width,
+                    height,
+                    tolerance=4,
+                )
                 locator = f"page {number}, box " + ",".join(f"{v:.2f}" for v in region.bbox)
                 self.blocks.append(
                     TextBlock(
@@ -563,7 +446,7 @@ class PdfBook:
                         f"page:{number}",
                         locator,
                         region.text,
-                        region.protected if self.projection_version >= 2 else {},
+                        region.protected,
                     )
                 )
                 self._regions[identifier] = region
@@ -625,10 +508,9 @@ class PdfBook:
             span = region.spans[0]
             font = fonts[span.style]
             plain = texts[block.id]
-            if self.projection_version >= 2:
-                from brofessor.infrastructure.formats.epub import MARKER
+            from brofessor.infrastructure.formats.epub import MARKER
 
-                plain = MARKER.sub(lambda m: block.protected.get(m[0], ""), plain)
+            plain = MARKER.sub(lambda m: block.protected.get(m[0], ""), plain)
             if any(
                 ord(c) not in pdfmetrics.getFont(font).face.charToGlyph
                 for c in plain
@@ -659,19 +541,15 @@ class PdfBook:
                 markup = MARKER.sub(row_marker, markup)
                 layout.append(self._contents_layout(block, region, markup, font, language))
                 continue
-            if self.projection_version >= 2:
-                source_size = max(s.size for s in region.spans)
-                extra_bottom = max(region.limit_box[1], bottom - source_size)
-                for accepted in layout:
-                    if (
-                        accepted["page"] == region.page
-                        and accepted["source_bbox"][3] > region.bbox[3]
-                        and _overlap((left, right), (accepted["bbox"][0], accepted["bbox"][2]))
-                        > 0.5
-                    ):
-                        top = min(top, accepted["bbox"][1] - 3)
-            else:
-                source_size = span.size
+            source_size = max(s.size for s in region.spans)
+            extra_bottom = max(region.limit_box[1], bottom - source_size)
+            for accepted in layout:
+                if (
+                    accepted["page"] == region.page
+                    and accepted["source_bbox"][3] > region.bbox[3]
+                    and _overlap((left, right), (accepted["bbox"][0], accepted["bbox"][2])) > 0.5
+                ):
+                    top = min(top, accepted["bbox"][1] - 3)
             minimum = min(source_size, max(9, source_size * 0.8))
             rows = getattr(region, "row_baselines", [])
             if rows:
@@ -685,7 +563,7 @@ class PdfBook:
                 for ratio in (1.15, 1.05)
                 for candidate in _sizes(source_size, minimum)
             ]
-            if self.projection_version >= 2 and extra_bottom < bottom:
+            if extra_bottom < bottom:
                 candidates.extend(
                     (candidate, extra_bottom, ratio)
                     for ratio in (1.15, 1.05)
@@ -693,27 +571,26 @@ class PdfBook:
                 )
             for size, available_bottom, ratio in candidates:
                 markup = escape(texts[block.id])
-                if self.projection_version >= 2:
 
-                    def inline(match):
-                        marker = match[0]
-                        if marker.startswith("⟦close:"):
-                            return "</font>"
-                        run = region.runs[marker]
-                        if run["style"] == "break":
-                            return "<br/>"
-                        if run["style"] == "sup":
-                            return "<super>" + escape(block.protected[marker]) + "</super>"
-                        face = "Courier" if run["style"] == "code" else fonts[run["style"]]
-                        color = Color(*run["color"]).hexval()
-                        start = f'<font name="{face}" color="{color}">'
-                        return (
-                            start + escape(block.protected[marker]) + "</font>"
-                            if marker in block.protected
-                            else start
-                        )
+                def inline(match):
+                    marker = match[0]
+                    if marker.startswith("⟦close:"):
+                        return "</font>"
+                    run = region.runs[marker]
+                    if run["style"] == "break":
+                        return "<br/>"
+                    if run["style"] == "sup":
+                        return "<super>" + escape(block.protected[marker]) + "</super>"
+                    face = "Courier" if run["style"] == "code" else fonts[run["style"]]
+                    color = Color(*run["color"]).hexval()
+                    start = f'<font name="{face}" color="{color}">'
+                    return (
+                        start + escape(block.protected[marker]) + "</font>"
+                        if marker in block.protected
+                        else start
+                    )
 
-                    markup = MARKER.sub(inline, markup)
+                markup = MARKER.sub(inline, markup)
                 leading = (
                     min(a - b for a, b in zip(rows, rows[1:])) if len(rows) > 1 else size * ratio
                 )
@@ -814,42 +691,14 @@ class PdfBook:
             raise ValueError("PDF output must not overwrite the original")
         with _PDF_LOCK:
             layout = self._layout(texts, check, language)
-            background = BytesIO()
-            if self.projection_version >= 2:
-                from brofessor.infrastructure.formats.pdf_background import remove_text
+            from brofessor.infrastructure.formats.pdf_background import remove_text
 
-                writer = remove_text(
-                    BytesIO(self._data),
-                    self._text_keys,
-                    {**self._regions, **self._moving_numbers, **self._moving_code},
-                    check=check,
-                )
-            else:
-                writer = None
-            with pdfium.PdfDocument(self._data) as document:
-                for index in range(len(document)):
-                    if writer is not None:
-                        break
-                    check()
-                    with closing(document[index]) as page:
-                        objects = list(
-                            page.get_objects(max_depth=15 if self.projection_version >= 2 else 1)
-                        )
-                        indices = {
-                            s.index
-                            for region in self._regions.values()
-                            if region.page == index + 1
-                            for s in region.spans
-                        }
-                        for obj_index in sorted(indices, reverse=True):
-                            obj = objects[obj_index]
-                            page.remove_obj(obj)
-                            obj.close()
-                        page.gen_content()
-                if writer is None:
-                    document.save(background)
-            if writer is None:
-                writer = PdfWriter(clone_from=BytesIO(background.getvalue()))
+            writer = remove_text(
+                BytesIO(self._data),
+                self._text_keys,
+                {**self._regions, **self._moving_numbers, **self._moving_code},
+                check=check,
+            )
             for number, dimensions in enumerate(self._pages, 1):
                 check()
                 overlay = BytesIO()
@@ -965,7 +814,7 @@ class PdfBook:
                 "pdfium": str(pdfium.PDFIUM_INFO),
                 "reportlab": version("reportlab"),
                 "pypdf": version("pypdf"),
-                "background": "content-stream" if self.projection_version >= 2 else "pdfium-v1",
+                "background": "content-stream",
                 "font": "DejaVu Sans 2.37",
             },
         }

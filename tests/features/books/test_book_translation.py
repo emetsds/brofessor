@@ -53,41 +53,25 @@ def test_automatic_meanings_are_grounded_and_user_choice_takes_precedence(tmp_pa
     )
 
 
-@pytest.mark.parametrize("legacy_projection", [None, 2])
-def test_projection_snapshot_survives_render_and_regeneration(
-    tmp_path, monkeypatch, legacy_projection
-):
+def test_projection_snapshot_survives_render_and_regeneration(tmp_path, monkeypatch):
     from brofessor.infrastructure.storage.workspace import Workspace
-    from tests.helpers.epub import legacy_entries, make_book
+    from tests.helpers.epub import epub2_entries, make_book
 
-    book = make_book(tmp_path, legacy_entries())
+    book = make_book(tmp_path, epub2_entries())
     workspace = Workspace(tmp_path / "workspace")
     source = workspace.add_source(book.source)
     model = FakeBookModel()
     monkeypatch.setattr("brofessor.infrastructure.text.runners.generate", model)
-    current = submit(workspace, source)
-    assert current["params"]["epub_projection"] == 3
-    run(workspace, current)
-    # Historical jobs have no projection parameter; their larger inline runs
-    # and accepted glossary/translation must continue to resolve as version 1.
-    params = dict(current["params"])
-    params.pop("epub_projection")
-    if legacy_projection is not None:
-        params["epub_projection"] = legacy_projection
-    legacy = workspace.submit(JobKind.TRANSLATE_EPUB, params)
-    old = run(workspace, legacy)
-    assert old is not None
-    assert old["data"]["blocks"] != workspace.draft(current["id"])["data"]["blocks"]
-    for job in (current, legacy):
-        rendered = book_translation.render(workspace, job["id"], start_worker=False)
-        assert rendered["params"]["epub_projection"] == job["params"].get("epub_projection", 1)
-        calls = len(model.calls)
-        run(workspace, rendered)
-        assert any(item["kind"] == "epub" for item in workspace.artifacts(rendered["id"]))
-        assert len(model.calls) == calls
-        child = tasks.regenerate(workspace, job["id"], start_worker=False)
-        assert child["params"].get("epub_projection", 1) == job["params"].get("epub_projection", 1)
-        assert run(workspace, child) is not None
+    job = submit(workspace, source)
+    saved = run(workspace, job)
+    rendered = book_translation.render(workspace, job["id"], start_worker=False)
+    assert rendered["params"]["epub_projection"] == 3
+    calls = len(model.calls)
+    run(workspace, rendered)
+    assert any(item["kind"] == "epub" for item in workspace.artifacts(rendered["id"]))
+    assert len(model.calls) == calls
+    child = tasks.regenerate(workspace, job["id"], start_worker=False)
+    assert run(workspace, child)["data"]["blocks"] == saved["data"]["blocks"]
 
 
 def test_late_discovered_glossary_meaning_applies_to_earlier_unanchored_packet(monkeypatch):
@@ -152,11 +136,10 @@ def test_late_discovered_glossary_meaning_applies_to_earlier_unanchored_packet(m
         validate(value)
         return value
 
-    for version, expected in [(2, "указатель"), (3, "бегунок")]:
-        result = terminology.translate(
-            book, terms, occurrences, "ru", generate, lambda: None, lambda _: None, version=version
-        )
-        assert result[0]["text"].startswith("Move " + expected + ".")
+    result = terminology.translate(
+        book, terms, occurrences, "ru", generate, lambda: None, lambda _: None
+    )
+    assert result[0]["text"].startswith("Move бегунок.")
 
 
 def test_term_correction_preserves_other_meaning_manual_words_and_prior_revisions(
@@ -420,7 +403,9 @@ def test_a_failed_correction_preserves_parent_and_reuses_accepted_phrase_packets
 
 def test_conflicting_or_overlapping_glossary_proposals_are_rejected(tmp_path):
     workspace, source = workspace_with_book(tmp_path)
-    book = book_translation.source_book(workspace, {"source_ids": [source["id"]]})
+    book = book_translation.source_book(
+        workspace, {"source_ids": [source["id"]], "epub_projection": 3}
+    )
     block = next(block for block in book.blocks if "wooden log" in block.text)
     quote = terminology.MARKER.sub("", block.text)
     proposal = {

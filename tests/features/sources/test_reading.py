@@ -130,54 +130,6 @@ def test_cancelled_book_keeps_accepted_reading_progress(book, monkeypatch):
     assert workspace.draft(job["id"]) is None
 
 
-def test_large_note_sets_are_consolidated_without_new_citation_ids(book, monkeypatch):
-    workspace, source, units = book
-    monkeypatch.setattr(reading, "SYNTHESIS_BUDGET", 3000)
-    consolidated = []
-
-    def generate(prompt, schema, *args, **kwargs):
-        if schema["title"] == "ReadingBatch":
-            return notes_for(prompt)
-        if schema["title"] == "SectionNote":
-            notes = json.loads(prompt.split("\n", 1)[1])["notes"]
-            assert len(reading.encoded(notes)) <= reading.READING_BUDGET
-            citations = [item["citations"][0] for item in notes]
-            consolidated.append(citations)
-            return {"summary": "Retained facts", "citations": citations}
-        evidence, _ = json.JSONDecoder().raw_decode(prompt.split("EVIDENCE:\n")[1])
-        assert len(reading.encoded(evidence)) <= reading.SYNTHESIS_BUDGET
-        assert {c for item in evidence for c in item["citations"]} == {u["id"] for u in units}
-        return slide_plan([units[-1]["id"]])
-
-    monkeypatch.setattr("brofessor.infrastructure.text.runners.generate", generate)
-    created = service.submit(
-        workspace, JobKind.SLIDES, slide_count=1, focus="Facts?", start_worker=False
-    )
-    job = workspace.submit(
-        JobKind.SLIDES,
-        {key: value for key, value in created["params"].items() if key != "reading_version"},
-        "legacy-reading",
-    )
-    pipeline.execute(workspace, job)
-    assert consolidated
-    assert service.coverage(workspace, job["id"])["count"] == len(units)
-    monkeypatch.setattr(
-        "brofessor.infrastructure.text.runners.generate", lambda *a, **k: pytest.fail("Checkpoint")
-    )
-    pipeline.execute(workspace, job)
-    assert (
-        service.submit(
-            workspace,
-            "slides",
-            slide_count=1,
-            focus="Facts?",
-            request_key="legacy-reading",
-            start_worker=False,
-        )["params"]
-        == job["params"]
-    )
-
-
 def test_reduction_keeps_each_fact_attached_to_one_source_and_resumes(book, monkeypatch):
     workspace, source, units = book
     monkeypatch.setattr(reading, "SYNTHESIS_BUDGET", 3000)
@@ -248,7 +200,7 @@ def test_failed_direct_answer_does_not_claim_sources_were_read(tmp_path, monkeyp
     assert service.coverage(workspace, job["id"])["count"] == 0
 
 
-def test_legacy_coverage_and_render_citations_follow_the_pinned_revision(book):
+def test_coverage_and_render_citations_follow_the_pinned_revision(preset_voices, book):
     from brofessor.infrastructure.storage.workspace import atomic_json
 
     workspace, source, units = book
@@ -264,10 +216,24 @@ def test_legacy_coverage_and_render_citations_follow_the_pinned_revision(book):
     workspace.save_draft(job["id"], data)
     atomic_json(
         workspace.path / "jobs" / job["id"] / "coverage.json",
-        {"read": [unit["id"] for unit in units], "count": len(units), "excluded": []},
+        {
+            "read": [unit["id"] for unit in units],
+            "count": len(units),
+            "excluded": [],
+            "units": [
+                {
+                    "id": u["id"],
+                    "source_id": u["source_id"],
+                    "locator": u["locator"],
+                    "status": "read",
+                    "reason": "",
+                }
+                for u in units
+            ],
+        },
     )
-    render = service.render(workspace, job["id"], model="qwen3-0.6b", start_worker=False)
-    probe = service.render(workspace, job["id"], model="qwen3-0.6b", turn=2, start_worker=False)
+    render = service.render(workspace, job["id"], model="qwen3-base", start_worker=False)
+    probe = service.render(workspace, job["id"], model="qwen3-base", turn=2, start_worker=False)
     for turn in data["turns"]:
         turn["citations"] = [units[-1]["id"]]
     service.edit_draft(workspace, job["id"], data, 1)

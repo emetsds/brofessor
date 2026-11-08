@@ -334,14 +334,13 @@ def _complete(identifier, rendered):
         return prompts.render(
             prompt_ids.PODCASTS_OUTLINE, **{**defaults, "base": defaults["base"] + rendered}
         )
-    if identifier in {prompt_ids.PODCASTS_WORD_BUDGET, prompt_ids.PODCASTS_WORD_BUDGET_V1}:
+    if identifier in {prompt_ids.PODCASTS_WORD_BUDGET}:
         return prompts.render(
             prompt_ids.PODCASTS_SECTION,
             **{**values_for(prompt_ids.PODCASTS_SECTION), "word_instruction": rendered},
         )
     if identifier in {
         prompt_ids.PODCASTS_CORRECTION_RANGE,
-        prompt_ids.PODCASTS_CORRECTION_RANGE_V1,
     }:
         return prompts.render(
             prompt_ids.PODCASTS_CORRECT_SECTION,

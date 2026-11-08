@@ -199,7 +199,7 @@ def prepare(
     return evidence, report
 
 
-def validate_answer(value, units, *, require_quotes=True):
+def validate_answer(value, units):
     """Restore original whitespace in quotes, then require verbatim source text.
 
     Imported EPUB/PDF line wrapping is not semantic content. Only whitespace
@@ -222,7 +222,7 @@ def validate_answer(value, units, *, require_quotes=True):
                 raise ValueError(f"Quote is not an exact substring of original fragment {key}")
             quote["text"] = match.group()  # Canonical original, including its line breaks.
         quoted.add(key)
-    if require_quotes and cited != quoted:
+    if cited != quoted:
         raise ValueError("Every cited fragment requires an exact original quote")
     if (
         value["evidence_status"] == EvidenceStatus.CONFLICTING_EVIDENCE

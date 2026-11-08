@@ -38,11 +38,15 @@ def source_book(workspace, params, check=lambda: None):
         from brofessor.infrastructure.formats.pdf import PdfBook
 
         try:
-            book = PdfBook(path, projection_version=params.get("pdf_projection", 1), check=check)
+            if params["pdf_projection"] != PdfBook.projection_version:
+                raise ValueError("Unsupported PDF projection version")
+            book = PdfBook(path, check=check)
         except (PdfReadError, PdfiumError) as error:
             raise ValueError(f"Cannot translate PDF: {error}") from error
     elif path.suffix.lower() == DocumentExtension.EPUB:
-        book = EpubBook(path, projection_version=params.get("epub_projection", 1))
+        if params["epub_projection"] != EpubBook.projection_version:
+            raise ValueError("Unsupported EPUB projection version")
+        book = EpubBook(path)
     else:
         raise ValueError("Book translation supports reflowable EPUB 2/3 and text-layer PDF")
     if book.source_hash != source["hash"] or book.source_hash != params.get(
@@ -214,7 +218,7 @@ def export(workspace, job, book, saved, check):
 
 def run(workspace, job, generate, progress, check):
     params = job["params"]
-    if params.get("translation_version") not in (1, 2, 3, 4):
+    if params.get("translation_version") != 4:
         raise ValueError("Unsupported book translation workflow version")
     book = source_book(workspace, params, check)
     saved = workspace.draft(job["id"])
@@ -248,10 +252,9 @@ def run(workspace, job, generate, progress, check):
                 terms, occurrences = terminology.discover(
                     book, params["glossary_seed"], params["language"], generate, check, progress
                 )
-            if params["translation_version"] >= 4:
-                terms, occurrences = terminology.review_recurring(
-                    book, terms, occurrences, params["language"], generate, check, progress
-                )
+            terms, occurrences = terminology.review_recurring(
+                book, terms, occurrences, params["language"], generate, check, progress
+            )
             blocks = terminology.translate(
                 book,
                 terms,
@@ -260,7 +263,6 @@ def run(workspace, job, generate, progress, check):
                 generate,
                 check,
                 progress,
-                version=params["translation_version"],
             )
             state = {
                 "title": "",
@@ -376,7 +378,7 @@ def render(workspace, job_id, *, revision=None, request_key=None, start_worker=T
         **(
             {"pdf_projection": job["params"]["pdf_projection"]}
             if job["kind"] == JobKind.TRANSLATE_PDF
-            else {"epub_projection": job["params"].get("epub_projection", 1)}
+            else {"epub_projection": job["params"]["epub_projection"]}
         ),
     }
     validate_state(source_book(workspace, params), saved["data"])

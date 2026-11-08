@@ -185,7 +185,7 @@ def write(
     save_section=None,
     plan=None,
 ):
-    """Generate only new-version prompts; legacy prompts remain in podcasts.write."""
+    """Write an episode from original fragments with bounded editorial context."""
     instructions = context["instructions"]
     units, names = context["units"], context["names"]
     if plan is None:

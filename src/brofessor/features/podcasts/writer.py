@@ -79,14 +79,13 @@ def write(
     save_outline,
     *,
     target_words=None,
-    dialogue_version=1,
     writer_context=None,
     save_section=None,
 ):
-    if dialogue_version >= 4:
+    if writer_context is not None:
         from brofessor.features.podcasts.episode_writer import write as grounded_write
 
-        if writer_context is None or target_words is None:
+        if target_words is None:
             raise ValueError("Source-backed writing requires original context and a word budget")
         return grounded_write(
             writer_context,
@@ -115,34 +114,29 @@ def write(
     )
     save_outline(outline)
     if target_words is None:
-        # Keep the prompts and checkpoints of jobs submitted before Qwen calibration.
-        target_words = minutes * (125 if language == ContentLanguage.RU else 100)
+        raise ValueError("Podcast writing requires a frozen word budget")
     target = round(target_words / parts)
     turns = []
     for index, section in enumerate(outline["sections"]):
         progress({"stage": StageId.SCRIPT, "completed": index, "total": parts})
         written = word_count(turns)
-        if dialogue_version >= 3:
-            target = round((target_words - written) / (parts - index))
+        target = round((target_words - written) / (parts - index))
         lower, upper = math.ceil(0.85 * target), math.floor(1.15 * target)
-        if dialogue_version >= 3 and index == parts - 1:
+        if index == parts - 1:
             margin = max(1, round(target_words * 0.02))
             lower = max(lower, target_words - margin - written)
             upper = min(upper, target_words + margin - written)
-        word_instruction = prompts.render(prompt_ids.PODCASTS_WORD_BUDGET_V1, target=target)
-        correction_instruction = prompts.render(prompt_ids.PODCASTS_CORRECTION_RANGE_V1)
-        if dialogue_version >= 3:
-            word_instruction = prompts.render(
-                prompt_ids.PODCASTS_WORD_BUDGET,
-                target_words=target_words,
-                written=written,
-                target=target,
-                lower=lower,
-                upper=upper,
-            )
-            correction_instruction = prompts.render(
-                prompt_ids.PODCASTS_CORRECTION_RANGE, lower=lower, upper=upper
-            )
+        word_instruction = prompts.render(
+            prompt_ids.PODCASTS_WORD_BUDGET,
+            target_words=target_words,
+            written=written,
+            target=target,
+            lower=lower,
+            upper=upper,
+        )
+        correction_instruction = prompts.render(
+            prompt_ids.PODCASTS_CORRECTION_RANGE, lower=lower, upper=upper
+        )
         prompt = prompts.render(
             prompt_ids.PODCASTS_SECTION,
             base=base,

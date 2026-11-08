@@ -19,8 +19,8 @@ from brofessor.infrastructure.formats.epub import DC, NCX, XML_LANG, EpubBook
 from brofessor.infrastructure.formats.epub_xml import publication_xml
 
 
-def audit(source, translated, projection_version=3):
-    book = EpubBook(source, projection_version=projection_version)
+def audit(source, translated):
+    book = EpubBook(source)
     paths = [book.package_path, *book.document_paths, *book.navigation_paths]
     problems = []
     with ZipFile(translated) as archive:
@@ -147,8 +147,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path)
     parser.add_argument("translated", type=Path)
-    parser.add_argument("--projection-version", type=int, choices=(1, 2, 3), default=3)
     args = parser.parse_args()
-    result = audit(args.source, args.translated, args.projection_version)
+    result = audit(args.source, args.translated)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     raise SystemExit(bool(result["problems"]))

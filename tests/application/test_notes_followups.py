@@ -112,21 +112,6 @@ def test_invalid_notes_do_not_create_a_record(study, change):
     assert w.notes() == []
 
 
-def test_schema_one_migration_preserves_existing_sources_jobs_and_revisions(study):
-    w, parent, _ = study
-    before = w.draft(parent["id"])
-    with w.connect() as db:
-        db.execute("DROP TABLE notes")
-        db.execute("PRAGMA user_version=1")
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        reopened = list(pool.map(lambda _: Workspace(w.path), range(4)))
-    assert all(copy.draft(parent["id"]) == before for copy in reopened)
-    assert reopened[0].sources() == w.sources()
-    assert reopened[0].notes() == []
-    with w.connect() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
-
-
 def test_two_note_editors_have_one_winner_and_keep_the_initial_revision(study):
     from threading import Barrier
 

@@ -8,7 +8,7 @@
     "source": "features/books/terminology.py",
     "purpose": "Перевод с привязкой каждого употребления термина к целевой фразе",
     "schema": "AlignedBatch",
-    "versions": "Все translation_version",
+    "versions": "translation_version = 4",
     "uses": [
       "books/translate",
       "books/metalinguistic"
@@ -23,7 +23,7 @@
     "source": "features/books/terminology.py",
     "purpose": "Извлечение значений терминов и исходных употреблений",
     "schema": "GlossaryBatch",
-    "versions": "Все translation_version",
+    "versions": "translation_version = 4",
     "uses": [],
     "path": "books/glossary.md"
   },
@@ -32,7 +32,7 @@
     "source": "features/books/terminology.py",
     "purpose": "Сохранение исходного написания обсуждаемых слов",
     "schema": "AlignedBatch",
-    "versions": "translation_version >= 2",
+    "versions": "translation_version = 4",
     "uses": [],
     "path": "books/metalinguistic.md"
   },
@@ -54,7 +54,7 @@
     "source": "features/books/terminology.py",
     "purpose": "Обзор пропущенных повторяющихся терминов",
     "schema": "GlossaryReviewBatch",
-    "versions": "translation_version >= 4",
+    "versions": "translation_version = 4",
     "uses": [],
     "path": "books/review_glossary.md"
   },
@@ -77,7 +77,7 @@
     "source": "infrastructure/formats/epub.py",
     "purpose": "Полный перевод блоков с неизменяемыми inline-маркерами",
     "schema": "TranslationBatch / AlignedBatch",
-    "versions": "Все translation_version; также локальная проба",
+    "versions": "translation_version = 4; также локальная проба",
     "uses": [],
     "path": "books/translate.md"
   },
@@ -295,7 +295,7 @@
     "source": "features/podcasts/episode_writer.py",
     "purpose": "Коррекция раздела по оригиналам и его handoff; суффикс",
     "schema": "WrittenSection",
-    "versions": "dialogue_version >= 4",
+    "versions": "writing_method = originals",
     "uses": [
       "podcasts/originals_section"
     ],
@@ -312,11 +312,10 @@
     "source": "features/podcasts/writer.py",
     "purpose": "Одна коррекция длины и состава ведущих",
     "schema": "Podcast",
-    "versions": "dialogue_version < 4",
+    "versions": "writing_method != originals",
     "uses": [
       "podcasts/section",
-      "podcasts/correction_range",
-      "podcasts/correction_range_v1"
+      "podcasts/correction_range"
     ],
     "path": "podcasts/correct_section.md"
   },
@@ -328,18 +327,9 @@
     "source": "features/podcasts/writer.py",
     "purpose": "Числовые границы корректировки длины",
     "schema": "Podcast",
-    "versions": "dialogue_version = 3",
+    "versions": "writing_method != originals; minutes >= 20",
     "uses": [],
     "path": "podcasts/correction_range.md"
-  },
-  "podcasts/correction_range_v1": {
-    "variables": [],
-    "source": "features/podcasts/writer.py",
-    "purpose": "Прежний относительный допуск корректировки длины",
-    "schema": "Podcast",
-    "versions": "dialogue_version = 1/2",
-    "uses": [],
-    "path": "podcasts/correction_range_v1.md"
   },
   "podcasts/originals_outline": {
     "variables": [
@@ -353,7 +343,7 @@
     "source": "features/podcasts/episode_writer.py",
     "purpose": "Редакторский план с достаточностью источников и отношениями между ними",
     "schema": "EpisodePlan",
-    "versions": "dialogue_version >= 4",
+    "versions": "writing_method = originals",
     "uses": [
       "common/materials",
       "podcasts/voices",
@@ -379,7 +369,7 @@
     "source": "features/podcasts/episode_writer.py",
     "purpose": "Раздел по оригиналам с редакторской памятью; префикс перед ORIGINALS",
     "schema": "WrittenSection",
-    "versions": "dialogue_version >= 4",
+    "versions": "writing_method = originals",
     "uses": [
       "common/materials",
       "podcasts/voices",
@@ -396,7 +386,7 @@
     "source": "features/podcasts/writer.py",
     "purpose": "Равновесный план длинного выпуска",
     "schema": "Outline",
-    "versions": "dialogue_version < 4; minutes >= 20",
+    "versions": "writing_method != originals; minutes >= 20",
     "uses": [
       "common/materials",
       "common/evidence",
@@ -418,14 +408,13 @@
     "source": "features/podcasts/writer.py",
     "purpose": "Раздел выпуска по плану и концу предыдущего раздела",
     "schema": "Podcast",
-    "versions": "dialogue_version < 4; minutes >= 20",
+    "versions": "writing_method != originals; minutes >= 20",
     "uses": [
       "common/materials",
       "common/evidence",
       "podcasts/voices",
       "podcasts/series_context",
-      "podcasts/word_budget",
-      "podcasts/word_budget_v1"
+      "podcasts/word_budget"
     ],
     "path": "podcasts/section.md"
   },
@@ -481,7 +470,7 @@
     "source": "application/pipeline.py",
     "purpose": "Грамматический род ведущих и сохранение рода персонажей",
     "schema": "Podcast",
-    "versions": "dialogue_version >= 2",
+    "versions": "podcast",
     "uses": [],
     "path": "podcasts/voices.md"
   },
@@ -496,20 +485,9 @@
     "source": "features/podcasts/writer.py",
     "purpose": "Остаток общего бюджета слов и границы раздела",
     "schema": "Podcast",
-    "versions": "dialogue_version = 3",
+    "versions": "writing_method != originals; minutes >= 20",
     "uses": [],
     "path": "podcasts/word_budget.md"
-  },
-  "podcasts/word_budget_v1": {
-    "variables": [
-      "target"
-    ],
-    "source": "features/podcasts/writer.py",
-    "purpose": "Прежний равный бюджет слов раздела",
-    "schema": "Podcast",
-    "versions": "dialogue_version = 1/2",
-    "uses": [],
-    "path": "podcasts/word_budget_v1.md"
   },
   "questions/answer": {
     "variables": [
@@ -567,7 +545,7 @@
     "source": "features/sources/reading.py",
     "purpose": "Чтение каждого исходного фрагмента в отдельную заметку",
     "schema": "ReadingBatch",
-    "versions": "Все reading_version",
+    "versions": "Текущее чтение",
     "uses": [],
     "path": "reading/fragments.md"
   },
@@ -578,20 +556,9 @@
     "source": "features/sources/reading.py",
     "purpose": "Сжатие заметок с раздельными ссылками на каждый оригинал",
     "schema": "SectionNotes",
-    "versions": "reading_version >= 2",
+    "versions": "Текущее чтение",
     "uses": [],
     "path": "reading/reduce.md"
-  },
-  "reading/reduce_v1": {
-    "variables": [
-      "payload"
-    ],
-    "source": "features/sources/reading.py",
-    "purpose": "Прежнее объединение заметок; сохранено для старых заданий",
-    "schema": "SectionNote",
-    "versions": "reading_version = 1",
-    "uses": [],
-    "path": "reading/reduce_v1.md"
   },
   "reports/arguments": {
     "variables": [],

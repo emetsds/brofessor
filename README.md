@@ -8,7 +8,7 @@ Turn books and other source materials into answers and written reports with cita
 
 ## Get started
 
-You need a checkout of this repository, [uv](https://docs.astral.sh/uv/getting-started/installation/), and one text provider from the table below. Run the commands from the repository root. The tested full setup is an Apple Silicon Mac with 32 GB RAM; Qwen3 and F5 audio require Apple Silicon, while Russian Silero and Kokoro run on CPU.
+You need a checkout of this repository, [uv](https://docs.astral.sh/uv/getting-started/installation/), and one text provider from the table below. Run the commands from the repository root. The tested full setup is an Apple Silicon Mac with 32 GB RAM; local Qwen3-TTS Base audio requires Apple Silicon.
 
 Install the app and UI with Python 3.12:
 
@@ -440,7 +440,7 @@ uv run --no-sync brofessor job coverage JOB_ID
 
 EPUB locators follow the file's reading order. Their `chapter N` labels are import positions and can differ from the chapter numbers printed in the book; the original fragment text remains the reference.
 
-When new jobs condense a large set of reading notes, each retained note keeps one original source ID. Older jobs retain their original reading checkpoints. This preserves the source mapping through condensation; factual accuracy still needs review.
+When jobs condense a large set of reading notes, each retained note keeps one original source ID. This preserves the source mapping through condensation; factual accuracy still needs review.
 
 ### Create a podcast
 
@@ -482,73 +482,6 @@ The renderer saves complete audio segments as it goes. An interrupted render res
 For episodes of 20–60 minutes, brofessor saves an outline and writes distinct sections with checked word budgets. New jobs estimate 115 spoken words per minute for Russian and 150 for English, aiming inside the accepted duration interval at its 20/60-minute boundaries. This budget is fixed when the script is requested. Each section accounts for the words already written, and the final section is checked against the whole episode budget. Actual duration is measured after synthesis. Generated long turns are split at sentence and word boundaries. Short previews use the simpler writing flow.
 
 `--minutes` is a target. CLI and UI report the measured duration and whether it is within 10% of the request. Full episodes also require the 20–60 minute range. When the result misses, edit the script and render again. Matching speech segments are reused. Generate separate drafts for Russian and English.
-
-### Restoring older speech profiles
-
-The supported speech profile is `qwen3-base` with ready-to-use ExNihilus voices.
-Older profiles are retained for reproducing existing projects and their saved
-model specifications. They are hidden from the regular model list and UI.
-Saved settings naming a retired or unknown profile resolve to the current default.
-
-#### Restore a historical job
-
-Open the original project. Its render job records the model revision, settings
-and, for reference-based engines, the project-relative voice samples and transcripts.
-Install the optional dependencies required by that engine and download its exact
-profile or saved model reference.
-
-| Historical ID | Install extra | Language | Weight license |
-|---|---|---|---|
-| `qwen3-0.6b` | `speech` | RU / EN | Apache-2.0 |
-| `qwen3-1.7b` | `speech` | RU / EN | Apache-2.0 |
-| `silero-cis-base` | `silero` | RU | MIT |
-| `silero-ru` | `silero` | RU | CC-BY-NC-SA-4.0 |
-| `kokoro-ru` | `russian-speech` | RU | OpenRAIL |
-| `f5-tts` | `f5` | EN | CC-BY-NC-4.0 |
-| `f5-tts-russian` | `f5` | RU | CC-BY-NC-4.0 |
-| `espeech-rl-v2` | `f5` | RU | Apache-2.0, declared upstream |
-
-For example, restore a failed or interrupted CustomVoice 1.7B job with its saved
-profile. Retain the extras needed by other engines in the environment when running
-`uv sync`.
-
-```sh
-uv sync --locked --python 3.12 --extra ui --extra speech
-uv run --no-sync brofessor -w /absolute/project tts download qwen3-1.7b --wait
-uv run --no-sync brofessor -w /absolute/project job resume RENDER_JOB_ID
-```
-
-An explicit legacy render is also available for rebuilding a saved draft.
-
-```sh
-uv run --no-sync brofessor -w /absolute/project draft render DRAFT_ID --tts-model qwen3-1.7b --wait
-```
-
-`tts use` accepts currently supported profiles. For historical jobs, use their
-recorded model and resume operation, or specify the model on an explicit render.
-
-#### Historical F5 voice settings
-
-Frozen render jobs use their own copies in `voice-samples/`. To explicitly rebuild
-an old draft with F5 or ESpeech, the corresponding local voice preferences can be
-restored through the compatibility command `tts voice`. It is hidden from the
-regular help. Supply PCM16 WAV, 2–20 seconds, with the exact spoken transcript and
-permission to use the recording.
-
-```sh
-uv sync --locked --python 3.12 --extra ui --extra speech --extra f5
-uv run --no-sync brofessor tts voice set host --language ru --audio host.wav --text "Exact words in host.wav."
-uv run --no-sync brofessor tts voice set guest --language ru --audio guest.wav --text "Exact words in guest.wav."
-uv run --no-sync brofessor -w /absolute/project tts download f5-tts-russian --wait
-uv run --no-sync brofessor -w /absolute/project draft render DRAFT_ID --tts-model f5-tts-russian --wait
-```
-
-The original Russian Silero CIS Base expects manual `+` stress and spelled-out
-numbers and Latin names. The later Silero RU and Kokoro RU profiles have their own
-text preparation. Preserve the job's saved text, model specification and cached
-segments when restoring it.
-
-Historical voice selection, source licenses and limitations are recorded in the [speech comparison history](docs/evidence/2026-11-03-speech-selection.md).
 
 ### Writing options and source review
 
@@ -639,7 +572,7 @@ Reflowable EPUB 2/3 translation is available in both interfaces. Its [contextual
 
 Files are limited to 100 MiB each. Source search and individual questions have been checked on 20 synthetic questions plus three questions in a complete EPUB; this is a small control corpus, not a general retrieval-quality guarantee. Notes and bounded follow-ups are available in both interfaces. Slide-image previews and Google Slides export are not available yet. Audio pronunciation and voice quality need listening review.
 
-Workspace schema is now 6. Existing schemas 0-5 upgrade automatically when opened. Schema 4 adds directory registrations and separates task-cached originals from manually selected sources; schema 5 adds reversible task deletion; schema 6 adds task names, first-narration continuations, and durable workflow timing. Sources, jobs, revisions, and artifacts are retained. Older app versions cannot open schema 6.
+The current workspace schema is 6. Backward compatibility and automatic upgrades from older schemas are not supported. An unsupported project must be replaced with a new project; its original files, saved revisions and finished outputs remain on disk. Jobs without prompt snapshots and retired speech engines cannot be resumed. Start a new task with the current workflow; existing finished files remain usable.
 
 Measured results: [provider checks](docs/evidence/2026-11-02-provider-acceptance.md), [speech selection](docs/evidence/2026-11-03-speech-selection.md), [PPTX layouts](docs/evidence/2026-11-02-pptx.md), [source questions](docs/evidence/2026-11-02-source-questions.md), [notes and follow-ups](docs/evidence/2026-11-02-notes-and-followups.md).
 
@@ -662,8 +595,8 @@ Preview uses synthetic inputs and makes no model or network calls. Use `--variab
 for your own named inputs. New jobs freeze the current instruction text and hashes;
 retry and resume keep their original set. Regeneration creates a new run with today's
 templates. The catalogue also explains how to inspect a saved job's templates and how
-editable installs differ from separately installed wheels. Keep `legacy.json` unchanged:
-it preserves requests and checkpoint identities for jobs created before extraction.
+editable installs differ from separately installed wheels. Jobs without prompt
+snapshots are unsupported; create a new task from the sources.
 
 ### Checks and code layout
 
@@ -676,7 +609,7 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. For project work, read [AGENTS.md](AGENTS.md). Project documentation is in Russian: [specification](docs/specification.md) for current requirements and architecture, [Decision log](docs/decision-log.md) for decisions and their history, and [Plan](docs/plan.md) for unfinished work. Supporting reports in [docs/evidence](docs/evidence) describe checks at their recorded versions; they do not create a separate backlog.
+Tests use synthetic sources and fake model responses; they need no subscription, model weights, or paid API. Each test should detect a concrete behavioral regression; mock expensive external boundaries. Check current-job recovery and user edits when changing stored inputs. Real runner/model checks are separate from offline tests; report unavailable integrations as unverified. See the [test-quality review](docs/evidence/2026-11-02-test-quality.md) for examples. For project work, read [AGENTS.md](AGENTS.md). Project documentation is in Russian: [specification](docs/specification.md) for current requirements and architecture, [Decision log](docs/decision-log.md) for decisions and their history, and [Plan](docs/plan.md) for unfinished work. Supporting reports in [docs/evidence](docs/evidence) describe checks at their recorded versions; they do not create a separate backlog.
 
 The Python package uses a `src` layout. Code is grouped by responsibility:
 
@@ -725,11 +658,10 @@ for shared filenames and protocol names, and immutable groups such as
 the scoped mypy configuration checks these contracts and selected annotated
 boundaries. It does not claim strict typing of the entire application.
 
-Saved SQLite/JSON records keep their existing fields and plain string values.
-Existing model schemas use named `Literal` aliases where an enum field would
-change checkpoint identity. Schema expectations and their provenance are in
-[`tests/fixtures/contracts`](tests/fixtures/contracts/README.md). Keep the original
-expectations when refactoring; a schema change needs a compatibility decision.
+Saved SQLite/JSON records use plain string values.
+Model schemas may change with current requirements. Backward compatibility,
+old workflow versions, and migration layers are not maintained. Current-job
+snapshots, checkpoint reuse, and user edits remain behavioral contracts.
 Model IDs, source text, catalogs, external field/flag names, and obvious local
 literals remain data or local code as appropriate.
 

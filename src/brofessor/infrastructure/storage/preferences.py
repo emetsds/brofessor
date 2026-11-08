@@ -177,7 +177,7 @@ def save_settings(provider, model=None, *, ollama_address=None, language, speech
     elif ollama_address is not None:
         raise ValueError("Only Ollama uses a server address")
     speech = get(speech_model)
-    if speech["id"] not in {item["id"] for item in CATALOG if not item.get("legacy")}:
+    if speech["id"] not in {item["id"] for item in CATALOG}:
         raise ValueError("Choose a supported speech model")
     with edit(repair=True) as values:
         values.update(text_provider=provider, ui_language=language, tts_model=speech["id"])

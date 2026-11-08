@@ -1,6 +1,6 @@
 # Промпты brofessor: чтение, редактура и предпросмотр
 
-Это оглавление всех инструкций, которыми управляет brofessor: **56 UTF-8 файла `.md`**, включая общие правила runner, агента, повторной навигации, старые ветки workflow и отдельные developer-пробы. Файл содержит именно отправляемый текст или явно обозначенную общую часть. Заголовок, назначение, схема и связи находятся здесь и в `catalogue.json`, чтобы не попадать в запрос модели.
+Это оглавление всех инструкций, которыми управляет brofessor: UTF-8 шаблоны `.md`, включая общие правила runner, агента, повторной навигации, отдельные developer-пробы. Файл содержит именно отправляемый текст или явно обозначенную общую часть. Заголовок, назначение, схема и связи находятся здесь и в `catalogue.json`, чтобы не попадать в запрос модели.
 
 ## С чего начать
 
@@ -33,7 +33,6 @@ uv run --no-sync brofessor prompts preview questions/answer --variables /tmp/ans
 ```sh
 uv run --no-sync brofessor -w /path/to/project prompts preview questions/answer --job JOB_ID
 uv run --no-sync brofessor -w /path/to/project prompts show questions/answer --job JOB_ID
-uv run --no-sync brofessor prompts preview questions/answer --legacy
 ```
 
 `--job` выбирает закреплённый набор инструкций; примерные входы остаются синтетическими, если не переданы `--variables`. Это не реконструкция всех прошлых запросов с исходными материалами. `show --job` выводит точный сохранённый шаблон без подстановок. В результате предпросмотра явно указаны `source`, SHA-256 набора и текущий путь редактируемого файла.
@@ -53,7 +52,7 @@ uv run --no-sync brofessor prompts preview questions/answer --legacy
 
 При создании текстового задания в существующих `params` сохраняется `prompt_snapshot`: полный применимый набор текстов, SHA-256 каждого файла и всего набора. Сохраняется семейство шаблонов с поддерживаемыми условными ветками; это не журнал фактически выполненных обращений. Никаких новых таблиц или сервисов нет. Во время исполнения весь workflow, включая asyncio/thread-переход runner, использует этот набор. Хеширование новых checkpoints включает фактические сообщения и общую границу runner.
 
-Для заданий, созданных до этого переноса, используется **[legacy.json](legacy.json)** — неизменяемый архив точного извлечённого текста со всеми прежними ветками. Такие задания сохраняют старый алгоритм checkpoint keys и не получают новую настройку задним числом. Принятые обращения и ручные редакции переиспользуются. **Не редактируйте `legacy.json` при улучшении промптов.** Его исходный хеш и [синтетический эталон](../../../tests/fixtures/prompts/README.md) проверяются тестами. Текущие `.md` можно менять независимо от архива.
+Задания без `prompt_snapshot` и прежние версии workflow не поддерживаются. Для новой обработки создайте задачу заново; сохранённые результаты и авторские правки остаются на диске.
 
 Проверка после редактуры:
 
@@ -62,7 +61,7 @@ uv run --no-sync brofessor prompts preview --all > /tmp/brofessor-prompts.json
 uv run --no-sync pytest tests/prompts -q
 ```
 
-Тесты защищают архив старых запросов, однократную подстановку, ошибки входов, framing, snapshot/retry/resume и сохранность редакций. Они не требуют, чтобы текущий редактируемый текст всегда совпадал с архивом, и не доказывают содержательное качество ответов. Для качества нужна отдельная проба на выбранных материалах.
+Тесты защищают однократную подстановку, ошибки входов, framing, snapshot/retry/resume и сохранность редакций. Содержательное качество ответов проверяется отдельно. Для качества нужна отдельная проба на выбранных материалах.
 
 ## Каталог
 
@@ -94,9 +93,8 @@ uv run --no-sync pytest tests/prompts -q
 
 | Файл | Назначение и связи | Переменные | Выходная схема / условие |
 |---|---|---|---|
-| [reading/fragments](reading/fragments.md) | Чтение каждого исходного фрагмента в отдельную заметку | `payload` | `ReadingBatch`; Все reading_version |
-| [reading/reduce](reading/reduce.md) | Сжатие заметок с раздельными ссылками на каждый оригинал | `payload` | `SectionNotes`; reading_version >= 2 |
-| [reading/reduce_v1](reading/reduce_v1.md) | Прежнее объединение заметок; сохранено для старых заданий | `payload` | `SectionNote`; reading_version = 1 |
+| [reading/fragments](reading/fragments.md) | Чтение каждого исходного фрагмента в отдельную заметку | `payload` | `ReadingBatch`; Текущее чтение |
+| [reading/reduce](reading/reduce.md) | Сжатие заметок с раздельными ссылками на каждый оригинал | `payload` | `SectionNotes`; Текущее чтение |
 
 ### Вопросы и поиск
 
@@ -131,20 +129,18 @@ uv run --no-sync pytest tests/prompts -q
 |---|---|---|---|
 | [podcasts/check](podcasts/check.md) | Инструкции предметной сверки реплик с оригиналами | `language` | `CheckBatch`; check_podcast |
 | [podcasts/check_packet](podcasts/check_packet.md) | Пакет реплик после правил сверки; префикс перед ORIGINALS Общие части: [podcasts/check](podcasts/check.md). | `header`, `turns` | `CheckBatch`; check_podcast |
-| [podcasts/correct_originals](podcasts/correct_originals.md) | Коррекция раздела по оригиналам и его handoff; суффикс Общие части: [podcasts/originals_section](podcasts/originals_section.md). | `target`, `low`, `high`, `first_version` | `WrittenSection`; dialogue_version >= 4 |
-| [podcasts/correct_section](podcasts/correct_section.md) | Одна коррекция длины и состава ведущих Общие части: [podcasts/section](podcasts/section.md), [podcasts/correction_range](podcasts/correction_range.md), [podcasts/correction_range_v1](podcasts/correction_range_v1.md). | `prompt`, `count`, `target`, `correction_instruction`, `first_version` | `Podcast`; dialogue_version < 4 |
-| [podcasts/correction_range](podcasts/correction_range.md) | Числовые границы корректировки длины | `lower`, `upper` | `Podcast`; dialogue_version = 3 |
-| [podcasts/correction_range_v1](podcasts/correction_range_v1.md) | Прежний относительный допуск корректировки длины | — | `Podcast`; dialogue_version = 1/2 |
-| [podcasts/originals_outline](podcasts/originals_outline.md) | Редакторский план с достаточностью источников и отношениями между ними Общие части: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `evidence`, `minutes`, `target_words`, `lower`, `upper` | `EpisodePlan`; dialogue_version >= 4 |
-| [podcasts/originals_section](podcasts/originals_section.md) | Раздел по оригиналам с редакторской памятью; префикс перед ORIGINALS Общие части: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `plan`, `handoff`, `previous`, `section_number`, `sections`, `section`, `target`, `low`, `high`, `target_words`, `written` | `WrittenSection`; dialogue_version >= 4 |
-| [podcasts/outline](podcasts/outline.md) | Равновесный план длинного выпуска Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `base`, `minutes`, `parts` | `Outline`; dialogue_version < 4; minutes >= 20 |
-| [podcasts/section](podcasts/section.md) | Раздел выпуска по плану и концу предыдущего раздела Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md), [podcasts/word_budget](podcasts/word_budget.md), [podcasts/word_budget_v1](podcasts/word_budget_v1.md). | `base`, `outline`, `section_number`, `parts`, `section`, `word_instruction`, `previous` | `Podcast`; dialogue_version < 4; minutes >= 20 |
+| [podcasts/correct_originals](podcasts/correct_originals.md) | Коррекция раздела по оригиналам и его handoff; суффикс Общие части: [podcasts/originals_section](podcasts/originals_section.md). | `target`, `low`, `high`, `first_version` | `WrittenSection`; writing_method = originals |
+| [podcasts/correct_section](podcasts/correct_section.md) | Одна коррекция длины и состава ведущих Общие части: [podcasts/section](podcasts/section.md), [podcasts/correction_range](podcasts/correction_range.md). | `prompt`, `count`, `target`, `correction_instruction`, `first_version` | `Podcast`; writing_method != originals |
+| [podcasts/correction_range](podcasts/correction_range.md) | Числовые границы корректировки длины | `lower`, `upper` | `Podcast`; writing_method != originals; minutes >= 20 |
+| [podcasts/originals_outline](podcasts/originals_outline.md) | Редакторский план с достаточностью источников и отношениями между ними Общие части: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `evidence`, `minutes`, `target_words`, `lower`, `upper` | `EpisodePlan`; writing_method = originals |
+| [podcasts/originals_section](podcasts/originals_section.md) | Раздел по оригиналам с редакторской памятью; префикс перед ORIGINALS Общие части: [common/materials](common/materials.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `instructions`, `plan`, `handoff`, `previous`, `section_number`, `sections`, `section`, `target`, `low`, `high`, `target_words`, `written` | `WrittenSection`; writing_method = originals |
+| [podcasts/outline](podcasts/outline.md) | Равновесный план длинного выпуска Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md). | `base`, `minutes`, `parts` | `Outline`; writing_method != originals; minutes >= 20 |
+| [podcasts/section](podcasts/section.md) | Раздел выпуска по плану и концу предыдущего раздела Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md), [podcasts/series_context](podcasts/series_context.md), [podcasts/word_budget](podcasts/word_budget.md). | `base`, `outline`, `section_number`, `parts`, `section`, `word_instruction`, `previous` | `Podcast`; writing_method != originals; minutes >= 20 |
 | [podcasts/series](podcasts/series.md) | План серии с распределением тем и общими терминами Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md). | `base`, `count`, `minutes` | `Series`; podcast_series |
 | [podcasts/series_context](podcasts/series_context.md) | Границы одного выпуска серии и общие термины | `series` | `Podcast`; Эпизод серии |
 | [podcasts/short](podcasts/short.md) | Короткий диалог с последовательным продолжением Общие части: [common/materials](common/materials.md), [common/evidence](common/evidence.md), [podcasts/voices](podcasts/voices.md). | `base`, `part_number`, `parts`, `target_words`, `last_part`, `previous` | `Podcast`; minutes < 20 |
-| [podcasts/voices](podcasts/voices.md) | Грамматический род ведущих и сохранение рода персонажей | — | `Podcast`; dialogue_version >= 2 |
-| [podcasts/word_budget](podcasts/word_budget.md) | Остаток общего бюджета слов и границы раздела | `target_words`, `written`, `target`, `lower`, `upper` | `Podcast`; dialogue_version = 3 |
-| [podcasts/word_budget_v1](podcasts/word_budget_v1.md) | Прежний равный бюджет слов раздела | `target` | `Podcast`; dialogue_version = 1/2 |
+| [podcasts/voices](podcasts/voices.md) | Грамматический род ведущих и сохранение рода персонажей | — | `Podcast`; podcast |
+| [podcasts/word_budget](podcasts/word_budget.md) | Остаток общего бюджета слов и границы раздела | `target_words`, `written`, `target`, `lower`, `upper` | `Podcast`; writing_method != originals; minutes >= 20 |
 
 ### Обучение
 
@@ -157,13 +153,13 @@ uv run --no-sync pytest tests/prompts -q
 
 | Файл | Назначение и связи | Переменные | Выходная схема / условие |
 |---|---|---|---|
-| [books/align_translation](books/align_translation.md) | Перевод с привязкой каждого употребления термина к целевой фразе Общие части: [books/translate](books/translate.md), [books/metalinguistic](books/metalinguistic.md). | `translation`, `metalinguistic`, `occurrences` | `AlignedBatch`; Все translation_version |
-| [books/glossary](books/glossary.md) | Извлечение значений терминов и исходных употреблений | `language`, `payload` | `GlossaryBatch`; Все translation_version |
-| [books/metalinguistic](books/metalinguistic.md) | Сохранение исходного написания обсуждаемых слов | — | `AlignedBatch`; translation_version >= 2 |
+| [books/align_translation](books/align_translation.md) | Перевод с привязкой каждого употребления термина к целевой фразе Общие части: [books/translate](books/translate.md), [books/metalinguistic](books/metalinguistic.md). | `translation`, `metalinguistic`, `occurrences` | `AlignedBatch`; translation_version = 4 |
+| [books/glossary](books/glossary.md) | Извлечение значений терминов и исходных употреблений | `language`, `payload` | `GlossaryBatch`; translation_version = 4 |
+| [books/metalinguistic](books/metalinguistic.md) | Сохранение исходного написания обсуждаемых слов | — | `AlignedBatch`; translation_version = 4 |
 | [books/repair_alignment](books/repair_alignment.md) | Одна коррекция только отклонённых привязок без правки перевода | `payload` | `AlignmentBatch`; Версии с протоколом исправления привязок |
-| [books/review_glossary](books/review_glossary.md) | Обзор пропущенных повторяющихся терминов | `payload` | `GlossaryReviewBatch`; translation_version >= 4 |
+| [books/review_glossary](books/review_glossary.md) | Обзор пропущенных повторяющихся терминов | `payload` | `GlossaryReviewBatch`; translation_version = 4 |
 | [books/revise_term](books/revise_term.md) | Изменение только целевых терминологических фраз | `payload` | `Replacements`; terminology_update |
-| [books/translate](books/translate.md) | Полный перевод блоков с неизменяемыми inline-маркерами | `language`, `payload` | `TranslationBatch / AlignedBatch`; Все translation_version; также локальная проба |
+| [books/translate](books/translate.md) | Полный перевод блоков с неизменяемыми inline-маркерами | `language`, `payload` | `TranslationBatch / AlignedBatch`; translation_version = 4; также локальная проба |
 
 ### Явные developer-пробы
 

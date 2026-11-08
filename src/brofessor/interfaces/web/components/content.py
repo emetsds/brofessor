@@ -728,7 +728,7 @@ def turn_preview(workspace, job_id, revision, turn, language, saved, t, model=No
             "compatible": known["compatible"],
         }
     if not item["compatible"] or (
-        item.get("engine", SpeechEngine.QWEN_CUSTOM).startswith(QWEN_ENGINE_PREFIX)
+        item.get("engine", SpeechEngine.QWEN_BASE).startswith(QWEN_ENGINE_PREFIX)
         and not speech_models.qwen_runtime_available()
     ):
         return

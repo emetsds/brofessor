@@ -229,16 +229,36 @@ def test_external_edit_preserves_unsaved_ui_buffer(tmp_path, monkeypatch):
     workspace.add_source(source)
     citation = workspace.units()[0]["id"]
     job = service.submit(workspace, JobKind.ASK, focus="Load?", start_worker=False)
-    workspace.save_draft(job["id"], {"answer": "1200 kg", "citations": [citation]})
+    workspace.save_draft(
+        job["id"],
+        {
+            "answer": "1200 kg",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        },
+    )
     workspace.update_job(job["id"], status=JobStatus.SUCCEEDED)
     monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
     ui = AppTest.from_file(UI_APP, default_timeout=30).run()
     edit_json(ui, workspace, job["id"])
     buffer_key = f"editor:{workspace.path}:{job['id']}:text"
-    unsaved = json.dumps({"answer": "Unsaved wording", "citations": [citation]})
+    unsaved = json.dumps(
+        {
+            "answer": "Unsaved wording",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        }
+    )
     ui.text_area(key=buffer_key).set_value(unsaved).run()
     service.edit_draft(
-        workspace, job["id"], {"answer": "CLI correction", "citations": [citation]}, 1
+        workspace,
+        job["id"],
+        {
+            "answer": "CLI correction",
+            "citations": [citation],
+            "quotes": [{"citation": citation, "text": "1200 kilograms"}],
+        },
+        1,
     )
     ui.run()
     assert ui.text_area(key=buffer_key).value == unsaved
@@ -647,35 +667,9 @@ def test_switching_projects_keeps_unsaved_draft_buffer(tmp_path, monkeypatch):
     assert workspace.draft(job["id"])["data"]["answer"] == "Original answer"
 
 
-def test_audio_result_shows_recorded_legacy_model_under_new_default(tmp_path, monkeypatch):
-    workspace = Workspace(tmp_path / "workspace")
-    source = tmp_path / "source.txt"
-    source.write_text("A measured result")
-    workspace.add_source(source)
-    citation = workspace.units()[0]["id"]
-    original = service.submit(workspace, JobKind.PODCAST, start_worker=False)
-    workspace.save_draft(
-        original["id"],
-        {
-            "title": "Voice check",
-            "language": "ru",
-            "turns": [
-                {"speaker": "host", "text": "Question?", "citations": [citation]},
-                {"speaker": "guest", "text": "Answer.", "citations": [citation]},
-            ],
-        },
-    )
-    rendered = service.render(workspace, original["id"], model="qwen3-1.7b", start_worker=False)
-    workspace.update_job(rendered["id"], status=JobStatus.SUCCEEDED)
-    monkeypatch.setattr("sys.argv", ["ui.py", "--workspace", str(workspace.path)])
-    workspace.update_job(original["id"], status=JobStatus.SUCCEEDED)
-    ui = AppTest.from_file(UI_APP, default_timeout=30).run()
-    assert not ui.exception
-    assert "tts_model" not in {w.key for w in ui.selectbox}
-    assert any("Модель озвучки: Qwen3-TTS 1.7B" in caption.value for caption in ui.caption)
-
-
-def test_duration_feedback_is_available_in_cli_and_both_ui_languages(tmp_path, monkeypatch):
+def test_duration_feedback_is_available_in_cli_and_both_ui_languages(
+    preset_voices, tmp_path, monkeypatch
+):
     import wave
 
     from brofessor.features.podcasts.writer import duration_feedback
@@ -695,7 +689,7 @@ def test_duration_feedback_is_available_in_cli_and_both_ui_languages(tmp_path, m
         ],
     }
     workspace.save_draft(original["id"], data)
-    rendered = service.render(workspace, original["id"], model="qwen3-0.6b", start_worker=False)
+    rendered = service.render(workspace, original["id"], model="qwen3-base", start_worker=False)
     path = workspace.path / "jobs" / rendered["id"] / "test.wav"
     path.parent.mkdir(parents=True)
     with wave.open(str(path), "wb") as stream:

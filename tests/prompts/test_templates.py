@@ -1,4 +1,4 @@
-"""Preserve historical requests while making current instruction files editable."""
+"""Editable templates, one-pass substitution and local previews."""
 
 import asyncio
 import json
@@ -13,15 +13,6 @@ from brofessor.contracts.text import TextProvider
 from brofessor.infrastructure.text import runners
 from brofessor.interfaces.cli.app import app
 from brofessor.prompts import examples
-from tests.helpers.paths import FIXTURES
-
-CASES = json.loads((FIXTURES / "prompts/extracted-2026-11-07.json").read_text())
-
-
-@pytest.mark.parametrize("case", CASES, ids=lambda case: case["id"])
-def test_original_requests_survive_in_the_legacy_set(case):
-    with prompts.use_snapshot(None):
-        assert prompts.render(case["id"], **case["variables"]) == case["expected"]
 
 
 def test_values_are_inserted_once_and_literal_json_can_be_added(editable_prompts):

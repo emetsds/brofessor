@@ -17,6 +17,20 @@ def workspace(tmp_path):
     return Workspace(tmp_path / "workspace")
 
 
+def test_concurrent_first_open_initializes_one_current_workspace(tmp_path):
+    path = tmp_path / "new-project"
+    barrier = Barrier(6)
+
+    def open_and_submit():
+        barrier.wait()
+        return Workspace(path).submit(JobKind.ASK, {}, "same-request")
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        jobs = list(pool.map(lambda _: open_and_submit(), range(6)))
+    assert len({job["id"] for job in jobs}) == 1
+    assert Workspace(path).jobs() == jobs[:1]
+
+
 def test_concurrent_request_key_has_one_job_and_conflicting_retry_is_rejected(workspace):
     barrier = Barrier(8)
 
@@ -193,8 +207,12 @@ def test_concurrent_revision_edits_have_one_winner(workspace):
     assert workspace.draft(job["id"], 1)["data"] == {"title": "Initial"}
 
 
-def test_artifacts_stay_inside_workspace_and_unknown_schema_is_rejected(workspace, tmp_path):
+@pytest.mark.parametrize("schema", [0, 1, 5, 999])
+def test_artifacts_stay_inside_workspace_and_unsupported_schema_preserves_data(
+    workspace, tmp_path, schema
+):
     job = workspace.submit(JobKind.SLIDES, {})
+    draft = workspace.save_draft(job["id"], {"title": "Saved author revision"})
     with pytest.raises(ValueError):
         workspace.add_artifact(job["id"], tmp_path / "outside.pptx", ArtifactKind.PPTX, {})
     artifact = workspace.path / "jobs" / job["id"] / "draft.json"
@@ -203,6 +221,8 @@ def test_artifacts_stay_inside_workspace_and_unknown_schema_is_rejected(workspac
     workspace.add_artifact(job["id"], artifact, ArtifactKind.JSON, {"revision": 1})
     assert workspace.artifacts(job["id"])[0]["path"] == f"jobs/{job['id']}/draft.json"
     with sqlite3.connect(workspace.path / "workspace.sqlite3") as db:
-        db.execute("PRAGMA user_version=999")
+        db.execute(f"PRAGMA user_version={schema}")
     with pytest.raises(ValueError, match="Unsupported workspace schema"):
         Workspace(workspace.path)
+    assert workspace.draft(job["id"]) == draft
+    assert artifact.read_text() == "{}"

@@ -5,9 +5,9 @@ from zipfile import ZipFile
 
 import pytest
 
-from brofessor.infrastructure.formats.epub import DC, NCX, OPF, XHTML, XML_LANG, EpubBook
+from brofessor.infrastructure.formats.epub import DC, NCX, OPF, XHTML, XML_LANG
 from brofessor.infrastructure.formats.epub_xml import publication_xml
-from tests.helpers.epub import DTD, legacy_entries, make_book, translation
+from tests.helpers.epub import DTD, epub2_entries, make_book, translation
 
 
 def test_xhtml_prefix_spelling_is_retained_for_reader_compatibility(tmp_path):
@@ -25,8 +25,8 @@ def test_xhtml_prefix_spelling_is_retained_for_reader_compatibility(tmp_path):
 
 
 @pytest.mark.parametrize("encoding", ["utf-8", "utf-16"])
-def test_legacy_epub_roundtrip_retains_navigation_qnames_entities_and_prose(tmp_path, encoding):
-    entries = legacy_entries()
+def test_epub2_roundtrip_retains_navigation_qnames_entities_and_prose(tmp_path, encoding):
+    entries = epub2_entries()
     entries["EPUB/chapter.xhtml"] = entries["EPUB/chapter.xhtml"].decode().encode(encoding)
     book = make_book(tmp_path, entries)
     value = translation(
@@ -65,8 +65,8 @@ def test_legacy_epub_roundtrip_retains_navigation_qnames_entities_and_prose(tmp_
     "fault",
     ["missing_toc", "wrong_toc", "unknown_dtd", "internal_subset", "entity", "utf16_entity"],
 )
-def test_legacy_input_does_not_bypass_navigation_or_xml_safety(tmp_path, fault):
-    entries = legacy_entries()
+def test_epub2_input_does_not_bypass_navigation_or_xml_safety(tmp_path, fault):
+    entries = epub2_entries()
     if fault in {"missing_toc", "wrong_toc"}:
         entries["EPUB/package.opf"] = entries["EPUB/package.opf"].replace(
             b'toc="ncx"', b"" if fault == "missing_toc" else b'toc="chapter"'
@@ -88,16 +88,12 @@ def test_legacy_input_does_not_bypass_navigation_or_xml_safety(tmp_path, fault):
         make_book(tmp_path, entries)
 
 
-def test_older_projection_and_original_license_notices_survive_new_runs(tmp_path):
+def test_original_license_notices_survive_translation(tmp_path):
     chapter = f'''<html xmlns="{XHTML}" lang="en"><head><title>Book</title></head><body>
     <p>Ordinary passage.</p><div id="pg-footer" class="pg-boilerplate footer">
     <p>Original license.</p></div></body></html>'''
     current = make_book(tmp_path, {"EPUB/chapter.xhtml": chapter.encode()})
-    old = EpubBook(current.source, projection_version=1)
-    assert any("Original license" in b.text for b in old.blocks)
     assert not any("Original license" in b.text for b in current.blocks)
-    old_prose = next(b for b in old.blocks if "Ordinary passage" in b.text)
-    assert old_prose in current.blocks
     assert current.preserved_notices[0]["id"] == "pg-footer"
     output = current.render(
         translation(current, lambda t: t.replace("Ordinary passage", "Обычный текст")),
@@ -124,7 +120,7 @@ def test_cdata_comments_and_literal_entity_spelling_survive_reconstruction(tmp_p
         )
 
 
-def test_plain_ascii_math_is_immutable_inside_mixed_prose_without_reprojecting_old_jobs(tmp_path):
+def test_plain_ascii_math_is_immutable_inside_mixed_prose(tmp_path):
     chapter = f'''<html xmlns="{XHTML}"><head><title>Math</title></head><body>
     <p>Compute square( 4 ) and <em>use cube_root(27)</em>, then square_root(9).</p>
     <p>square(25.4)</p></body></html>'''
@@ -133,8 +129,6 @@ def test_plain_ascii_math_is_immutable_inside_mixed_prose_without_reprojecting_o
     assert "square(" not in projected and "cube_root(" not in projected
     protected = {value for b in book.blocks for value in b.protected.values()}
     assert {"square( 4 )", "cube_root(27)", "square_root(9)"} <= protected
-    legacy = EpubBook(book.source, projection_version=2)
-    assert any("square( 4 )" in b.text for b in legacy.blocks)
     result = book.render(
         translation(
             book,

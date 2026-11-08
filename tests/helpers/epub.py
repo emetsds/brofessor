@@ -30,7 +30,7 @@ def translation(book, transform=lambda text: text):
 DTD = "<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>"
 
 
-def legacy_entries():
+def epub2_entries():
     package = (FIXTURE / "EPUB/package.opf").read_text().replace('version="3.0"', 'version="2.0"')
     package = (
         package.replace("<spine>", '<spine toc="ncx">')

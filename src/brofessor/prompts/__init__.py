@@ -20,12 +20,10 @@ from brofessor.contracts.text import MessageRole, RunnerMessage, TextProvider
 from brofessor.prompts import ids as prompt_ids
 
 CATALOGUE_FILENAME: Final = "catalogue.json"
-LEGACY_FILENAME: Final = "legacy.json"
 TEMPLATE_SUFFIX: Final = ".md"
 
 SNAPSHOT_KEY: Final = "prompt_snapshot"
 SNAPSHOT_VERSION: Final = 1
-LEGACY_VERSION: Final = 1
 
 
 class PromptSpec(TypedDict):
@@ -138,7 +136,7 @@ def _bundle(templates: dict[str, str]) -> PromptSnapshot:
 
 
 def snapshot(kind: str, params: dict) -> PromptSnapshot:
-    """Freeze the applicable template families, including supported workflow branches."""
+    """Freeze the applicable template families, for the selected workflow."""
     if kind not in TEXT_JOB_KINDS:
         raise PromptError(f"No text prompt family for job kind: {kind}")
     ids = {prompt_ids.COMMON_RUNNER}
@@ -180,16 +178,6 @@ def snapshot(kind: str, params: dict) -> PromptSnapshot:
     return _bundle(templates)
 
 
-def original_snapshot() -> PromptSnapshot:
-    """Pinned extracted text for jobs created before prompt snapshots existed."""
-    original = json.loads(files(__package__).joinpath(LEGACY_FILENAME).read_text(encoding="utf-8"))
-    if original.get("version") != LEGACY_VERSION or original.get("sha256") != _digest(
-        original["templates"]
-    ):
-        raise PromptError("Legacy prompt archive version or hash is invalid")
-    return _bundle(original["templates"])
-
-
 def _check_snapshot(snapshot):
     if not isinstance(snapshot, dict) or snapshot.get("version") != SNAPSHOT_VERSION:
         raise PromptError("Unsupported prompt snapshot version")
@@ -209,9 +197,9 @@ def _check_snapshot(snapshot):
 
 
 @contextmanager
-def use_snapshot(snapshot: PromptSnapshot | None):
+def use_snapshot(snapshot: PromptSnapshot):
     """Use frozen templates across synchronous code, asyncio, and to_thread calls."""
-    selected = original_snapshot() if snapshot is None else copy.deepcopy(snapshot)
+    selected = copy.deepcopy(snapshot)
     _check_snapshot(selected)
     token = _ACTIVE.set(selected)
     try:

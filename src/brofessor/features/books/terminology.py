@@ -521,19 +521,16 @@ def validate_or_repair_alignment(value, blocks, terms, occurrences, generate):
     return aligned_blocks(value, blocks, occurrences)
 
 
-def translate(book, terms, occurrences, language, generate, check, progress, *, version=1):
+def translate(book, terms, occurrences, language, generate, check, progress):
     def prompt(blocks):
         ids = {block.id for block in blocks}
         mentions = [item for item in occurrences if item["block_id"] in ids]
         term_ids = {item["term_id"] for item in mentions}
         glossary = [term for term in terms if term["id"] in term_ids]
-        if version >= 3:
-            # A meaning discovered late in the book may also occur in an earlier
-            # packet whose discovery pass omitted it. Apply the complete relevant
-            # glossary even where there is no automatic correction anchor.
-            relevant = {term["id"] for term in relevant_terms(blocks, terms, occurrences)}
-            glossary = [term for term in terms if term["id"] in term_ids | relevant]
-        metalinguistic = prompts.render(prompt_ids.BOOKS_METALINGUISTIC) if version >= 2 else ""
+        # A meaning discovered in a later packet can also apply to earlier blocks.
+        relevant = {term["id"] for term in relevant_terms(blocks, terms, occurrences)}
+        glossary = [term for term in terms if term["id"] in term_ids | relevant]
+        metalinguistic = prompts.render(prompt_ids.BOOKS_METALINGUISTIC)
         return prompts.render(
             prompt_ids.BOOKS_ALIGN_TRANSLATION,
             translation=translation_prompt(blocks, language, glossary),
@@ -546,9 +543,7 @@ def translate(book, terms, occurrences, language, generate, check, progress, *, 
         check()
 
         def validate(value):
-            if version >= 4:
-                return validate_or_repair_alignment(value, batch, terms, occurrences, generate)
-            return aligned_blocks(value, batch, occurrences)
+            return validate_or_repair_alignment(value, batch, terms, occurrences, generate)
 
         value = generate(
             prompt(batch),

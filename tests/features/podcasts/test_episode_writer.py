@@ -4,6 +4,8 @@ import json
 
 import pytest
 
+from brofessor import prompts
+
 from brofessor.contracts.jobs import JobKind, JobStatus
 from brofessor.features.podcasts import episode_writer as writer
 from brofessor.models import validate_citations
@@ -136,7 +138,7 @@ def test_insufficient_material_is_saved_as_plan_without_padding_or_script_calls(
     assert saved == [insufficient]
 
 
-def test_version_four_checks_scoped_sources_and_reuses_plan_on_resume(tmp_path, monkeypatch):
+def test_originals_writer_checks_scoped_sources_and_reuses_plan_on_resume(tmp_path, monkeypatch):
     from brofessor.application import worker
     from brofessor.infrastructure.storage.workspace import Workspace
 
@@ -160,8 +162,8 @@ def test_version_four_checks_scoped_sources_and_reuses_plan_on_resume(tmp_path, 
             "model": None,
             "minutes": 20,
             "target_words": 100,
-            "dialogue_version": 4,
-            "reading_version": 3,
+            "writing_method": "originals",
+            "prompt_snapshot": prompts.snapshot(JobKind.PODCAST, {}),
         },
     )
     calls = []
@@ -206,7 +208,7 @@ def test_version_four_checks_scoped_sources_and_reuses_plan_on_resume(tmp_path, 
     assert report["input_handoff"]["covered_points"] == ["Actual covered material"]
 
 
-def test_source_metadata_survives_note_compression_without_changing_legacy_prompts(tmp_path):
+def test_source_metadata_survives_note_compression(tmp_path):
     from brofessor.features.sources import reading
 
     data = units()
@@ -232,17 +234,11 @@ def test_source_metadata_survives_note_compression_without_changing_legacy_promp
     newer = tmp_path / "new"
     newer.mkdir()
     evidence, coverage = reading.prepare(
-        data, "Limits", generate, lambda: None, lambda _: None, newer, version=3, names=names
+        data, "Limits", generate, lambda: None, lambda _: None, newer, names=names
     )
     assert coverage["count"] == len(data)
     assert all(item["origins"][0]["source"] in names.values() for item in evidence)
     assert any("Independent review" in text for text in captured)
-    legacy = tmp_path / "old"
-    legacy.mkdir()
-    older, _ = reading.prepare(
-        data, "Limits", generate, lambda: None, lambda _: None, legacy, version=2, names=names
-    )
-    assert all("origins" not in item for item in older)
 
 
 def test_long_first_response_can_be_corrected_without_dropping_its_cited_originals():
@@ -325,17 +321,13 @@ def test_experimental_method_is_explicit_in_cli_and_inherited_by_new_series_epis
     source.write_text("Measurements and their limits.")
     w.add_source(source)
     ordinary = service.submit(w, JobKind.PODCAST, start_worker=False)
-    assert ordinary["params"]["dialogue_version"] == 3
     assert "writing_method" not in ordinary["params"]
     result = CliRunner().invoke(
         app, ["-w", str(w.path), "podcast", "--writing-method", "originals"]
     )
     assert result.exit_code == 0, result.output
     experimental = json.loads(result.output)
-    assert (
-        experimental["params"]["dialogue_version"] == 4
-        and experimental["params"]["reading_version"] == 3
-    )
+    assert experimental["params"]["writing_method"] == "originals"
     for kind, options in (
         ("ask", {"focus": "Limits?"}),
         ("slides", {}),
@@ -363,7 +355,7 @@ def test_experimental_method_is_explicit_in_cli_and_inherited_by_new_series_epis
     w.update_job(parent["id"], status=JobStatus.SUCCEEDED)
     episode = service.series_episode(w, parent["id"], 1, start_worker=False)
     assert episode["params"]["writing_method"] == "originals"
-    assert episode["params"]["dialogue_version"] == 4 and episode["params"]["language"] == "en"
+    assert episode["params"]["language"] == "en"
 
 
 @pytest.mark.parametrize("minutes,total", [(20, 2415), (60, 8550)])

@@ -17,8 +17,9 @@ from brofessor.contracts.jobs import (
     JobRecord,
     StageId,
 )
-from brofessor.contracts.text import DEFAULT_OLLAMA_ADDRESS, DEFAULT_OLLAMA_PORT, TextProvider
+from brofessor.contracts.text import DEFAULT_OLLAMA_ADDRESS, TextProvider
 from brofessor.features.podcasts.series import EVIDENCE_FILENAME
+from brofessor.features.podcasts.writer import WritingMethod
 from brofessor.features.sources import reading
 from brofessor.features.sources.reading import ReadingStatus
 from brofessor.infrastructure.formats.audio import AUDIO_METADATA_SUFFIX
@@ -110,15 +111,10 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
             "provider": params["provider"],
             "model": params["model"],
         }
-        if prompts.SNAPSHOT_KEY in params:
-            # Historical runs keep their original checkpoint keys. New runs identify
-            # every instruction actually sent, including the runner's message framing.
-            identity["messages"] = prompts.messages(identity.pop("prompt"), params["provider"])
+        identity["messages"] = prompts.messages(identity.pop("prompt"), params["provider"])
         if params["provider"] == TextProvider.OLLAMA:
             if "ollama_address" in params:
                 identity["ollama_address"] = ollama_address
-            elif params.get("ollama_port", DEFAULT_OLLAMA_PORT) != DEFAULT_OLLAMA_PORT:
-                identity["ollama_port"] = params["ollama_port"]
         fingerprint = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         checkpoint = folder / "checkpoints" / f"{fingerprint}.json"
         if checkpoint.exists():
@@ -337,10 +333,9 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
             check,
             progress,
             folder,
-            version=params.get("reading_version", 1),
-            names=names,
+            names=names if params.get("writing_method") == WritingMethod.ORIGINALS else None,
         )
-    if params.get("dialogue_version", 1) >= 4:
+    if params.get("writing_method") == WritingMethod.ORIGINALS:
         evidence = reading.with_metadata(evidence, original_units, names)
     allowed = {
         citation for item in evidence for citation in item.get("citations", [item.get("id")])
@@ -363,7 +358,7 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
         )
     base = prompts.render(prompt_ids.COMMON_EVIDENCE, instructions=instructions, evidence=encoded)
     editorial_context = ""
-    if job["kind"] == JobKind.PODCAST and params.get("dialogue_version", 1) >= 2:
+    if job["kind"] == JobKind.PODCAST:
         editorial_context += prompts.render(prompt_ids.PODCASTS_VOICES)
     if series_context:
         editorial_context += prompts.render(
@@ -451,7 +446,7 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
                 atomic_json(folder / f"writer-section-{index}.json", report)
 
             writer_options = {}
-            if params.get("dialogue_version", 1) >= 4:
+            if params.get("writing_method") == WritingMethod.ORIGINALS:
                 writer_options = {
                     "writer_context": {
                         "instructions": instructions + editorial_context,
@@ -470,7 +465,6 @@ def _execute(workspace: Workspace, job: JobRecord, cancelled):
                 progress,
                 save_outline,
                 target_words=params.get("target_words"),
-                dialogue_version=params.get("dialogue_version", 1),
                 **writer_options,
             )
         else:
